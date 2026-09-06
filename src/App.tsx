@@ -125,15 +125,20 @@ export default function App() {
   const wallet = useWallet();
   const [holding, setHolding] = useState<Holding | null>(null);
   const [loadingHolding, setLoadingHolding] = useState(false);
+  /* Demo only: a stand-in holding, so the ladder can be seen working with no
+     wallet installed. Cleared the moment a real one connects. */
+  const [preview, setPreview] = useState<Holding | null>(null);
   const [log, setLog] = useState<readonly LogEntry[]>([]);
 
   const taken = useMemo(() => occupiedSeats(ALL_SEATS, CABIN_SEED, LAVATORY_SEATS), []);
   /* Souls on board, less the ones who got a seat. */
   const belowCutoff = Math.max(0, tick.holders - taken.size);
 
+  const effectiveHolding = preview ?? holding;
+  const seatKey = wallet.address ?? (preview ? 'SAMPLE-HOLDER' : null);
   const berth = useMemo(
-    () => berthFor(holding?.share ?? 0, wallet.address),
-    [holding?.share, wallet.address],
+    () => berthFor(effectiveHolding?.share ?? 0, seatKey),
+    [effectiveHolding?.share, seatKey],
   );
   const claimed = berth.seat?.id ?? null;
   const claimedSeat = berth.seat;
@@ -141,7 +146,11 @@ export default function App() {
     () => CABIN_ZONES.find((z) => z.key === claimedSeat?.zone) ?? null,
     [claimedSeat],
   );
-  const passenger = wallet.address ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}` : 'Standby';
+  const passenger = wallet.address
+    ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
+    : preview
+      ? 'Sample holder'
+      : 'Standby';
 
   const viewSeat = useMemo(() => representativeSeat(viewZone, viewPosition), [viewZone, viewPosition]);
   const viewZoneDef = CABIN_ZONES.find((z) => z.key === viewZone) ?? CABIN_ZONES[0];
@@ -192,6 +201,7 @@ export default function App() {
       setHolding(null);
       return;
     }
+    setPreview(null);
     let cancelled = false;
     const read = async () => {
       setLoadingHolding(true);
@@ -211,7 +221,8 @@ export default function App() {
   /* Being seated is an event: the PA says so, and the camera walks you there. */
   const lastSeat = useRef<string | null>(null);
   useEffect(() => {
-    if (berth.hold && wallet.address && lastSeat.current !== 'HOLD') {
+    const boarded = Boolean(wallet.address) || Boolean(preview);
+    if (berth.hold && boarded && lastSeat.current !== 'HOLD') {
       lastSeat.current = 'HOLD';
       setCamera('hold');
       say('Passenger assigned to the cargo hold. Mind the step.', 'alert');
@@ -232,7 +243,7 @@ export default function App() {
         : `Passenger reseated to ${id}. ${berth.rung}.`,
       'pa',
     );
-  }, [berth.seat?.id, berth.hold, berth.rung, wallet.address, boardedAt, tick.marketCap, say]);
+  }, [berth.seat?.id, berth.hold, berth.rung, wallet.address, preview, boardedAt, tick.marketCap, say]);
 
   const flyMode = (next: FlightMode) => {
     setMode(next);
@@ -548,16 +559,25 @@ export default function App() {
               <div className="mt-7 flex flex-col gap-5">
                 <CheckIn
                   wallet={wallet}
-                  holding={holding}
+                  holding={effectiveHolding}
                   berth={berth}
                   live={holdingsSource.live}
                   loading={loadingHolding}
+                  previewing={Boolean(preview)}
+                  onPreview={(share) => {
+                    const supply = 1_000_000_000;
+                    setPreview({ balance: share * supply, supply, share, live: false });
+                  }}
+                  onClearPreview={() => {
+                    setPreview(null);
+                    lastSeat.current = null;
+                  }}
                 />
                 <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
               </div>
             </div>
 
-            <BoardingLadder berth={berth} holding={holding} address={wallet.address} />
+            <BoardingLadder berth={berth} holding={effectiveHolding} address={seatKey} />
 
             <RadioLog entries={log} />
           </div>

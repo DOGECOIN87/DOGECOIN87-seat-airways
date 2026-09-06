@@ -87,8 +87,9 @@ export function formatShare(share: number): string {
   return `${(share * 100).toFixed(2)}%`;
 }
 
-/** A token amount at human scale. */
+/** A token amount at human scale. Supplies run to billions; balances rarely do. */
 export function formatTokens(amount: number): string {
+  if (amount >= 1_000_000_000) return `${(amount / 1_000_000_000).toFixed(2)}B`;
   if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(2)}M`;
   if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K`;
   return amount.toLocaleString('en-US', { maximumFractionDigits: 2 });

@@ -24,12 +24,25 @@ interface CheckInProps {
   /** False when the deployment has not been pointed at a real token yet. */
   live: boolean;
   loading: boolean;
+  /** Demo only: board as a holder of a given size, with no wallet at all. */
+  onPreview?: (share: number) => void;
+  previewing?: boolean;
+  onClearPreview?: () => void;
 }
 
-const CheckIn = ({ wallet, holding, berth, live, loading }: CheckInProps) => {
+/* Bag sizes that land on four different rungs, for demonstrating the ladder
+   without a wallet. Shares sit clear of the cutoffs so the result is obvious. */
+const SAMPLE_HOLDERS: { label: string; share: number }[] = [
+  { label: 'Flight deck', share: 0.014 },
+  { label: 'Business', share: 0.0031 },
+  { label: 'Economy', share: 0.00012 },
+  { label: 'Cargo hold', share: 0 },
+];
+
+const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing, onClearPreview }: CheckInProps) => {
   const { address, walletName, connecting, error, unavailable, connect, disconnect } = wallet;
 
-  if (!address) {
+  if (!address && !previewing) {
     return (
       <section className="border border-seat-amber/35 bg-[#141821]/85 backdrop-blur-sm" aria-label="Check in">
         <div className="px-5 py-5">
@@ -62,10 +75,24 @@ const CheckIn = ({ wallet, holding, berth, live, loading }: CheckInProps) => {
             </p>
           )}
           {!live && (
-            <p className="mt-3 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-blue-100/40">
-              Demonstration mode — this deployment isn&apos;t pointed at a token yet, so the balance shown
-              after check-in is an example, not your real holding.
-            </p>
+            <div className="mt-5 border-t border-white/10 pt-4">
+              <p className="text-[11px] leading-relaxed text-blue-100/45">
+                Demonstration mode — this deployment isn&apos;t pointed at a token yet. No wallet? Board as
+                a sample holder and watch the ladder decide:
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {SAMPLE_HOLDERS.map((h) => (
+                  <button
+                    key={h.label}
+                    type="button"
+                    onClick={() => onPreview?.(h.share)}
+                    className="border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/65 transition-colors hover:border-seat-cyan/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </section>
@@ -81,20 +108,20 @@ const CheckIn = ({ wallet, holding, berth, live, loading }: CheckInProps) => {
           style={{ borderRadius: '9999px', boxShadow: '0 0 10px #FFB300' }}
         />
         <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-blue-100/55">
-          Checked in{walletName ? ` · ${walletName}` : ''}
+          {previewing ? 'Sample holder' : `Checked in${walletName ? ` · ${walletName}` : ''}`}
         </p>
         <button
           type="button"
-          onClick={disconnect}
+          onClick={previewing ? onClearPreview : disconnect}
           className="ml-auto text-[10px] uppercase tracking-[0.16em] text-blue-100/40 underline-offset-4 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
         >
-          Sign out
+          {previewing ? 'Back to check-in' : 'Sign out'}
         </button>
       </header>
 
       <dl className="grid grid-cols-2 gap-px bg-white/[0.07]">
         {[
-          { k: 'Passenger', v: short(address) },
+          { k: 'Passenger', v: address ? short(address) : 'Sample holder' },
           { k: 'Cabin', v: berth.hold ? 'CARGO HOLD' : berth.rung },
           { k: 'Holding', v: holding ? formatTokens(holding.balance) : loading ? '—' : 'unread' },
           { k: 'Share of supply', v: holding ? formatShare(holding.share) : loading ? '—' : 'unread' },
@@ -108,7 +135,9 @@ const CheckIn = ({ wallet, holding, berth, live, loading }: CheckInProps) => {
 
       {!live && (
         <p className="border-t border-white/10 px-5 py-3 text-[11px] leading-relaxed text-blue-100/40">
-          Demonstration figures — not your real balance.
+          {previewing
+            ? 'A sample holder, to show the ladder working. Not a real balance.'
+            : 'Demonstration figures — not your real balance.'}
         </p>
       )}
     </section>
