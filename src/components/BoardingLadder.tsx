@@ -21,11 +21,13 @@ interface BoardingLadderProps {
   holding: Holding | null;
   /** Null until a wallet is connected — the ladder still shows the rungs. */
   address: string | null;
+  /** How many seats are actually held, so each cabin can show how full it is. */
+  manifestSize: number;
 }
 
 const seatCount = (zone: string) => ALL_SEATS.filter((s) => s.zone === zone).length;
 
-const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
+const BoardingLadder = ({ berth, holding, address, manifestSize }: BoardingLadderProps) => {
   const share = holding?.share ?? 0;
   const seated = Boolean(address) && !berth.hold;
   const balance = holding?.balance ?? 0;
@@ -51,6 +53,9 @@ const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
           const zone = CABIN_ZONES.find((z) => z.key === rung.zone);
           const here = seated && berth.seat?.zone === rung.zone;
           const reached = seated && berth.rank !== null && berth.rank <= rung.maxRank;
+          const held = manifestSize >= rung.minRank
+            ? Math.min(rung.maxRank, manifestSize) - rung.minRank + 1
+            : 0;
           return (
             <li
               key={rung.zone}
@@ -80,7 +85,8 @@ const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
                   )}
                 </span>
                 <span className="block text-[11px] text-blue-100/40">
-                  {seatCount(rung.zone)} seats · {rung.label}
+                  {rung.label} · <span className="font-mono">{held}</span> of{' '}
+                  <span className="font-mono">{seatCount(rung.zone)}</span> taken
                 </span>
               </span>
               <span

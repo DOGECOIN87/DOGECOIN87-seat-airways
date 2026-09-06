@@ -9,22 +9,36 @@
 
 body {
   margin: 0;
-  background-color: #0B0E14;
-  color: #FFFFFF;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background-color: #0A0F16;
+  color: #EDE6D8;
+  /* Prose in a humanist sans; figures in mono, where they line up. Running
+     the whole page in monospace made an airline read like a terminal. */
+  font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Anything that is a number, a seat, or an address. */
+.sa-data,
+.tabular-nums,
+.font-mono {
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .font-heading {
-  font-family: 'Barlow Condensed', ui-sans-serif, system-ui, sans-serif;
-  font-weight: 700;
+  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
 }
 
-/* ── Signage glow, for the title only ─────────────────────────────── */
-.sa-glow-amber { text-shadow: 0 0 8px rgba(255, 179, 0, 0.7), 0 0 26px rgba(255, 179, 0, 0.35); }
-.sa-glow-cyan  { text-shadow: 0 0 8px rgba(63, 216, 232, 0.7), 0 0 26px rgba(63, 216, 232, 0.3); }
+/* ── Signage glow, for the title only ─────────────────────────────────
+   Airport signage is lit, not neon. Enough spill to read as illuminated,
+   not so much that it looks like a casino. */
+.sa-glow-amber { text-shadow: 0 0 10px rgba(255, 179, 0, 0.42), 0 0 34px rgba(255, 179, 0, 0.16); }
+.sa-glow-cyan  { text-shadow: 0 0 10px rgba(126, 205, 224, 0.4), 0 0 34px rgba(126, 205, 224, 0.14); }
 
 /* ── CRT scanlines over the glass ─────────────────────────────────── */
 .sa-scanlines {

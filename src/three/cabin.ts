@@ -250,7 +250,7 @@ function stitchedMark(w: number, h: number, cloth: string, thread: string) {
   gloss.fillRect(0, 0, w, h);
 
   // The mark, centred, at four fifths of the panel's height.
-  const box = h * 0.8;
+  const box = h * 0.92;
   const place = (g: CanvasRenderingContext2D) => {
     g.translate((w - box) / 2, (h - box) / 2);
     g.scale(box / 1536, box / 1536);
@@ -262,7 +262,15 @@ function stitchedMark(w: number, h: number, cloth: string, thread: string) {
   face.save();
   place(face);
   face.fillStyle = thread;
+  face.strokeStyle = thread;
+  face.lineJoin = 'round';
+  face.lineCap = 'round';
+  face.lineWidth = 11;
   face.fill(mark, 'evenodd');
+  face.stroke(mark);
+  // Clip to the thickened outline, not the bare fill, or the stitching stops
+  // short of the edge the thread actually reaches.
+
   face.clip(mark, 'evenodd');
   /* Satin stitch: parallel threads laid at a slant. Each one gets a dark
      valley and a lit crown, which is the whole reason embroidery reads as
@@ -291,7 +299,12 @@ function stitchedMark(w: number, h: number, cloth: string, thread: string) {
   place(bump);
   bump.filter = 'blur(6px)';
   bump.fillStyle = '#d0d0d0';
+  bump.strokeStyle = '#d0d0d0';
+  bump.lineJoin = 'round';
+  bump.lineCap = 'round';
+  bump.lineWidth = 11;
   bump.fill(mark, 'evenodd');
+  bump.stroke(mark);
   bump.filter = 'none';
   bump.clip(mark, 'evenodd');
   bump.lineWidth = 5;
@@ -308,7 +321,12 @@ function stitchedMark(w: number, h: number, cloth: string, thread: string) {
   gloss.save();
   place(gloss);
   gloss.fillStyle = '#4a4a4a';
+  gloss.strokeStyle = '#4a4a4a';
+  gloss.lineJoin = 'round';
+  gloss.lineCap = 'round';
+  gloss.lineWidth = 11;
   gloss.fill(mark, 'evenodd');
+  gloss.stroke(mark);
   gloss.restore();
 
   const map = new THREE.CanvasTexture(face.canvas);
@@ -427,37 +445,37 @@ function seatGeometry(): THREE.BufferGeometry {
   p.push({ g: pan, c: CLOTH });
 
   // Back, raked seven degrees, topping out just below a seated eye.
-  const back = roundedBox(0.45, 0.56, 0.13, 0.05);
-  back.rotateX(0.12); back.translate(0, 0.76, 0.21);
+  const back = roundedBox(0.45, 0.56, 0.1, 0.045);
+  back.rotateX(0.12); back.translate(0, 0.76, 0.19);
   p.push({ g: back, c: CLOTH });
 
   // The bolsters either side of it, which is what gives an airline seat its
   // shape from behind rather than reading as a slab.
   for (const x of [-0.2, 0.2]) {
-    const b = roundedBox(0.07, 0.5, 0.19, 0.035);
-    b.rotateX(0.12); b.translate(x, 0.78, 0.19);
+    const b = roundedBox(0.07, 0.5, 0.15, 0.035);
+    b.rotateX(0.12); b.translate(x, 0.78, 0.17);
     p.push({ g: b, c: CLOTH_DARK });
   }
 
   // Headrest, and the paper cover on it.
   const head = roundedBox(0.34, 0.2, 0.12, 0.05);
-  head.rotateX(0.12); head.translate(0, 1.06, 0.16);
+  head.rotateX(0.12); head.translate(0, 1.06, 0.215);
   p.push({ g: head, c: CLOTH_DARK });
   const cover = roundedBox(0.3, 0.13, 0.135, 0.03);
-  cover.rotateX(0.12); cover.translate(0, 1.09, 0.157);
+  cover.rotateX(0.12); cover.translate(0, 1.09, 0.212);
   p.push({ g: cover, c: COVER });
 
   // Tray table, stowed: a lighter panel let into the back.
   const tray = roundedBox(0.35, 0.26, 0.02, 0.02);
-  tray.rotateX(0.12); tray.translate(0, 0.83, 0.278);
+  tray.rotateX(0.12); tray.translate(0, 0.83, 0.245);
   p.push({ g: tray, c: TRIM });
   const latch = new THREE.BoxGeometry(0.05, 0.016, 0.02);
-  latch.rotateX(0.12); latch.translate(0, 0.955, 0.283);
+  latch.rotateX(0.12); latch.translate(0, 0.955, 0.25);
   p.push({ g: latch, c: 0x2b2f36 });
 
   // Literature pocket below it, its mouth open toward you.
   const pocket = roundedBox(0.37, 0.19, 0.035, 0.02);
-  pocket.rotateX(0.12); pocket.translate(0, 0.62, 0.288);
+  pocket.rotateX(0.12); pocket.translate(0, 0.62, 0.24);
   p.push({ g: pocket, c: CLOTH_DARK });
 
   // Armrests.
@@ -807,9 +825,9 @@ export function createCabin(): CabinHandles {
 
   /* The mark again on every headrest cover, which is where an airline puts it
      and the only branding a passenger sees for the whole flight. */
-  const stitched = stitchedMark(1536, 680, '#c6ccd6', MARK_NAVY);
+  const stitched = stitchedMark(2048, 1024, '#c6ccd6', MARK_NAVY);
   kill.push(stitched.map, stitched.height, stitched.rough);
-  const coverGeo = new THREE.PlaneGeometry(0.27, 0.12);
+  const coverGeo = new THREE.PlaneGeometry(0.28, 0.14);
   const covers = new THREE.InstancedMesh(
     coverGeo,
     new THREE.MeshStandardMaterial({
@@ -825,8 +843,10 @@ export function createCabin(): CabinHandles {
   let ci = 0;
   for (let row = 1; row <= CABIN.rows; row++) {
     for (const x of CABIN.seatX) {
-      dummy.position.set(x, CABIN.floorY + 1.087, rowZ(row) + 0.226);
-      dummy.rotation.set(-0.12, 0, 0);
+      /* The headrest is raked 0.12 rad, so its back face is too, and a panel
+         on it has to share that rake or it intersects the foam. */
+      dummy.position.set(x, CABIN.floorY + 1.0555, rowZ(row) + 0.2845);
+      dummy.rotation.set(0.12, 0, 0);
       dummy.updateMatrix();
       covers.setMatrixAt(ci++, dummy.matrix);
     }

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, type ZoneKey } from '../content/cabin';
+import { useState, type CSSProperties } from 'react';
+import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, type CabinRow, type ZoneKey } from '../content/cabin';
 import { safeHref, type Banner, type BannerSet } from '../lib/banners';
 import { shortAddress, type Manifest, type ManifestEntry } from '../lib/manifest';
 import { formatShare, formatTokens } from '../lib/seatLadder';
@@ -61,33 +61,43 @@ const Seat = ({ id, zone, entry, banner, mine, wide, onVisit, onInspect }: SeatP
       onFocus={() => onInspect(id)}
       onMouseLeave={() => onInspect(null)}
       onBlur={() => onInspect(null)}
-      className={`relative aspect-square flex-none overflow-hidden border transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${state} ${
-        wide ? 'h-7 w-[3.75rem]' : 'h-7 w-7'
-      } ${sold && !banner ? 'bg-white/[0.13]' : ''}`}
+      style={{ width: wide ? 'calc(var(--seat) * 2.2)' : 'var(--seat)', height: 'var(--seat)' }}
+      className={`sa-seat relative flex-none overflow-hidden border transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${state} ${
+        sold && !banner ? 'bg-white/[0.11]' : ''
+      }`}
     >
       {banner ? (
         <img src={banner.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      ) : sold && !wide ? (
-        // No advert up yet: the rank is the placeholder, which is its own
-        // advertisement for the seat.
-        <span className="absolute inset-0 grid place-items-center text-[9px] font-bold tabular-nums text-white/45">
-          {entry.rank}
+      ) : sold ? (
+        // No advert up yet, so the seat advertises itself: rank, then the
+        // seat number under it, at a size somebody can actually read.
+        <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+          <span className="font-mono text-[max(10px,0.42em)] font-semibold text-white/70">{entry.rank}</span>
+          <span className="mt-[0.15em] font-mono text-[max(7px,0.26em)] text-white/35">{id}</span>
         </span>
-      ) : null}
+      ) : (
+        <span className="absolute inset-0 grid place-items-center font-mono text-[max(7px,0.26em)] text-blue-100/20">
+          {id}
+        </span>
+      )}
 
       {/* Headrest — the line that turns a square into a seat. */}
       <span
         aria-hidden
-        className={`absolute inset-x-1 top-[3px] h-[2px] ${
-          banner ? 'bg-black/35' : mine ? 'bg-seat-amber/70' : sold ? 'bg-white/25' : 'bg-current opacity-25'
+        className={`absolute inset-x-[12%] top-[8%] h-[6%] ${
+          banner ? 'bg-black/35' : mine ? 'bg-seat-amber/70' : sold ? 'bg-white/25' : 'bg-current opacity-20'
         }`}
       />
-      {wide && !banner && (
-        <span className="relative text-[9px] font-bold tracking-[0.1em]">{id}</span>
-      )}
     </button>
   );
 };
+
+/** A run of consecutive rows with nobody in any of them. */
+interface Gap {
+  from: number;
+  to: number;
+  seats: number;
+}
 
 interface SeatMapProps {
   manifest: Manifest;
@@ -101,6 +111,42 @@ interface SeatMapProps {
 
 const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }: SeatMapProps) => {
   const [inspecting, setInspecting] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  /* Runs of rows with nobody in them collapse into one line.
+
+     The aircraft fills from the front, so an unexpanded map is mostly empty
+     rows — a screen of blank outlines that says nothing except that the map
+     is long. Folding them up puts the seats that are actually held, and the
+     adverts on them, at a size worth looking at, and the fold itself carries
+     the number: this many seats, nobody holding them. */
+  const blocksFor = (rows: readonly CabinRow[]): ({ row: CabinRow } | { gap: Gap })[] => {
+    const out: ({ row: CabinRow } | { gap: Gap })[] = [];
+    let run: CabinRow[] = [];
+    const flush = () => {
+      if (!run.length) return;
+      if (showAll || run.length < 3) {
+        out.push(...run.map((row) => ({ row })));
+      } else {
+        out.push({
+          gap: {
+            from: run[0].n ?? 0,
+            to: run[run.length - 1].n ?? 0,
+            seats: run.reduce((n, r) => n + r.left.length + r.right.length, 0),
+          },
+        });
+      }
+      run = [];
+    };
+    for (const row of rows) {
+      const sold = [...row.left, ...row.right].some((c) =>
+        manifest.seats.has(row.n === null ? c : `${row.n}${c}`),
+      );
+      if (sold) { flush(); out.push({ row }); } else run.push(row);
+    }
+    flush();
+    return out;
+  };
 
   const shown = inspecting ?? mine;
   const entry = shown ? manifest.bySeat.get(shown) ?? null : null;
@@ -108,20 +154,25 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
   const link = safeHref(banner?.href);
 
   return (
-    <div>
+    <div
+      /* One knob sets the whole grid: the seat is a square and everything is
+         measured off it, so the map scales from a phone to a desktop without
+         a second layout. */
+      style={{ '--seat': 'clamp(30px, 7.2vw, 52px)', '--cabin-w': 'min(100%, 34rem)' } as CSSProperties}
+    >
       {/* ── Nose ── */}
-      <svg viewBox="0 0 320 54" className="block w-full max-w-[460px] mx-auto" aria-hidden>
+      <svg viewBox="0 0 320 54" preserveAspectRatio="none" className="mx-auto block h-11 w-full max-w-[var(--cabin-w)]" aria-hidden>
         <path
-          d="M160 2 C205 2 250 22 264 52 L56 52 C70 22 115 2 160 2 Z"
-          fill="rgba(8,15,51,0.7)"
-          stroke="rgba(52,237,243,0.28)"
-          strokeWidth="1.5"
+          d="M160 6 C202 6 244 25 258 53 L62 53 C76 25 118 6 160 6 Z"
+          fill="rgba(0,38,99,0.34)"
+          stroke="rgba(126,205,224,0.3)"
+          strokeWidth="1.25"
         />
-        <path d="M136 30 h48" stroke="rgba(52,237,243,0.4)" strokeWidth="2" />
-        <circle cx="160" cy="18" r="3" fill="#FFB300" />
+        <path d="M132 34 h56" stroke="rgba(126,205,224,0.28)" strokeWidth="1.5" />
+        <circle cx="160" cy="22" r="2.5" fill="#FFB300" />
       </svg>
 
-      <div className="mx-auto max-w-[460px] border-x border-white/12 bg-[#141821]/60 backdrop-blur-sm">
+      <div className="mx-auto max-w-[var(--cabin-w)] border-x border-white/12 bg-seat-panel/70 backdrop-blur-sm">
         {CABIN_ZONES.map((zone) => {
           const accent = ACCENT[zone.accent];
           return (
@@ -132,37 +183,59 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
               </header>
 
               <div className={`flex flex-col gap-[5px] px-3 py-3 ${zone.key === 'deck' ? 'items-center' : ''}`}>
-                {zone.rows.map((row) => (
-                  <div key={row.n ?? 'deck'} className="flex items-center justify-center gap-[5px]">
-                    {row.n !== null && (
-                      <span className="w-5 flex-none text-right text-[10px] tabular-nums text-blue-100/30">{row.n}</span>
-                    )}
-                    {[row.left, row.right].map((bank, side) => (
-                      <div key={side} className="contents">
-                        {side === 1 && <span aria-hidden className="w-4 flex-none" />}
-                        {bank.map((c) => {
-                          const id = row.n === null ? c : `${row.n}${c}`;
-                          return (
-                            <Seat
-                              key={id}
-                              id={id}
-                              zone={zone.key}
-                              entry={manifest.bySeat.get(id) ?? null}
-                              banner={banners[id] ?? null}
-                              mine={mine === id}
-                              wide={row.n === null}
-                              onVisit={onVisit}
-                              onInspect={setInspecting}
-                            />
-                          );
-                        })}
-                      </div>
-                    ))}
-                    {row.n !== null && (
-                      <span className="w-5 flex-none text-[10px] tabular-nums text-blue-100/30">{row.n}</span>
-                    )}
-                  </div>
-                ))}
+                {blocksFor(zone.rows).map((block) =>
+                  'gap' in block ? (
+                    <button
+                      key={`gap-${block.gap.from}`}
+                      type="button"
+                      onClick={() => setShowAll(true)}
+                      className="group flex items-center gap-3 border border-dashed border-white/12 px-3 py-2.5 text-left transition-colors hover:border-seat-cyan/50"
+                    >
+                      <span aria-hidden className="flex gap-[3px]">
+                        {[0, 1, 2, 3, 4, 5].map((i) => (
+                          <span key={i} className="h-3 w-2 border border-white/15" />
+                        ))}
+                      </span>
+                      <span className="text-[11.5px] text-blue-100/45">
+                        Rows {block.gap.from}–{block.gap.to} ·{' '}
+                        <span className="font-mono">{block.gap.seats}</span> seats nobody has taken
+                      </span>
+                      <span className="ml-auto whitespace-nowrap text-[10px] uppercase tracking-[0.16em] text-blue-100/30 group-hover:text-seat-cyan">
+                        Show
+                      </span>
+                    </button>
+                  ) : (
+                    <div key={block.row.n ?? 'deck'} className="flex items-center justify-center gap-[5px]">
+                      {block.row.n !== null && (
+                        <span className="w-6 flex-none text-right font-mono text-[10px] text-blue-100/30">{block.row.n}</span>
+                      )}
+                      {[block.row.left, block.row.right].map((bank, side) => (
+                        <div key={side} className="contents">
+                          {side === 1 && <span aria-hidden className="w-5 flex-none" />}
+                          {bank.map((c) => {
+                            const id = block.row.n === null ? c : `${block.row.n}${c}`;
+                            return (
+                              <Seat
+                                key={id}
+                                id={id}
+                                zone={zone.key}
+                                entry={manifest.bySeat.get(id) ?? null}
+                                banner={banners[id] ?? null}
+                                mine={mine === id}
+                                wide={block.row.n === null}
+                                onVisit={onVisit}
+                                onInspect={setInspecting}
+                              />
+                            );
+                          })}
+                        </div>
+                      ))}
+                      {block.row.n !== null && (
+                        <span className="w-6 flex-none font-mono text-[10px] text-blue-100/30">{block.row.n}</span>
+                      )}
+                    </div>
+                  ),
+                )}
               </div>
             </section>
           );
@@ -179,20 +252,20 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
       </div>
 
       {/* ── Tail ── */}
-      <svg viewBox="0 0 320 64" className="block w-full max-w-[460px] mx-auto" aria-hidden>
+      <svg viewBox="0 0 320 64" preserveAspectRatio="none" className="mx-auto block h-12 w-full max-w-[var(--cabin-w)]" aria-hidden>
         <path
-          d="M56 0 L264 0 C252 30 214 56 160 62 C106 56 68 30 56 0 Z"
-          fill="rgba(8,15,51,0.7)"
-          stroke="rgba(52,237,243,0.28)"
-          strokeWidth="1.5"
+          d="M62 0 L258 0 C247 28 211 52 160 58 C109 52 73 28 62 0 Z"
+          fill="rgba(0,38,99,0.34)"
+          stroke="rgba(126,205,224,0.3)"
+          strokeWidth="1.25"
         />
-        <path d="M160 12 L160 52" stroke="rgba(247,21,171,0.55)" strokeWidth="3" />
+        <path d="M160 10 L160 48" stroke="rgba(255,179,0,0.5)" strokeWidth="2.5" />
       </svg>
 
       {/* ── Who is in the seat under the cursor ────────────────────────────
           A fixed panel rather than a floating card: the tiles are 28px and a
           popover on one would cover the three next to it. */}
-      <div className="mx-auto mt-4 flex max-w-[460px] items-start gap-3 border border-white/10 bg-[#141821]/60 p-3">
+      <div className="mx-auto mt-4 flex max-w-[var(--cabin-w)] items-start gap-3 border border-white/10 bg-seat-panel/70 p-3">
         <div className="grid h-[72px] w-[72px] flex-none place-items-center overflow-hidden border border-white/12 bg-black/35">
           {banner ? (
             <img src={banner.image} alt={banner.alt} className="h-full w-full object-cover" />
@@ -250,7 +323,7 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
       </div>
 
       {/* ── Legend ── */}
-      <ul className="mx-auto mt-4 flex max-w-[460px] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.14em] text-blue-100/45">
+      <ul className="mx-auto mt-4 flex max-w-[var(--cabin-w)] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.14em] text-blue-100/45">
         <li className="flex items-center gap-2">
           <span aria-hidden className="h-3.5 w-3.5 border border-blue-100/25" /> Open
         </li>

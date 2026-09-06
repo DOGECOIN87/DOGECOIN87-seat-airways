@@ -41,6 +41,7 @@ import { berthFromManifest } from './lib/seatLadder';
 import { useManifest } from './lib/useManifest';
 import { MANIFEST_SIZE } from './lib/manifest';
 import {
+  demoBanners,
   fetchPublished,
   hasPublishedWall,
   localBanners,
@@ -160,7 +161,17 @@ export default function App() {
     if (!hasPublishedWall) return;
     void fetchPublished().then(setPublished);
   }, []);
-  const banners = useMemo(() => ({ ...local, ...published }), [local, published]);
+  /* Until this deployment is pointed at a token, the front rows carry drawn
+     placeholders so the wall reads as a wall. A holder's own upload, and the
+     published set, both beat them. */
+  const samples = useMemo(
+    () => (manifest.live ? {} : demoBanners(manifest.entries.slice(0, 14).map((e) => e.seat.id))),
+    [manifest.live, manifest.entries],
+  );
+  const banners = useMemo(
+    () => ({ ...samples, ...local, ...published }),
+    [samples, local, published],
+  );
   const claimed = berth.seat?.id ?? null;
   const claimedSeat = berth.seat;
   const claimedZone = useMemo(
@@ -304,16 +315,43 @@ export default function App() {
       </div>
 
       <section className="mx-auto max-w-6xl px-5 pb-24 pt-12 sm:px-6">
-        <header className="text-center">
-          <Mark size={62} background="none" className="mx-auto mb-3" title="SEAT AIRWAYS" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-seat-cyan">Flight FL350 · Nonstop</p>
-          <h1 className="font-heading mt-1 text-4xl sm:text-5xl md:text-6xl">
-            <span className="sa-glow-cerise text-seat-amber">Seat</span>{' '}
-            <span className="sa-glow-cyan text-seat-cyan">Airways</span>
-          </h1>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-blue-100/70">
-            Your bag is your seat. Bigger bag, better seat. Seats are finite, so a bigger bag can take
-            yours — you'll be reseated, and everyone will hear about it.
+        {/* ── Masthead ──────────────────────────────────────────────────
+            A gate sign, not a landing page. An airline's own vernacular is a
+            brand bar over a strip of flight data, left-aligned and set in
+            figures you can read across a concourse — so the page opens on the
+            live numbers rather than on a headline about them. */}
+        <header>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border border-white/10 bg-seat-navy px-4 py-3 sm:px-5">
+            <Mark size={38} background="none" title="SEAT AIRWAYS" />
+            <h1 className="font-heading text-2xl leading-none text-white sm:text-[28px]">
+              Seat Airways
+            </h1>
+            <p className="ml-auto font-mono text-[11px] uppercase tracking-[0.22em] text-white/60">
+              FL350 · Nonstop
+            </p>
+          </div>
+
+          <dl className="grid grid-cols-2 border-x border-b border-white/10 bg-seat-panel sm:grid-cols-4">
+            {[
+              { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, tone: 'text-seat-amber' },
+              { k: 'Market cap', v: formatCap(tick.marketCap), tone: 'text-white' },
+              { k: '24h', v: formatChange(tick.change24h), tone: tick.change24h >= 0 ? 'text-seat-cyan' : 'text-red-300' },
+              { k: 'Seated', v: `${manifest.entries.length} / ${MANIFEST_SIZE}`, tone: 'text-white' },
+            ].map((f, i) => (
+              <div
+                key={f.k}
+                className={`px-4 py-3 sm:px-5 ${i > 0 ? 'border-l border-white/[0.07]' : ''} ${i > 1 ? 'border-t border-white/[0.07] sm:border-t-0' : ''} ${i === 2 ? 'border-l-0 sm:border-l' : ''}`}
+              >
+                <dt className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-blue-100/40">{f.k}</dt>
+                <dd className={`mt-1 font-mono text-lg leading-none sm:text-xl ${f.tone}`}>{f.v}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-blue-100/70">
+            Your bag is your seat. Bigger bag, better seat. Seats are finite and only the top{' '}
+            <span className="font-mono text-white">{MANIFEST_SIZE}</span> holders get one — so a bigger bag
+            takes yours, you'll be reseated, and everyone will hear about it.
           </p>
         </header>
 
@@ -544,7 +582,7 @@ export default function App() {
         </div>
 
         {/* ── Cabin + pass ── */}
-        <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-12">
+        <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-14">
           <div>
             <header className="border-b border-white/10 pb-4">
               <h2 className="font-heading text-3xl text-white sm:text-4xl">Cabin</h2>
@@ -600,7 +638,12 @@ export default function App() {
               </div>
             </div>
 
-            <BoardingLadder berth={berth} holding={effectiveHolding} address={seatKey} />
+            <BoardingLadder
+              berth={berth}
+              holding={effectiveHolding}
+              address={seatKey}
+              manifestSize={manifest.entries.length}
+            />
 
             <RadioLog entries={log} />
           </div>

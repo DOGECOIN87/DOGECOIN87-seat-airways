@@ -16,6 +16,8 @@ import { SEAT_ORDER, findEntry, type Manifest } from './manifest';
 
 export interface Rung {
   zone: ZoneKey;
+  /** The first rank this cabin holds. */
+  minRank: number;
   /** The last rank this cabin holds. Rank 1 is the biggest bag aboard. */
   maxRank: number;
   /** How it reads on the ladder. */
@@ -25,8 +27,18 @@ export interface Rung {
 /** The cabins, as rank bands, derived from where the seats actually are. */
 export const LADDER: readonly Rung[] = CABIN_ZONES.map((zone) => {
   let maxRank = 0;
-  SEAT_ORDER.forEach((s, i) => { if (s.zone === zone.key) maxRank = Math.max(maxRank, i + 1); });
-  return { zone: zone.key, maxRank, label: `Ranks 1–${maxRank}` };
+  let minRank = Infinity;
+  SEAT_ORDER.forEach((s, i) => {
+    if (s.zone !== zone.key) return;
+    maxRank = Math.max(maxRank, i + 1);
+    minRank = Math.min(minRank, i + 1);
+  });
+  return {
+    zone: zone.key,
+    minRank: Number.isFinite(minRank) ? minRank : 0,
+    maxRank,
+    label: minRank === maxRank ? `Rank ${maxRank}` : `Ranks ${minRank}–${maxRank}`,
+  };
 });
 
 export interface Berth {

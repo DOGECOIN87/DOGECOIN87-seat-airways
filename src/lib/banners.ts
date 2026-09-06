@@ -153,6 +153,41 @@ export async function fetchPublished(): Promise<Record<string, Banner>> {
 
 export const hasPublishedWall = Boolean(REMOTE);
 
+/**
+ * A wall with something on it.
+ *
+ * An empty grid does not show what the grid is for. These are placeholders on
+ * the first dozen seats so the page opens on a working billboard wall rather
+ * than an argument that one could exist — drawn rather than fetched, so they
+ * cost nothing and cannot be mistaken for anybody's real advert. Every one is
+ * labelled, and a real banner replaces it the moment a holder puts one up.
+ */
+export function demoBanners(seats: readonly string[]): Record<string, Banner> {
+  const palette = [
+    ['#0F3B57', '#5FD0E8'], ['#3A1B4E', '#E4A0FF'], ['#4A2410', '#FFB300'],
+    ['#123A26', '#6FE3A0'], ['#3D1220', '#FF7C9C'], ['#1B2A55', '#8FB2FF'],
+    ['#4A3A0E', '#FFE07A'], ['#0E3F3B', '#5FE8D4'],
+  ];
+  const out: Record<string, Banner> = {};
+  seats.forEach((seat, i) => {
+    const [bg, fg] = palette[i % palette.length];
+    const rot = (i * 37) % 360;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">` +
+      `<rect width="120" height="120" fill="${bg}"/>` +
+      `<g transform="rotate(${rot} 60 60)">` +
+      `<circle cx="60" cy="60" r="34" fill="none" stroke="${fg}" stroke-width="7" opacity="0.55"/>` +
+      `<rect x="42" y="42" width="36" height="36" fill="${fg}" opacity="0.9"/></g>` +
+      `<text x="60" y="108" font-family="monospace" font-size="13" font-weight="700" ` +
+      `fill="${fg}" text-anchor="middle" opacity="0.85">AD ${i + 1}</text></svg>`;
+    out[seat] = {
+      image: `data:image/svg+xml,${encodeURIComponent(svg)}`,
+      alt: `Example advert ${i + 1} — this seat's holder would put their own here`,
+    };
+  });
+  return out;
+}
+
 export const localBanners = {
   read: readLocal,
   /** Returns false if the browser refused to store it (quota). */
