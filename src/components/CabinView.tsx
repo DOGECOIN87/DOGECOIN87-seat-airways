@@ -75,6 +75,8 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
 
   const f = FRAMING[seat.position];
   const premium = zone.key === 'first' || zone.key === 'business';
+  /* First gets a shell, a divider and a lamp. Business is simply wide. */
+  const suite = zone.key === 'first';
   const exitRow = zone.key === 'exit';
   /* Above the atmosphere there is no daylight to spill into the cabin — the
      window goes black and the reading lights become the only light in shot. */
@@ -344,6 +346,34 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
               </text>
               <text ref={screenSpd} x={screen.x + screen.w - 18} y={screen.y + screen.h - 16} fontSize="16" textAnchor="end" fill="#E8EDF5" fontFamily={MONO} />
             </g>
+
+            {/* ── First only: the shell, the divider and the console ── */}
+            {suite && (
+              <g>
+                {/* Privacy shell curving around the seat ahead */}
+                <path
+                  d={`M${seatL - 74} ${H} L${seatL - 62} ${seatTop - 96} q ${(seatR - seatL) / 2 + 68} ${-74} ${seatR - seatL + 136} 0 L${seatR + 74} ${H}`}
+                  fill="none"
+                  stroke="#7C7566"
+                  strokeWidth="3"
+                />
+                <path
+                  d={`M${seatL - 74} ${H} L${seatL - 62} ${seatTop - 96} q ${(seatR - seatL) / 2 + 68} ${-74} ${seatR - seatL + 136} 0 L${seatR + 74} ${H} Z`}
+                  fill="#2E2B25"
+                  opacity="0.55"
+                />
+                {/* Side console with a reading lamp and a glass */}
+                <path d={`M${seatL - 66} ${seatTop + 150} h 120 v ${H - seatTop - 150} h -132 Z`} fill="#3A362F" />
+                <path d={`M${seatL - 66} ${seatTop + 150} h 120 v 12 h -122 Z`} fill="#5E594E" />
+                <g>
+                  <path d={`M${seatL - 22} ${seatTop + 150} v -54`} stroke="#6E685C" strokeWidth="4" fill="none" />
+                  <path d={`M${seatL - 40} ${seatTop + 88} h 36 l -6 -18 h -24 Z`} fill="#5E594E" />
+                  <ellipse cx={seatL - 22} cy={seatTop + 152} rx="72" ry="34" fill="#FFCE7A" opacity="0.14" />
+                </g>
+                <ellipse cx={seatL + 34} cy={seatTop + 168} rx="17" ry="7" fill="#BFB8A8" opacity="0.5" />
+                <path d={`M${seatL + 21} ${seatTop + 168} l 4 30 h 18 l 4 -30 Z`} fill="#DDE6F2" opacity="0.35" />
+              </g>
+            )}
 
             {/* Tray table latched shut, and the literature pocket */}
             <rect x={screen.x - 30} y={screen.y + screen.h + 40} width={screen.w + 60} height="16" rx="3" fill="#5E594E" />
