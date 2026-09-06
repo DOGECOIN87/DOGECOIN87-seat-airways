@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import Mark from './Mark';
 import type { CabinZone } from '../content/cabin';
 import { LAVATORY_NOTE, LAVATORY_SEATS } from '../content/cabin';
 import { formatFeet } from '../lib/flightModel';
@@ -68,12 +69,7 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
         {/* Upper stub */}
         <div className="px-5 pb-5 pt-5">
           <div className="flex items-center gap-2.5">
-            <svg viewBox="0 0 24 24" className="h-5 w-5 flex-none" aria-hidden>
-              <path
-                d="M12 1 L13.6 9.4 L23 13.6 L23 15.6 L13.6 13.2 L13.2 19.6 L16.6 22 L16.6 23 L12 21.4 L7.4 23 L7.4 22 L10.8 19.6 L10.4 13.2 L1 15.6 L1 13.6 L10.4 9.4 Z"
-                fill="#FFB300"
-              />
-            </svg>
+<Mark size={22} background="none" color="#FFB300" className="flex-none" />
             <p className="font-heading text-lg tracking-tight">
               <span className="text-seat-amber">SEAT</span>{' '}
               <span className="text-seat-cyan">AIRWAYS</span>

@@ -1,13 +1,19 @@
+import { useState } from 'react';
 import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, type ZoneKey } from '../content/cabin';
+import { safeHref, type Banner, type BannerSet } from '../lib/banners';
+import { shortAddress, type Manifest, type ManifestEntry } from '../lib/manifest';
+import { formatShare, formatTokens } from '../lib/seatLadder';
 
 /**
- * The cabin, drawn as a seat map.
+ * The cabin, from above.
  *
- * Occupancy is decided once by the seeded roll in `flightModel` and handed in,
- * so the aircraft does not reshuffle itself between renders — a seat you were
- * looking at a second ago is still the same seat. The forward cabin runs
- * fuller than the back, which is the premise made visible: the good seats are
- * the scarce ones.
+ * Two things are true of this map that are not true of a seat map anywhere
+ * else. Every seat on it is sold by rank — the manifest seats the top holders
+ * and stops, so the empty rows aft are not decoration, they are the seats
+ * nobody has out-held anyone for yet. And every seat is a square, so every
+ * sold seat is a billboard: the holder in it can put a 1:1 image on their
+ * square, and the whole aircraft reads as a wall of them with the best
+ * placements at the front.
  */
 
 const ACCENT: Record<'cerise' | 'cyan' | 'violet', { line: string; text: string }> = {
@@ -19,46 +25,64 @@ const ACCENT: Record<'cerise' | 'cyan' | 'violet', { line: string; text: string 
 interface SeatProps {
   id: string;
   zone: ZoneKey;
-  taken: boolean;
+  entry: ManifestEntry | null;
+  banner: Banner | null;
   mine: boolean;
   wide?: boolean;
   onVisit: (id: string, zone: ZoneKey) => void;
+  onInspect: (id: string | null) => void;
 }
 
-const Seat = ({ id, zone, taken, mine, wide, onVisit }: SeatProps) => {
+const Seat = ({ id, zone, entry, banner, mine, wide, onVisit, onInspect }: SeatProps) => {
   const lavatory = (LAVATORY_SEATS as readonly string[]).includes(id);
+  const sold = entry !== null;
 
   const state = mine
-    ? 'border-seat-amber bg-seat-amber text-seat-night shadow-[0_0_14px_rgba(247,21,171,0.7)]'
-    : taken
-      ? 'border-transparent bg-white/[0.17] cursor-not-allowed'
+    ? 'border-seat-amber shadow-[0_0_14px_rgba(255,179,0,0.55)]'
+    : sold
+      ? 'border-white/25 hover:border-seat-cyan'
       : zone === 'exit'
-        ? 'border-seat-cyan/70 hover:bg-seat-cyan/25 hover:shadow-[0_0_12px_rgba(52,237,243,0.55)]'
+        ? 'border-seat-cyan/45 hover:bg-seat-cyan/20 hover:border-seat-cyan'
         : lavatory
-          ? 'border-dashed border-blue-100/35 hover:bg-seat-amber/25 hover:border-seat-amber'
-          : 'border-blue-100/25 hover:bg-seat-cyan/25 hover:border-seat-cyan hover:shadow-[0_0_12px_rgba(52,237,243,0.45)]';
+          ? 'border-dashed border-blue-100/25 hover:border-seat-amber'
+          : 'border-blue-100/18 hover:bg-seat-cyan/15 hover:border-seat-cyan';
+
+  const label = sold
+    ? `Seat ${id}, rank ${entry.rank}, ${shortAddress(entry.address)}${banner ? `. Advert: ${banner.alt}` : ''}. Look from here.`
+    : `Seat ${id}, open${lavatory ? ', middle seat by the lavatory, does not recline' : ''}. Look from here.`;
 
   return (
     <button
       type="button"
       aria-pressed={mine}
-      aria-label={`${mine ? 'Your seat, ' : ''}${id}${taken ? ', taken' : ', free'}${
-        lavatory ? ', middle seat by the lavatory, does not recline' : ''
-      }. Look from here.`}
-      title={lavatory ? 'Middle seat, last row, by the lavatory. Does not recline.' : `Look from ${id}`}
+      aria-label={label}
       onClick={() => onVisit(id, zone)}
-      className={`relative h-6 flex-none border transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${state} ${
-        wide ? 'w-[3.75rem]' : 'w-[1.6rem]'
-      }`}
+      onMouseEnter={() => onInspect(id)}
+      onFocus={() => onInspect(id)}
+      onMouseLeave={() => onInspect(null)}
+      onBlur={() => onInspect(null)}
+      className={`relative aspect-square flex-none overflow-hidden border transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${state} ${
+        wide ? 'h-7 w-[3.75rem]' : 'h-7 w-7'
+      } ${sold && !banner ? 'bg-white/[0.13]' : ''}`}
     >
+      {banner ? (
+        <img src={banner.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      ) : sold && !wide ? (
+        // No advert up yet: the rank is the placeholder, which is its own
+        // advertisement for the seat.
+        <span className="absolute inset-0 grid place-items-center text-[9px] font-bold tabular-nums text-white/45">
+          {entry.rank}
+        </span>
+      ) : null}
+
       {/* Headrest — the line that turns a square into a seat. */}
       <span
         aria-hidden
         className={`absolute inset-x-1 top-[3px] h-[2px] ${
-          mine ? 'bg-seat-night/45' : taken ? 'bg-white/25' : 'bg-current opacity-30'
+          banner ? 'bg-black/35' : mine ? 'bg-seat-amber/70' : sold ? 'bg-white/25' : 'bg-current opacity-25'
         }`}
       />
-      {wide && (
+      {wide && !banner && (
         <span className="relative text-[9px] font-bold tracking-[0.1em]">{id}</span>
       )}
     </button>
@@ -66,26 +90,27 @@ const Seat = ({ id, zone, taken, mine, wide, onVisit }: SeatProps) => {
 };
 
 interface SeatMapProps {
-  taken: ReadonlySet<string>;
+  manifest: Manifest;
+  banners: BannerSet;
   mine: string | null;
+  /** The seat this visitor may advertise on, if any. */
+  canAdvertise: string | null;
   onVisit: (id: string, zone: ZoneKey) => void;
+  onAdvertise: (seat: string) => void;
 }
 
-const SeatMap = ({ taken, mine, onVisit }: SeatMapProps) => {
-  const free = CABIN_ZONES.reduce(
-    (n, zone) =>
-      n +
-      zone.rows.reduce(
-        (rn, row) => rn + [...row.left, ...row.right].filter((c) => !taken.has(row.n === null ? c : `${row.n}${c}`)).length,
-        0,
-      ),
-    0,
-  );
+const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }: SeatMapProps) => {
+  const [inspecting, setInspecting] = useState<string | null>(null);
+
+  const shown = inspecting ?? mine;
+  const entry = shown ? manifest.bySeat.get(shown) ?? null : null;
+  const banner = shown ? banners[shown] ?? null : null;
+  const link = safeHref(banner?.href);
 
   return (
     <div>
       {/* ── Nose ── */}
-      <svg viewBox="0 0 320 54" className="block w-full max-w-[420px] mx-auto" aria-hidden>
+      <svg viewBox="0 0 320 54" className="block w-full max-w-[460px] mx-auto" aria-hidden>
         <path
           d="M160 2 C205 2 250 22 264 52 L56 52 C70 22 115 2 160 2 Z"
           fill="rgba(8,15,51,0.7)"
@@ -96,7 +121,7 @@ const SeatMap = ({ taken, mine, onVisit }: SeatMapProps) => {
         <circle cx="160" cy="18" r="3" fill="#FFB300" />
       </svg>
 
-      <div className="mx-auto max-w-[420px] border-x border-white/12 bg-[#141821]/60 backdrop-blur-sm">
+      <div className="mx-auto max-w-[460px] border-x border-white/12 bg-[#141821]/60 backdrop-blur-sm">
         {CABIN_ZONES.map((zone) => {
           const accent = ACCENT[zone.accent];
           return (
@@ -112,35 +137,27 @@ const SeatMap = ({ taken, mine, onVisit }: SeatMapProps) => {
                     {row.n !== null && (
                       <span className="w-5 flex-none text-right text-[10px] tabular-nums text-blue-100/30">{row.n}</span>
                     )}
-                    {row.left.map((c) => {
-                      const id = row.n === null ? c : `${row.n}${c}`;
-                      return (
-                        <Seat
-                          key={id}
-                          id={id}
-                          zone={zone.key}
-                          taken={taken.has(id)}
-                          mine={mine === id}
-                          wide={row.n === null}
-                          onVisit={onVisit}
-                        />
-                      );
-                    })}
-                    <span aria-hidden className="w-4 flex-none" />
-                    {row.right.map((c) => {
-                      const id = row.n === null ? c : `${row.n}${c}`;
-                      return (
-                        <Seat
-                          key={id}
-                          id={id}
-                          zone={zone.key}
-                          taken={taken.has(id)}
-                          mine={mine === id}
-                          wide={row.n === null}
-                          onVisit={onVisit}
-                        />
-                      );
-                    })}
+                    {[row.left, row.right].map((bank, side) => (
+                      <div key={side} className="contents">
+                        {side === 1 && <span aria-hidden className="w-4 flex-none" />}
+                        {bank.map((c) => {
+                          const id = row.n === null ? c : `${row.n}${c}`;
+                          return (
+                            <Seat
+                              key={id}
+                              id={id}
+                              zone={zone.key}
+                              entry={manifest.bySeat.get(id) ?? null}
+                              banner={banners[id] ?? null}
+                              mine={mine === id}
+                              wide={row.n === null}
+                              onVisit={onVisit}
+                              onInspect={setInspecting}
+                            />
+                          );
+                        })}
+                      </div>
+                    ))}
                     {row.n !== null && (
                       <span className="w-5 flex-none text-[10px] tabular-nums text-blue-100/30">{row.n}</span>
                     )}
@@ -162,7 +179,7 @@ const SeatMap = ({ taken, mine, onVisit }: SeatMapProps) => {
       </div>
 
       {/* ── Tail ── */}
-      <svg viewBox="0 0 320 64" className="block w-full max-w-[420px] mx-auto" aria-hidden>
+      <svg viewBox="0 0 320 64" className="block w-full max-w-[460px] mx-auto" aria-hidden>
         <path
           d="M56 0 L264 0 C252 30 214 56 160 62 C106 56 68 30 56 0 Z"
           fill="rgba(8,15,51,0.7)"
@@ -172,21 +189,80 @@ const SeatMap = ({ taken, mine, onVisit }: SeatMapProps) => {
         <path d="M160 12 L160 52" stroke="rgba(247,21,171,0.55)" strokeWidth="3" />
       </svg>
 
+      {/* ── Who is in the seat under the cursor ────────────────────────────
+          A fixed panel rather than a floating card: the tiles are 28px and a
+          popover on one would cover the three next to it. */}
+      <div className="mx-auto mt-4 flex max-w-[460px] items-start gap-3 border border-white/10 bg-[#141821]/60 p-3">
+        <div className="grid h-[72px] w-[72px] flex-none place-items-center overflow-hidden border border-white/12 bg-black/35">
+          {banner ? (
+            <img src={banner.image} alt={banner.alt} className="h-full w-full object-cover" />
+          ) : (
+            <span className="px-1 text-center text-[9px] uppercase leading-tight tracking-[0.12em] text-blue-100/25">
+              {entry ? 'No advert' : 'Seat open'}
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          {shown ? (
+            <>
+              <p className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-blue-50">
+                <span className="font-bold tracking-[0.12em]">{shown}</span>
+                {entry ? (
+                  <>
+                    <span className="text-seat-amber tabular-nums">#{entry.rank}</span>
+                    <span className="font-mono text-[11px] text-blue-100/50">{shortAddress(entry.address)}</span>
+                  </>
+                ) : (
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-blue-100/40">Unsold</span>
+                )}
+              </p>
+              <p className="mt-1 text-[11.5px] tabular-nums text-blue-100/55">
+                {entry
+                  ? `${formatTokens(entry.balance)} · ${formatShare(entry.share)} of supply`
+                  : `Out-hold #${manifest.entries.length || 1} to take it`}
+              </p>
+              {banner && (
+                <p className="mt-1 truncate text-[11.5px] text-blue-100/70">
+                  {link ? (
+                    <a href={link} target="_blank" rel="noopener noreferrer nofollow" className="underline decoration-seat-cyan/50 underline-offset-2 hover:text-seat-cyan">
+                      {banner.alt}
+                    </a>
+                  ) : banner.alt}
+                </p>
+              )}
+              {canAdvertise === shown && (
+                <button
+                  type="button"
+                  onClick={() => onAdvertise(shown)}
+                  className="mt-2 border border-seat-amber/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-seat-amber hover:bg-seat-amber hover:text-seat-night"
+                >
+                  {banner ? 'Change your advert' : 'Advertise here'}
+                </button>
+              )}
+            </>
+          ) : (
+            <p className="text-[11.5px] leading-relaxed text-blue-100/45">
+              Hover a seat to see who holds it. Sold seats carry their holder&apos;s advert — a square image, front rows first.
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* ── Legend ── */}
-      <ul className="mx-auto mt-5 flex max-w-[420px] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.14em] text-blue-100/45">
+      <ul className="mx-auto mt-4 flex max-w-[460px] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.14em] text-blue-100/45">
         <li className="flex items-center gap-2">
-          <span aria-hidden className="h-3 w-3.5 border border-blue-100/25" /> Free
+          <span aria-hidden className="h-3.5 w-3.5 border border-blue-100/25" /> Open
         </li>
         <li className="flex items-center gap-2">
-          <span aria-hidden className="h-3 w-3.5 bg-white/[0.17]" /> Taken
+          <span aria-hidden className="h-3.5 w-3.5 bg-white/[0.13]" /> Held
         </li>
         <li className="flex items-center gap-2">
-          <span aria-hidden className="h-3 w-3.5 bg-seat-amber shadow-[0_0_8px_#FFB300]" /> Yours
+          <span aria-hidden className="h-3.5 w-3.5 border border-seat-amber shadow-[0_0_8px_#FFB300]" /> Yours
         </li>
-        <li className="flex items-center gap-2">
-          <span aria-hidden className="h-3 w-3.5 border border-seat-cyan/70" /> Exit row
+        <li className="tabular-nums text-blue-100/35">
+          {manifest.entries.length} seated · {manifest.open} open
         </li>
-        <li className="tabular-nums text-blue-100/35">{free} seats free</li>
       </ul>
     </div>
   );

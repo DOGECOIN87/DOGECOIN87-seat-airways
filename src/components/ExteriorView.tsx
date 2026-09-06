@@ -6,6 +6,7 @@ import { formatCap, formatChange } from '../lib/flightModel';
 import type { SkyState } from '../lib/sky';
 import { useAttitude } from '../lib/useAttitude';
 import { ALL_SEATS, type CabinSeat } from '../content/cabin';
+import { MARK_PATH } from './Mark';
 
 /**
  * The whole aircraft, from outside.
@@ -160,10 +161,9 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
           <path d={`M${TAIL - 130} ${CY - 8} L${TAIL - 34} ${CY - 78} L${TAIL + 24} ${CY - 78} L${TAIL - 60} ${CY + 2} Z`} fill="url(#ex-wing)" />
           {/* Fin, in the airline's colours */}
           <path d={`M${TAIL - 176} ${CY - 26} L${TAIL - 66} ${CY - 232} L${TAIL - 6} ${CY - 232} L${TAIL - 16} ${CY - 30} Z`} fill="url(#ex-fin)" />
-          {/* Tail logo: a seat, seen from the side */}
-          <g transform={`translate(${TAIL - 88} ${CY - 150}) scale(1.5)`}>
-            <circle cx="0" cy="0" r="30" fill="none" stroke="#FFFFFF" strokeWidth="4" />
-            <path d="M-12 14 L-12 -10 q 0 -6 6 -6 l 10 0 q 6 0 6 6 l 0 10 l 6 0 l 0 8 Z" fill="#FFFFFF" />
+          {/* Tail logo — the same path the rest of the page uses */}
+          <g transform={`translate(${TAIL - 156} ${CY - 244}) scale(0.115)`}>
+            <path d={MARK_PATH} fill="#FFFFFF" fillRule="evenodd" />
           </g>
 
           {/* Fuselage */}

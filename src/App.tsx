@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FlightDeck from './components/FlightDeck';
-import CabinView from './components/CabinView';
-import CabinSideView from './components/CabinSideView';
+import CabinView3D from './components/CabinView3D';
 import ExteriorView from './components/ExteriorView';
 import CargoHold from './components/CargoHold';
 import CheckIn from './components/CheckIn';
+import Mark from './components/Mark';
 import BoardingLadder from './components/BoardingLadder';
 import ViewFrame from './components/ViewFrame';
 import Annunciators from './components/Annunciators';
 import SeatMap from './components/SeatMap';
+import AdvertDialog from './components/AdvertDialog';
 import BoardingPass from './components/BoardingPass';
 import RadioLog, { type LogEntry } from './components/RadioLog';
 import {
@@ -16,7 +17,6 @@ import {
   CABIN_ZONES,
   CALLOUTS,
   CHATTER,
-  LAVATORY_SEATS,
   findSeat,
   type CabinSeat,
   type Facing,
@@ -32,13 +32,21 @@ import {
   formatCap,
   formatChange,
   formatFeet,
-  occupiedSeats,
 } from './lib/flightModel';
 import { useFlightState } from './lib/useFlightState';
 import { useSky } from './lib/useSky';
 import { useWallet } from './lib/useWallet';
 import { holdingsSource, type Holding } from './lib/holdings';
-import { berthFor } from './lib/seatLadder';
+import { berthFromManifest } from './lib/seatLadder';
+import { useManifest } from './lib/useManifest';
+import { MANIFEST_SIZE } from './lib/manifest';
+import {
+  fetchPublished,
+  hasPublishedWall,
+  localBanners,
+  type Banner,
+  type BannerSet,
+} from './lib/banners';
 
 /**
  * SEAT AIRWAYS — the cabin.
@@ -52,9 +60,6 @@ import { berthFor } from './lib/seatLadder';
  * window, middle and aisle seats see genuinely different things, because that
  * is the ladder the whole premise rests on.
  */
-
-/** Fixed cabin seed — the same aircraft every visit, not a fresh shuffle. */
-const CABIN_SEED = 350;
 
 const MODES: { key: FlightMode; label: string }[] = [
   { key: 'live', label: 'Live market' },
@@ -130,16 +135,32 @@ export default function App() {
   const [preview, setPreview] = useState<Holding | null>(null);
   const [log, setLog] = useState<readonly LogEntry[]>([]);
 
-  const taken = useMemo(() => occupiedSeats(ALL_SEATS, CABIN_SEED, LAVATORY_SEATS), []);
-  /* Souls on board, less the ones who got a seat. */
-  const belowCutoff = Math.max(0, tick.holders - taken.size);
-
   const effectiveHolding = preview ?? holding;
   const seatKey = wallet.address ?? (preview ? 'SAMPLE-HOLDER' : null);
+
+  /* Who is aboard. Seats go to the top holders and then run out, so the empty
+     rows aft are the game: they are the seats nobody has out-held anyone for. */
+  const manifest = useManifest(seatKey, effectiveHolding);
+  const taken = manifest.seats;
+  /* Holders who did not make the cut. */
+  const belowCutoff = Math.max(0, tick.holders - manifest.entries.length);
+
   const berth = useMemo(
-    () => berthFor(effectiveHolding?.share ?? 0, seatKey),
-    [effectiveHolding?.share, seatKey],
+    () => berthFromManifest(manifest, seatKey, effectiveHolding?.balance ?? 0),
+    [manifest, seatKey, effectiveHolding?.balance],
   );
+
+  /* ── The wall ─────────────────────────────────────────────────────────
+     Every seat is a square, so every held seat is a billboard. The published
+     set wins over anything this browser has put up locally. */
+  const [published, setPublished] = useState<BannerSet>({});
+  const [local, setLocal] = useState<BannerSet>(() => localBanners.read());
+  const [advertising, setAdvertising] = useState<string | null>(null);
+  useEffect(() => {
+    if (!hasPublishedWall) return;
+    void fetchPublished().then(setPublished);
+  }, []);
+  const banners = useMemo(() => ({ ...local, ...published }), [local, published]);
   const claimed = berth.seat?.id ?? null;
   const claimedSeat = berth.seat;
   const claimedZone = useMemo(
@@ -268,7 +289,6 @@ export default function App() {
     if (seat) setViewPosition(seat.position);
   };
 
-  const lavatory = (LAVATORY_SEATS as readonly string[]).includes(viewSeat.id);
 
   return (
     <div className="relative min-h-[calc(100vh-var(--navbar-height,56px))] text-white">
@@ -285,6 +305,7 @@ export default function App() {
 
       <section className="mx-auto max-w-6xl px-5 pb-24 pt-12 sm:px-6">
         <header className="text-center">
+          <Mark size={62} background="none" className="mx-auto mb-3" title="SEAT AIRWAYS" />
           <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-seat-cyan">Flight FL350 · Nonstop</p>
           <h1 className="font-heading mt-1 text-4xl sm:text-5xl md:text-6xl">
             <span className="sa-glow-cerise text-seat-amber">Seat</span>{' '}
@@ -356,18 +377,8 @@ export default function App() {
               />
             ) : camera === 'deck' ? (
               <FlightDeck feed={feed} lamps={lamps} sky={sky} band={band} />
-            ) : facing === 'forward' ? (
-              <CabinView
-                feed={feed}
-                sky={sky}
-                band={band}
-                seat={viewSeat}
-                zone={viewZoneDef}
-                lavatory={lavatory}
-                taken={taken}
-              />
             ) : (
-              <CabinSideView
+              <CabinView3D
                 feed={feed}
                 sky={sky}
                 band={band}
@@ -538,12 +549,24 @@ export default function App() {
             <header className="border-b border-white/10 pb-4">
               <h2 className="font-heading text-3xl text-white sm:text-4xl">Cabin</h2>
               <p className="mt-1.5 text-sm text-blue-100/60">
-                189 seats, and they fill from the front. You don&apos;t book one — your holding does that.
-                Click any seat to see the flight from it.
+                Only the top {MANIFEST_SIZE} holders get a seat, and they get them in order. You don&apos;t book
+                one — you take it off whoever is holding less than you. Click any seat to see the flight from it.
+              </p>
+              <p className="mt-2 text-[12px] leading-relaxed text-blue-100/45">
+                Every seat is a square, so every seat is a billboard: hold one and you can put a 1:1 image on it.
+                The front rows are the best placements, and the only way to reach them is to out-hold the person
+                already there.
               </p>
             </header>
             <div className="mt-7">
-              <SeatMap taken={taken} mine={claimed} onVisit={visit} />
+              <SeatMap
+                manifest={manifest}
+                banners={banners}
+                mine={claimed}
+                canAdvertise={claimed}
+                onVisit={visit}
+                onAdvertise={setAdvertising}
+              />
             </div>
           </div>
 
@@ -599,6 +622,26 @@ export default function App() {
           </p>
         </div>
       </section>
+
+      {advertising && (
+        <AdvertDialog
+          seat={advertising}
+          current={banners[advertising] ?? null}
+          onSave={(banner: Banner) => {
+            if (!localBanners.put(advertising, banner)) {
+              return 'This browser would not store that image. Try a smaller one.';
+            }
+            setLocal(localBanners.read());
+            say(`Advert up on seat ${advertising}.`, 'pa');
+            return null;
+          }}
+          onClear={() => {
+            localBanners.clear(advertising);
+            setLocal(localBanners.read());
+          }}
+          onClose={() => setAdvertising(null)}
+        />
+      )}
     </div>
   );
 }

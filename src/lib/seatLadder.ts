@@ -2,80 +2,84 @@
  * What your bag earns you.
  *
  * The premise says your seat is not a choice — it is what your holdings are
- * worth. This turns a balance into a specific seat on a specific row.
+ * worth relative to everyone else's. Seats are handed out strictly by rank
+ * from the manifest, and the manifest is finite, so the ladder is a queue
+ * rather than a set of thresholds: passing a threshold you can then forget
+ * about is not competitive, and having to out-hold the specific person in
+ * front of you is.
  *
- * Ranking is done by **share of supply**, not by position in a holder list.
- * That is a deliberate constraint: reading one wallet's balance needs a single
- * RPC call, whereas "are you in the top two" needs every holder's balance from
- * an indexer. Share of supply gives an honest, stable ladder that a browser can
- * work out on its own — and it does not silently change under you because
- * somebody else sold.
+ * Each cabin is therefore a band of ranks. How many ranks it covers is simply
+ * how many seats are in it, counted in the order the aircraft fills.
  */
-import { ALL_SEATS, CABIN_ZONES, type CabinSeat, type ZoneKey } from '../content/cabin';
+import { CABIN_ZONES, type CabinSeat, type ZoneKey } from '../content/cabin';
+import { SEAT_ORDER, findEntry, type Manifest } from './manifest';
 
-/** The cutoffs, as a share of total supply. */
-export const LADDER: { zone: ZoneKey; minShare: number; label: string }[] = [
-  { zone: 'deck', minShare: 0.01, label: '1% of supply' },
-  { zone: 'first', minShare: 0.005, label: '0.5% of supply' },
-  { zone: 'business', minShare: 0.002, label: '0.2% of supply' },
-  { zone: 'exit', minShare: 0.0005, label: '0.05% of supply' },
-  { zone: 'economy', minShare: 0, label: 'any balance at all' },
-];
+export interface Rung {
+  zone: ZoneKey;
+  /** The last rank this cabin holds. Rank 1 is the biggest bag aboard. */
+  maxRank: number;
+  /** How it reads on the ladder. */
+  label: string;
+}
+
+/** The cabins, as rank bands, derived from where the seats actually are. */
+export const LADDER: readonly Rung[] = CABIN_ZONES.map((zone) => {
+  let maxRank = 0;
+  SEAT_ORDER.forEach((s, i) => { if (s.zone === zone.key) maxRank = Math.max(maxRank, i + 1); });
+  return { zone: zone.key, maxRank, label: `Ranks 1–${maxRank}` };
+});
 
 export interface Berth {
-  /** The seat earned, or null when the holding is below every cutoff. */
+  /** The seat earned, or null when the bag is not in the manifest. */
   seat: CabinSeat | null;
-  /** True when the holder rides below the floor. */
+  /** True when the holder rides below the cut. */
   hold: boolean;
+  /** Position on the manifest, 1 being the biggest bag. Null in the hold. */
+  rank: number | null;
   /** The rung reached, for display. */
   rung: string;
-  /** What the next rung up costs, as a share. Null at the top. */
-  nextShare: number | null;
+  /** Tokens needed to pass whoever is directly above. Zero at the top. */
+  gap: number;
+  /** Who that is, in words. Null at the top of the aircraft. */
   nextLabel: string | null;
 }
 
-/** A stable index from an address — the same wallet always gets the same seat. */
-function hashOf(address: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < address.length; i++) {
-    h ^= address.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h ^ (h >>> 15)) >>> 0;
-}
-
 /**
- * The seat a holding earns.
+ * The seat a holding earns, read off the manifest.
  *
- * `share` is the holder's fraction of supply, 0–1. Which seat *within* the
- * earned cabin comes from the address, so it is stable across reloads and two
- * wallets rarely land on the same one — and when they do, that is the premise
- * working: seats are finite, and a bigger bag can take yours.
+ * Everything here is relative: the same balance is a flight-deck seat on a
+ * quiet day and the cargo hold on a busy one, and that is the intended
+ * behaviour — the aircraft is a leaderboard with legroom.
  */
-export function berthFor(share: number, address: string | null): Berth {
-  if (!address || share <= 0) {
+export function berthFromManifest(manifest: Manifest, address: string | null, balance: number): Berth {
+  const entry = findEntry(manifest, address);
+
+  if (!entry) {
+    // Below the cut. What it costs to get aboard is the last seat's balance.
+    const seatsLeft = manifest.open > 0;
     return {
       seat: null,
       hold: true,
+      rank: null,
       rung: 'Cargo hold',
-      nextShare: 0,
-      nextLabel: 'any balance at all',
+      gap: seatsLeft ? 1 : Math.max(0, manifest.cutoff - balance),
+      nextLabel: !address
+        ? null
+        : seatsLeft
+          ? `${manifest.open} seats still unsold — any balance takes one`
+          : `The last seat aboard is holding ${formatTokens(manifest.cutoff)}`,
     };
   }
 
-  const rungIndex = LADDER.findIndex((r) => share >= r.minShare);
-  const rung = LADDER[rungIndex] ?? LADDER[LADDER.length - 1];
-  const zone = CABIN_ZONES.find((z) => z.key === rung.zone);
-  const seats = ALL_SEATS.filter((s) => s.zone === rung.zone);
-  const seat = seats.length ? seats[hashOf(address) % seats.length] : null;
-  const next = rungIndex > 0 ? LADDER[rungIndex - 1] : null;
-
+  const above = manifest.entries[entry.rank - 2] ?? null;
+  const zone = CABIN_ZONES.find((z) => z.key === entry.seat.zone);
   return {
-    seat,
+    seat: entry.seat,
     hold: false,
-    rung: zone?.className ?? rung.zone.toUpperCase(),
-    nextShare: next ? next.minShare : null,
-    nextLabel: next ? `${CABIN_ZONES.find((z) => z.key === next.zone)?.name ?? next.zone} at ${next.label}` : null,
+    rank: entry.rank,
+    rung: zone?.className ?? entry.seat.zone.toUpperCase(),
+    gap: above ? Math.max(0, above.balance - entry.balance) : 0,
+    nextLabel: above ? `#${above.rank} in ${above.seat.id} is holding ${formatTokens(above.balance)}` : null,
   };
 }
 

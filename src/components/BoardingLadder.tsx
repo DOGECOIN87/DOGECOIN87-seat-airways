@@ -28,15 +28,11 @@ const seatCount = (zone: string) => ALL_SEATS.filter((s) => s.zone === zone).len
 const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
   const share = holding?.share ?? 0;
   const seated = Boolean(address) && !berth.hold;
+  const balance = holding?.balance ?? 0;
 
-  /* Progress from the rung you are on to the one above it. */
-  const currentMin = LADDER.find((r) => share >= r.minShare)?.minShare ?? 0;
-  const target = berth.nextShare;
-  const progress =
-    target === null
-      ? 1
-      : Math.max(0, Math.min(1, (share - currentMin) / Math.max(target - currentMin, 1e-12)));
-  const shortfall = target !== null && holding ? Math.max(0, target * holding.supply - holding.balance) : 0;
+  /* How close you are to the bag directly above yours. */
+  const target = balance + berth.gap;
+  const progress = berth.gap <= 0 ? 1 : Math.max(0.02, Math.min(1, balance / Math.max(target, 1e-9)));
 
   return (
     <section
@@ -46,7 +42,7 @@ const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
       <header className="flex items-baseline gap-3 border-b border-white/10 px-5 py-3.5">
         <h3 className="font-heading text-lg leading-none text-white">Boarding ladder</h3>
         <p className="ml-auto whitespace-nowrap text-[10px] uppercase tracking-[0.18em] text-blue-100/40">
-          % of supply
+          By rank
         </p>
       </header>
 
@@ -54,7 +50,7 @@ const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
         {LADDER.map((rung) => {
           const zone = CABIN_ZONES.find((z) => z.key === rung.zone);
           const here = seated && berth.seat?.zone === rung.zone;
-          const reached = seated && share >= rung.minShare;
+          const reached = seated && berth.rank !== null && berth.rank <= rung.maxRank;
           return (
             <li
               key={rung.zone}
@@ -79,7 +75,7 @@ const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
                   {zone?.name ?? rung.zone}
                   {here && berth.seat && (
                     <span className="ml-2 align-middle text-[11px] font-normal tabular-nums text-seat-amber">
-                      seat {berth.seat.id}
+                      seat {berth.seat.id} · #{berth.rank}
                     </span>
                   )}
                 </span>
@@ -92,7 +88,7 @@ const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
                   reached ? 'text-white' : 'text-blue-100/35'
                 }`}
               >
-                {rung.minShare === 0 ? '> 0%' : formatShare(rung.minShare)}
+                #{rung.maxRank}
               </span>
             </li>
           );
@@ -114,9 +110,9 @@ const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
             <span className={`block text-sm font-bold ${berth.hold && address ? 'text-white' : 'text-blue-100/75'}`}>
               Cargo hold
             </span>
-            <span className="block text-[11px] text-blue-100/40">Unlimited · no balance required</span>
+            <span className="block text-[11px] text-blue-100/40">Unlimited · everyone below the cut</span>
           </span>
-          <span className="shrink-0 text-right text-[12px] tabular-nums text-blue-100/35">0%</span>
+          <span className="shrink-0 text-right text-[12px] tabular-nums text-blue-100/35">—</span>
         </li>
       </ol>
 
@@ -139,12 +135,12 @@ const BoardingLadder = ({ berth, holding, address }: BoardingLadderProps) => {
               </div>
               <p className="mt-2.5 text-[12.5px] leading-relaxed text-blue-100/70">
                 {berth.nextLabel}. You need{' '}
-                <span className="font-bold tabular-nums text-white">{formatTokens(shortfall)}</span> more.
+                <span className="font-bold tabular-nums text-white">{formatTokens(berth.gap)}</span> more to take it.
               </p>
             </>
           ) : (
             <p className="text-[12.5px] text-blue-100/70">
-              You are on the flight deck. There is no seat above this one.
+              You hold the biggest bag on this aircraft. There is no seat above yours.
             </p>
           )}
         </div>
