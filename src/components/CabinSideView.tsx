@@ -106,8 +106,8 @@ const CabinSideView = ({ feed, sky, band, seat, zone, facing, taken }: CabinSide
 
   return (
     <div
-      className="sd-view relative w-full"
-      style={{ aspectRatio: '3 / 2', minHeight: 300 }}
+      className="sd-view sd-frame relative w-full"
+      
       role="img"
       aria-label={`Looking ${facing} from seat ${seat.id}: ${chain
         .map((i) => (i.kind === 'seat' ? `seat ${i.id}` : i.kind))

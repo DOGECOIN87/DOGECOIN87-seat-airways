@@ -102,8 +102,8 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
 
   return (
     <div
-      className="sd-view relative w-full"
-      style={{ aspectRatio: '16 / 9', minHeight: 300 }}
+      className="sd-view sd-frame sd-frame--wide relative w-full"
+      
       role="img"
       aria-label={`SEAT AIRWAYS flight FL350 from outside, ${band.label.toLowerCase()}. Each lit window is a row with passengers in it${
         claimed ? `, and seat ${claimed.id} is marked` : ''

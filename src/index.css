@@ -83,6 +83,35 @@ body {
 }
 .sd-shake { animation: sd-shake 0.17s linear infinite; }
 
+/* ── Responsive view frames ───────────────────────────────────────────
+   The instrument views are drawn landscape, but a phone held upright has
+   no landscape to give them. Squaring the frame on a narrow screen makes
+   the view physically larger and lets the SVG crop to its own centre,
+   which is where every view keeps the thing worth seeing. The exterior
+   keeps a wider frame — an aircraft cropped to its middle is a tube. */
+.sd-frame { aspect-ratio: 3 / 2; }
+.sd-frame--wide { aspect-ratio: 16 / 9; }
+
+@media (max-width: 640px) {
+  .sd-frame { aspect-ratio: 5 / 4; }
+  .sd-frame--wide { aspect-ratio: 4 / 3; }
+}
+
+/* Full screen: the real answer on a phone, and worth having on a laptop.
+   The frame gives up its aspect ratio and fills whatever it is given. */
+.sd-full .sd-frame,
+.sd-full .sd-frame--wide {
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Control rows scroll sideways on a narrow screen instead of stacking
+   four deep. No visible scrollbar — the clipped last button is the
+   affordance, as it is in every other horizontal strip on the page. */
+.sd-chrome { scrollbar-width: none; -ms-overflow-style: none; }
+.sd-chrome::-webkit-scrollbar { display: none; }
+
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;

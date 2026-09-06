@@ -34,6 +34,7 @@ interface ViewFrameProps {
 const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: ViewFrameProps) => {
   const boxRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  const [full, setFull] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
 
   /* Active pointers, so a two-finger pinch can be told from a one-finger drag. */
@@ -117,6 +118,22 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
     if (pointers.current.size === 0) dragFrom.current = null;
   };
 
+  /* Full screen is a modal-ish state: hold the page still behind it, and
+     let Escape out the way every other overlay does. */
+  useEffect(() => {
+    if (!full) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFull(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [full]);
+
   /* Wheel has to be a non-passive native listener to be preventable. */
   useEffect(() => {
     const box = boxRef.current;
@@ -147,7 +164,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
   const zoomed = scale > 1.001;
 
   return (
-    <div className="relative">
+    <div className={full ? 'sd-full fixed inset-0 z-[60] flex flex-col gap-2 bg-[#05070F] p-3' : 'relative'}>
       <div
         ref={boxRef}
         tabIndex={0}
@@ -159,7 +176,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
         onPointerUp={endPointer}
         onPointerCancel={endPointer}
         onKeyDown={onKeyDown}
-        className={`relative overflow-hidden border border-white/12 bg-[#05070F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
+        className={`relative overflow-hidden border border-white/12 bg-[#05070F] ${full ? 'min-h-0 flex-1' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
           zoomed ? 'cursor-grab active:cursor-grabbing' : ''
         }`}
         style={{ touchAction: 'none' }}
@@ -180,26 +197,27 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
         </p>
       </div>
 
-      {/* Chrome */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5" role="group" aria-label="Zoom">
+      {/* Chrome. On a narrow screen this scrolls sideways rather than
+          stacking four rows deep and pushing the view off the top. */}
+      <div className="sd-chrome mt-3 flex items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+        <div className="flex shrink-0 items-center gap-1.5" role="group" aria-label="Zoom">
           <button
             type="button"
             onClick={() => zoomAbout(scale / 1.25)}
             disabled={scale <= MIN + 0.001 && !onZoomOutBeyond}
             aria-label={scale <= MIN + 0.001 && zoomOutHint ? zoomOutHint : 'Zoom out'}
             title={scale <= MIN + 0.001 && zoomOutHint ? zoomOutHint : undefined}
-            className="h-9 w-9 border border-white/12 bg-white/[0.03] text-lg leading-none text-blue-100/70 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 disabled:hover:border-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+            className="h-9 w-9 shrink-0 border border-white/12 bg-white/[0.03] text-lg leading-none text-blue-100/70 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 disabled:hover:border-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
           >
             −
           </button>
-          <span className="w-14 text-center text-[11px] tabular-nums text-blue-100/50">{scale.toFixed(1)}×</span>
+          <span className="w-14 shrink-0 text-center text-[11px] tabular-nums text-blue-100/50">{scale.toFixed(1)}×</span>
           <button
             type="button"
             onClick={() => zoomAbout(scale * 1.25)}
             disabled={scale >= MAX - 0.001}
             aria-label="Zoom in"
-            className="h-9 w-9 border border-white/12 bg-white/[0.03] text-lg leading-none text-blue-100/70 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 disabled:hover:border-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+            className="h-9 w-9 shrink-0 border border-white/12 bg-white/[0.03] text-lg leading-none text-blue-100/70 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 disabled:hover:border-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
           >
             +
           </button>
@@ -207,9 +225,17 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
             type="button"
             onClick={reset}
             disabled={!zoomed && pan.x === 0 && pan.y === 0}
-            className="ml-1 border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/60 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+            className="ml-1 shrink-0 border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/60 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
           >
             Reset
+          </button>
+          <button
+            type="button"
+            onClick={() => setFull((v) => !v)}
+            aria-pressed={full}
+            className="ml-1 shrink-0 border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/60 transition-colors hover:border-white/25 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+          >
+            {full ? 'Exit full screen' : 'Full screen'}
           </button>
         </div>
         {actions}

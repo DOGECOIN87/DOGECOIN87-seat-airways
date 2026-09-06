@@ -20,7 +20,7 @@ const Lamp = ({ label, on, caution, detail }: LampProps) => {
   const colour = caution ? '#FFB300' : '#3FD8E8';
   return (
     <li
-      className={`relative flex min-w-0 flex-1 items-center gap-3 border-r border-white/10 px-4 py-3.5 last:border-r-0 ${
+      className={`relative flex min-w-[10.5rem] flex-1 shrink-0 items-center gap-3 border-r border-white/10 px-4 py-3.5 last:border-r-0 ${
         on ? 'bg-white/[0.045]' : ''
       }`}
     >
@@ -37,13 +37,13 @@ const Lamp = ({ label, on, caution, detail }: LampProps) => {
       />
       <span className="min-w-0">
         <span
-          className={`block truncate text-[11px] font-bold uppercase tracking-[0.18em] ${
+          className={`block whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.18em] ${
             on ? 'text-white' : 'text-blue-100/35'
           }`}
         >
           {label}
         </span>
-        <span className="block truncate text-[10px] uppercase tracking-[0.14em] text-blue-100/35">
+        <span className="block whitespace-nowrap text-[10px] uppercase tracking-[0.14em] text-blue-100/35">
           {on ? detail : 'Off'}
         </span>
       </span>

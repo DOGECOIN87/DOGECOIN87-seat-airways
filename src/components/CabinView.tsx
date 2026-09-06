@@ -125,8 +125,8 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
 
   return (
     <div
-      className="sd-view relative w-full"
-      style={{ aspectRatio: '3 / 2', minHeight: 300 }}
+      className="sd-view sd-frame relative w-full"
+      
       role="img"
       aria-label={`The view from seat ${seat.id} in ${zone.name}: ${
         seat.position === 'window' ? 'a window seat' : seat.position === 'middle' ? 'a middle seat' : 'an aisle seat'
