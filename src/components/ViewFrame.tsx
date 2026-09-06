@@ -1,0 +1,221 @@
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react';
+
+/**
+ * The window you look through.
+ *
+ * Wraps any view in zoom and pan: wheel or pinch to zoom about the pointer,
+ * drag to move once you are in past 1×, and buttons and keys for everyone not
+ * using a mouse. Zoom is a transform on a wrapper rather than anything the
+ * views know about, so the SVG inside stays vector-sharp all the way in and no
+ * view has to implement this twice.
+ */
+
+const MIN = 1;
+const MAX = 4;
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+interface ViewFrameProps {
+  children: ReactNode;
+  /** Announced to screen readers, and shown in the corner badge. */
+  label: string;
+  /** Right-hand chrome, e.g. the walk-through controls. */
+  actions?: ReactNode;
+  /**
+   * Called when the viewer keeps zooming out at the minimum — the gesture for
+   * leaving the cabin altogether and looking at the whole aircraft. Omitted
+   * on the exterior view itself, where there is nowhere further out to go.
+   */
+  onZoomOutBeyond?: () => void;
+  /** Hint shown on the zoom-out button when that will pop you outside. */
+  zoomOutHint?: string;
+}
+
+const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: ViewFrameProps) => {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
+  /* Active pointers, so a two-finger pinch can be told from a one-finger drag. */
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchStart = useRef<{ dist: number; scale: number } | null>(null);
+  const dragFrom = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
+
+  /** Keep the view inside its frame — panning should never reveal the void. */
+  const clampPan = useCallback((next: { x: number; y: number }, s: number) => {
+    const box = boxRef.current;
+    if (!box) return next;
+    const maxX = (box.clientWidth * (s - 1)) / 2;
+    const maxY = (box.clientHeight * (s - 1)) / 2;
+    return { x: clamp(next.x, -maxX, maxX), y: clamp(next.y, -maxY, maxY) };
+  }, []);
+
+  /** Zoom about a point, so the thing under the cursor stays under it. */
+  const zoomAbout = useCallback(
+    (nextScale: number, clientX?: number, clientY?: number) => {
+      const box = boxRef.current;
+      // Already all the way out and still zooming out: that is the request to
+      // leave the aircraft, not a no-op.
+      if (nextScale < MIN && scale <= MIN + 0.001 && onZoomOutBeyond) {
+        onZoomOutBeyond();
+        return;
+      }
+      const s = clamp(nextScale, MIN, MAX);
+      setScale((prev) => {
+        if (!box || clientX === undefined || clientY === undefined) {
+          setPan((p) => clampPan(p, s));
+          return s;
+        }
+        const rect = box.getBoundingClientRect();
+        const ox = clientX - rect.left - rect.width / 2;
+        const oy = clientY - rect.top - rect.height / 2;
+        setPan((p) => clampPan({ x: ox - ((ox - p.x) * s) / prev, y: oy - ((oy - p.y) * s) / prev }, s));
+        return s;
+      });
+    },
+    [clampPan, scale, onZoomOutBeyond],
+  );
+
+  const onWheel = (e: ReactWheelEvent<HTMLDivElement>) => {
+    if (!e.ctrlKey && Math.abs(e.deltaY) < 2) return;
+    e.preventDefault();
+    zoomAbout(scale * (e.deltaY < 0 ? 1.14 : 1 / 1.14), e.clientX, e.clientY);
+  };
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinchStart.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), scale };
+      dragFrom.current = null;
+      return;
+    }
+    if (scale > 1) {
+      dragFrom.current = { x: e.clientX, y: e.clientY, pan };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      zoomAbout((pinchStart.current.scale * dist) / pinchStart.current.dist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      return;
+    }
+    const from = dragFrom.current;
+    if (!from) return;
+    setPan(clampPan({ x: from.pan.x + (e.clientX - from.x), y: from.pan.y + (e.clientY - from.y) }, scale));
+  };
+
+  const endPointer = (e: ReactPointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchStart.current = null;
+    if (pointers.current.size === 0) dragFrom.current = null;
+  };
+
+  /* Wheel has to be a non-passive native listener to be preventable. */
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const block = (e: WheelEvent) => {
+      if (e.deltaY) e.preventDefault();
+    };
+    box.addEventListener('wheel', block, { passive: false });
+    return () => box.removeEventListener('wheel', block);
+  }, []);
+
+  const reset = () => {
+    setScale(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = 40;
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomAbout(scale * 1.25); }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomAbout(scale / 1.25); }
+    else if (e.key === '0') { e.preventDefault(); reset(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); setPan((p) => clampPan({ ...p, x: p.x + step }, scale)); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); setPan((p) => clampPan({ ...p, x: p.x - step }, scale)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setPan((p) => clampPan({ ...p, y: p.y + step }, scale)); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setPan((p) => clampPan({ ...p, y: p.y - step }, scale)); }
+  };
+
+  const zoomed = scale > 1.001;
+
+  return (
+    <div className="relative">
+      <div
+        ref={boxRef}
+        tabIndex={0}
+        role="group"
+        aria-label={`${label}. Zoom with the plus and minus keys, pan with the arrow keys, zero to reset.`}
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endPointer}
+        onPointerCancel={endPointer}
+        onKeyDown={onKeyDown}
+        className={`relative overflow-hidden border border-white/12 bg-[#05070F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
+          zoomed ? 'cursor-grab active:cursor-grabbing' : ''
+        }`}
+        style={{ touchAction: 'none' }}
+      >
+        <div
+          className="origin-center"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+            transition: dragFrom.current || pinchStart.current ? 'none' : 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+        >
+          {children}
+        </div>
+
+        {/* Where you are, bottom left of the glass */}
+        <p className="pointer-events-none absolute bottom-3 left-3 border border-white/12 bg-[#05070F]/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-seat-cyan backdrop-blur-sm">
+          {label}
+        </p>
+      </div>
+
+      {/* Chrome */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5" role="group" aria-label="Zoom">
+          <button
+            type="button"
+            onClick={() => zoomAbout(scale / 1.25)}
+            disabled={scale <= MIN + 0.001 && !onZoomOutBeyond}
+            aria-label={scale <= MIN + 0.001 && zoomOutHint ? zoomOutHint : 'Zoom out'}
+            title={scale <= MIN + 0.001 && zoomOutHint ? zoomOutHint : undefined}
+            className="h-9 w-9 border border-white/12 bg-white/[0.03] text-lg leading-none text-blue-100/70 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 disabled:hover:border-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+          >
+            −
+          </button>
+          <span className="w-14 text-center text-[11px] tabular-nums text-blue-100/50">{scale.toFixed(1)}×</span>
+          <button
+            type="button"
+            onClick={() => zoomAbout(scale * 1.25)}
+            disabled={scale >= MAX - 0.001}
+            aria-label="Zoom in"
+            className="h-9 w-9 border border-white/12 bg-white/[0.03] text-lg leading-none text-blue-100/70 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 disabled:hover:border-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={reset}
+            disabled={!zoomed && pan.x === 0 && pan.y === 0}
+            className="ml-1 border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/60 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+          >
+            Reset
+          </button>
+        </div>
+        {actions}
+      </div>
+    </div>
+  );
+};
+
+export default ViewFrame;

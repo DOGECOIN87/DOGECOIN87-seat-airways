@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+/* ============================================================
+   SEAT AIRWAYS
+   Graphite structure, amber integral lighting, cyan for data —
+   the same palette the instruments themselves are drawn in.
+   ============================================================ */
+
+body {
+  margin: 0;
+  background-color: #0B0E14;
+  color: #FFFFFF;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-heading {
+  font-family: 'Barlow Condensed', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+/* ── Signage glow, for the title only ─────────────────────────────── */
+.sa-glow-amber { text-shadow: 0 0 8px rgba(255, 179, 0, 0.7), 0 0 26px rgba(255, 179, 0, 0.35); }
+.sa-glow-cyan  { text-shadow: 0 0 8px rgba(63, 216, 232, 0.7), 0 0 26px rgba(63, 216, 232, 0.3); }
+
+/* ── CRT scanlines over the glass ─────────────────────────────────── */
+.sa-scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.35) 0px,
+    rgba(0, 0, 0, 0.35) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* ── A caution lamp, pulsing ──────────────────────────────────────── */
+@keyframes sa-pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.sa-pulse-glow { animation: sa-pulse-glow 1.6s ease-in-out infinite; }
+
+/* ── Sheen across the boarding pass ───────────────────────────────── */
+.sa-shine { position: relative; overflow: hidden; }
+.sa-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-120%);
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.28) 50%, transparent 80%);
+}
+@keyframes sa-shine {
+  to { transform: translateX(120%); }
+}
+.sa-shine:hover::after { animation: sa-shine 0.9s ease; }
+
+/* ── Sections rise in as they are scrolled to ─────────────────────── */
+.sa-reveal { opacity: 0; transform: translateY(26px); }
+.sa-reveal.is-in {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── The flight deck ──────────────────────────────────────────────
+   The instruments animate by transform only, so containing paint
+   keeps the whole panel cheap to composite. */
+.sa-hud { contain: paint; }
+
+/* Airframe shake — reserved for a move big enough to earn it. */
+@keyframes sd-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, -2px); }
+  80% { transform: translate(1px, 2px); }
+}
+.sd-shake { animation: sd-shake 0.17s linear infinite; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-shake, .sa-pulse-glow, .sa-shine::after { animation: none !important; }
+  .sa-reveal { opacity: 1; transform: none; transition: none; }
+}
