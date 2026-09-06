@@ -4,6 +4,8 @@ import CabinView from './components/CabinView';
 import CabinSideView from './components/CabinSideView';
 import ExteriorView from './components/ExteriorView';
 import CargoHold from './components/CargoHold';
+import CheckIn from './components/CheckIn';
+import BoardingLadder from './components/BoardingLadder';
 import ViewFrame from './components/ViewFrame';
 import Annunciators from './components/Annunciators';
 import SeatMap from './components/SeatMap';
@@ -34,7 +36,9 @@ import {
 } from './lib/flightModel';
 import { useFlightState } from './lib/useFlightState';
 import { useSky } from './lib/useSky';
-import { passengerName } from './lib/passenger';
+import { useWallet } from './lib/useWallet';
+import { holdingsSource, type Holding } from './lib/holdings';
+import { berthFor } from './lib/seatLadder';
 
 /**
  * SEAT AIRWAYS — the cabin.
@@ -115,21 +119,29 @@ export default function App() {
   /** Where you are sitting. Independent of where you are ticketed. */
   const [viewZone, setViewZone] = useState<ZoneKey>('economy');
   const [viewPosition, setViewPosition] = useState<SeatPosition>('window');
-  /** Where you are ticketed. Null until you claim one. */
-  const [claimed, setClaimed] = useState<string | null>(null);
   const [boardedAt, setBoardedAt] = useState<number | null>(null);
+
+  /* Check-in. The seat is not a choice: the wallet's holding decides it. */
+  const wallet = useWallet();
+  const [holding, setHolding] = useState<Holding | null>(null);
+  const [loadingHolding, setLoadingHolding] = useState(false);
   const [log, setLog] = useState<readonly LogEntry[]>([]);
 
-  const passenger = useMemo(() => passengerName(), []);
   const taken = useMemo(() => occupiedSeats(ALL_SEATS, CABIN_SEED, LAVATORY_SEATS), []);
   /* Souls on board, less the ones who got a seat. */
   const belowCutoff = Math.max(0, tick.holders - taken.size);
 
-  const claimedSeat = useMemo(() => findSeat(claimed), [claimed]);
+  const berth = useMemo(
+    () => berthFor(holding?.share ?? 0, wallet.address),
+    [holding?.share, wallet.address],
+  );
+  const claimed = berth.seat?.id ?? null;
+  const claimedSeat = berth.seat;
   const claimedZone = useMemo(
     () => CABIN_ZONES.find((z) => z.key === claimedSeat?.zone) ?? null,
     [claimedSeat],
   );
+  const passenger = wallet.address ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}` : 'Standby';
 
   const viewSeat = useMemo(() => representativeSeat(viewZone, viewPosition), [viewZone, viewPosition]);
   const viewZoneDef = CABIN_ZONES.find((z) => z.key === viewZone) ?? CABIN_ZONES[0];
@@ -175,6 +187,53 @@ export default function App() {
     }
   }, [band.band, say]);
 
+  useEffect(() => {
+    if (!wallet.address) {
+      setHolding(null);
+      return;
+    }
+    let cancelled = false;
+    const read = async () => {
+      setLoadingHolding(true);
+      const next = await holdingsSource.read(wallet.address as string);
+      if (!cancelled && next) setHolding(next);
+      if (!cancelled) setLoadingHolding(false);
+    };
+    read();
+    // A bag can grow while the page is open; so can somebody else's.
+    const id = setInterval(read, 120_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [wallet.address]);
+
+  /* Being seated is an event: the PA says so, and the camera walks you there. */
+  const lastSeat = useRef<string | null>(null);
+  useEffect(() => {
+    if (berth.hold && wallet.address && lastSeat.current !== 'HOLD') {
+      lastSeat.current = 'HOLD';
+      setCamera('hold');
+      say('Passenger assigned to the cargo hold. Mind the step.', 'alert');
+      return;
+    }
+    const id = berth.seat?.id ?? null;
+    if (!id || id === lastSeat.current) return;
+    const first = lastSeat.current === null;
+    lastSeat.current = id;
+    if (boardedAt === null) setBoardedAt(tick.marketCap);
+    setViewZone(berth.seat!.zone);
+    setViewPosition(berth.seat!.position);
+    setCamera(berth.seat!.zone === 'deck' ? 'deck' : 'seat');
+    setFacing('forward');
+    say(
+      first
+        ? `Passenger seated in ${id}. ${berth.rung}.`
+        : `Passenger reseated to ${id}. ${berth.rung}.`,
+      'pa',
+    );
+  }, [berth.seat?.id, berth.hold, berth.rung, wallet.address, boardedAt, tick.marketCap, say]);
+
   const flyMode = (next: FlightMode) => {
     setMode(next);
     feed.setMode(next);
@@ -189,18 +248,13 @@ export default function App() {
     if (zone === 'deck') setFacing('forward');
   };
 
-  const claim = (id: string, zoneKey: ZoneKey) => {
+  /** Walk the camera to a seat. Looking is free; sitting there is not. */
+  const visit = (id: string, zoneKey: ZoneKey) => {
     const seat = findSeat(id);
-    const first = claimed === null;
-    setClaimed(id);
-    if (first) setBoardedAt(tick.marketCap);
-    // Claiming a seat walks you to it — the point is to see what you bought.
     setViewZone(zoneKey);
     setCamera(zoneKey === 'deck' ? 'deck' : 'seat');
     setFacing('forward');
     if (seat) setViewPosition(seat.position);
-    const label = CABIN_ZONES.find((z) => z.key === zoneKey)?.className ?? '';
-    say(first ? `Passenger seated in ${id}. ${label}.` : `Passenger reseated to ${id}.`, 'pa');
   };
 
   const lavatory = (LAVATORY_SEATS as readonly string[]).includes(viewSeat.id);
@@ -473,28 +527,39 @@ export default function App() {
             <header className="border-b border-white/10 pb-4">
               <h2 className="font-heading text-3xl text-white sm:text-4xl">Cabin</h2>
               <p className="mt-1.5 text-sm text-blue-100/60">
-                189 seats, and they fill from the front. Claim one and the view above becomes yours — 30B is
-                always free, and always will be.
+                189 seats, and they fill from the front. You don&apos;t book one — your holding does that.
+                Click any seat to see the flight from it.
               </p>
             </header>
             <div className="mt-7">
-              <SeatMap taken={taken} mine={claimed} onClaim={claim} />
+              <SeatMap taken={taken} mine={claimed} onVisit={visit} />
             </div>
           </div>
 
-          <div>
-            <header className="border-b border-white/10 pb-4">
-              <h2 className="font-heading text-3xl text-white sm:text-4xl">Your pass</h2>
-              <p className="mt-1.5 text-sm text-blue-100/60">Screenshot it. It's the whole marketing budget.</p>
-            </header>
+          <div className="flex flex-col gap-8">
+            <div>
+              <header className="border-b border-white/10 pb-4">
+                <h2 className="font-heading text-3xl text-white sm:text-4xl">Your pass</h2>
+                <p className="mt-1.5 text-sm text-blue-100/60">
+                  Screenshot it. It&apos;s the whole marketing budget.
+                </p>
+              </header>
 
-            <div className="mt-7">
-              <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
+              <div className="mt-7 flex flex-col gap-5">
+                <CheckIn
+                  wallet={wallet}
+                  holding={holding}
+                  berth={berth}
+                  live={holdingsSource.live}
+                  loading={loadingHolding}
+                />
+                <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
+              </div>
             </div>
 
-            <div className="mt-8">
-              <RadioLog entries={log} />
-            </div>
+            <BoardingLadder berth={berth} holding={holding} address={wallet.address} />
+
+            <RadioLog entries={log} />
           </div>
         </div>
 

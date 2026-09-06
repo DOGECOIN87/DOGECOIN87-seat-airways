@@ -22,10 +22,10 @@ interface SeatProps {
   taken: boolean;
   mine: boolean;
   wide?: boolean;
-  onClaim: (id: string, zone: ZoneKey) => void;
+  onVisit: (id: string, zone: ZoneKey) => void;
 }
 
-const Seat = ({ id, zone, taken, mine, wide, onClaim }: SeatProps) => {
+const Seat = ({ id, zone, taken, mine, wide, onVisit }: SeatProps) => {
   const lavatory = (LAVATORY_SEATS as readonly string[]).includes(id);
 
   const state = mine
@@ -41,15 +41,12 @@ const Seat = ({ id, zone, taken, mine, wide, onClaim }: SeatProps) => {
   return (
     <button
       type="button"
-      disabled={taken}
       aria-pressed={mine}
-      aria-label={
-        taken
-          ? `Seat ${id}, taken`
-          : `Claim seat ${id}${lavatory ? ', middle seat by the lavatory, does not recline' : ''}`
-      }
-      title={lavatory ? 'Middle seat, last row, by the lavatory. Does not recline.' : `Seat ${id}`}
-      onClick={() => onClaim(id, zone)}
+      aria-label={`${mine ? 'Your seat, ' : ''}${id}${taken ? ', taken' : ', free'}${
+        lavatory ? ', middle seat by the lavatory, does not recline' : ''
+      }. Look from here.`}
+      title={lavatory ? 'Middle seat, last row, by the lavatory. Does not recline.' : `Look from ${id}`}
+      onClick={() => onVisit(id, zone)}
       className={`relative h-6 flex-none border transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${state} ${
         wide ? 'w-[3.75rem]' : 'w-[1.6rem]'
       }`}
@@ -71,10 +68,10 @@ const Seat = ({ id, zone, taken, mine, wide, onClaim }: SeatProps) => {
 interface SeatMapProps {
   taken: ReadonlySet<string>;
   mine: string | null;
-  onClaim: (id: string, zone: ZoneKey) => void;
+  onVisit: (id: string, zone: ZoneKey) => void;
 }
 
-const SeatMap = ({ taken, mine, onClaim }: SeatMapProps) => {
+const SeatMap = ({ taken, mine, onVisit }: SeatMapProps) => {
   const free = CABIN_ZONES.reduce(
     (n, zone) =>
       n +
@@ -125,7 +122,7 @@ const SeatMap = ({ taken, mine, onClaim }: SeatMapProps) => {
                           taken={taken.has(id)}
                           mine={mine === id}
                           wide={row.n === null}
-                          onClaim={onClaim}
+                          onVisit={onVisit}
                         />
                       );
                     })}
@@ -140,7 +137,7 @@ const SeatMap = ({ taken, mine, onClaim }: SeatMapProps) => {
                           taken={taken.has(id)}
                           mine={mine === id}
                           wide={row.n === null}
-                          onClaim={onClaim}
+                          onVisit={onVisit}
                         />
                       );
                     })}
