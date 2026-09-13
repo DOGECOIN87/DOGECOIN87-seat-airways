@@ -133,7 +133,7 @@ const SceneLoading = ({ exterior = false }: { exterior?: boolean }) => (
     aria-live="polite"
   >
     <div className="sa-view-loading__mark" aria-hidden />
-    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-seat-cyan">
+    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7FE3F7]">
       Preparing {exterior ? 'exterior' : 'cabin'} view
     </p>
   </div>
@@ -354,10 +354,9 @@ export default function App() {
 
 
   return (
-    <div className="sa-app relative min-h-screen text-white">
+    <div className="sa-app relative min-h-screen text-ui-ink">
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="sa-ground absolute inset-0" />
-        <div className="sa-scanlines absolute inset-0 opacity-[0.03]" />
       </div>
 
       <a href="#wall" className="sa-skip">Skip to the seat map</a>
@@ -370,23 +369,25 @@ export default function App() {
           while you are reading the seat map. */}
       <header className="sa-topbar sticky top-0 z-40">
         <div className="mx-auto flex max-w-[94rem] flex-wrap items-center gap-x-7 gap-y-2 px-5 py-2.5 sm:px-8">
-          <a href="#top" className="flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-seat-cyan">
-            <Mark size={30} background="none" title="SEAT AIRWAYS" />
-            <span className="whitespace-nowrap font-heading text-lg leading-none text-white">Seat Airways</span>
-            <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-white/40 sm:inline">
+          <a href="#top" className="flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-blue">
+            <Mark size={30} background="none" color="#0087EA" title="SEAT AIRWAYS" />
+            <span className="whitespace-nowrap font-heading text-lg leading-none text-ui-ink">Seat Airways</span>
+            <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-ui-faint sm:inline">
               FL350 · Nonstop
             </span>
           </a>
 
           <dl className="sd-chrome ml-auto flex w-full min-w-0 items-center justify-between gap-x-7 overflow-x-auto sm:w-auto sm:max-w-[70%] sm:justify-start">
             {[
-              { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, tone: 'text-seat-amber' },
-              { k: 'Market cap', v: formatCap(tick.marketCap), tone: 'text-white' },
-              { k: '24h', v: formatChange(tick.change24h), tone: tick.change24h >= 0 ? 'text-seat-cyan' : 'text-red-300' },
-              { k: 'Seated', v: `${manifest.entries.length}/${MANIFEST_SIZE}`, tone: 'text-white' },
+              { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, tone: 'text-ui-deep' },
+              { k: 'Market cap', v: formatCap(tick.marketCap), tone: 'text-ui-ink' },
+              /* Direction is the one thing on the page a single accent cannot
+                 carry, so it keeps a sign as well as a colour. */
+              { k: '24h', v: formatChange(tick.change24h), tone: tick.change24h >= 0 ? 'text-ui-deep' : 'text-ui-soft' },
+              { k: 'Seated', v: `${manifest.entries.length}/${MANIFEST_SIZE}`, tone: 'text-ui-ink' },
             ].map((f) => (
-              <div key={f.k} className="shrink-0">
-                <dt className="text-[8.5px] font-semibold uppercase tracking-[0.2em] text-blue-100/40">{f.k}</dt>
+              <div key={f.k} className="sa-topbar__fig shrink-0">
+                <dt className="text-[8.5px] font-semibold uppercase tracking-[0.2em] text-ui-faint">{f.k}</dt>
                 <dd className={`font-mono text-[15px] leading-tight ${f.tone}`}>{f.v}</dd>
               </div>
             ))}
@@ -403,17 +404,20 @@ export default function App() {
             ══════════════════════════════════════════════════════════════ */}
         <section className="sa-hero pt-10 sm:pt-14" aria-labelledby="hero-title">
           <p className="sa-eyebrow">
-            <span className="sa-live" aria-hidden />
-            Live · FL350 · {band.label}
+            <span className="sa-eyebrow__no">01</span> The aeroplane
+            <span className="sa-eyebrow__live">
+              <span className="sa-live" aria-hidden />
+              Live · FL350 · {band.label}
+            </span>
           </p>
-          <div className="mt-4 grid gap-x-14 gap-y-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-end">
-            <h1 id="hero-title" className="sa-display text-white">
+          <div className="mt-4 grid gap-x-14 gap-y-6 lg:grid-cols-[minmax(0,1.618fr)_minmax(0,1fr)] lg:items-end">
+            <h1 id="hero-title" className="sa-display">
               One plane.
               <br />
               Everyone&apos;s in&nbsp;it.
             </h1>
             <div className="lg:pb-3">
-              <p className="max-w-xl text-[15px] leading-relaxed text-blue-100/70 sm:text-base">
+              <p className="sa-lead">
                 A flight simulator flown by one number. Market cap is altitude and the 24-hour change is
                 attitude, so the aeroplane you are looking at is the chart. Inside it, thirty rows of seats go
                 to the top holders in order — and every one of them is a billboard.
@@ -494,8 +498,13 @@ export default function App() {
             </ViewFrame>
           </div>
 
+          {/* ── The instrument deck ──────────────────────────────────────
+              Walk, state, lamps and sim are four readings of one aircraft, so
+              they are one panel under the window divided by hairlines, rather
+              than four cards floating a few pixels apart. */}
+          <div className="sa-deck mt-3">
           {/* ── Walk the aircraft ── */}
-          <div className="sa-panel sa-panel--cyan mt-3 flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center">
+          <div className="sa-deck__strip sa-deck__strip--cyan flex-col sm:flex-row sm:items-center">
             <div className="sd-chrome -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
               <span className="sa-strip-label">Walk the aircraft</span>
               <button type="button" onClick={() => setCamera('exterior')} aria-pressed={camera === 'exterior'} className={chip(camera === 'exterior')}>
@@ -536,8 +545,8 @@ export default function App() {
           </div>
 
           {/* ── Where the flight is ── */}
-          <section className="sa-flight-state mt-3" aria-label="Flight state">
-            <dl className="sa-flight-summary grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4">
+          <section className="sa-flight-state" aria-label="Flight state">
+            <dl className="sa-flight-summary grid grid-cols-2 sm:grid-cols-4">
               {[
                 { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, s: formatCap(tick.marketCap) },
                 { k: '24h', v: formatChange(tick.change24h), s: tick.change24h >= 0 ? 'Climbing' : 'Descending' },
@@ -545,22 +554,22 @@ export default function App() {
                 { k: 'Band', v: band.label, s: band.next ?? 'Nowhere higher to go' },
               ].map((cell) => (
                 <div key={cell.k} className="px-4 py-3.5">
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100/40">{cell.k}</dt>
-                  <dd className="mt-1 text-base leading-snug text-white sm:text-lg">{cell.v}</dd>
-                  <dd className="mt-0.5 text-[11px] leading-snug text-blue-100/45">{cell.s}</dd>
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.2em] text-ui-faint">{cell.k}</dt>
+                  <dd className="mt-1 text-base font-semibold leading-snug text-ui-ink sm:text-lg">{cell.v}</dd>
+                  <dd className="mt-0.5 text-[11px] leading-snug text-ui-soft">{cell.s}</dd>
                 </div>
               ))}
             </dl>
 
             {/* Climb meter toward the next band */}
             <div className="sa-progress px-4 py-3">
-              <div className="flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-[0.16em] text-blue-100/40">
+              <div className="flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-[0.16em] text-ui-faint">
                 <span>{band.label}</span>
                 <span>{band.next ?? 'The moon'}</span>
               </div>
-              <div className="mt-2 h-1.5 w-full bg-white/[0.07]">
+              <div className="sa-track mt-2 h-2 w-full">
                 <div
-                  className="sa-climb-fill h-full bg-gradient-to-r from-seat-cyan to-seat-amber transition-[width] duration-500"
+                  className="sa-climb-fill h-full transition-[width] duration-500"
                   style={{ width: `${Math.max(1.5, band.toNext * 100)}%` }}
                 />
               </div>
@@ -570,7 +579,7 @@ export default function App() {
           </section>
 
           {/* ── Flight sim ── */}
-          <div className="sa-panel sa-panel--amber mt-3 flex flex-col gap-3 px-4 py-3.5">
+          <div className="sa-deck__strip sa-deck__strip--amber flex-col">
             <div className="sd-chrome -mx-1 flex items-center gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
               <span className="sa-strip-label">Flight sim</span>
               {MODES.map((m) => (
@@ -591,11 +600,12 @@ export default function App() {
                     className={chip(false)}
                   >
                     {alt.label}
-                    <span className="ml-2 tabular-nums text-blue-100/35">{formatCap(alt.cap)}</span>
+                    <span className="ml-2 tabular-nums opacity-60">{formatCap(alt.cap)}</span>
                   </button>
                 ))}
               </div>
             )}
+          </div>
           </div>
         </section>
 
@@ -606,22 +616,22 @@ export default function App() {
             billboard, and the front of the cabin is the front of the wall —
             so it is given the width, the ground and the type to say so.
             ══════════════════════════════════════════════════════════════ */}
-        <section id="wall" className="sa-wall scroll-mt-20" aria-labelledby="wall-title">
+        <section id="wall" className="sa-wall scroll-mt-24" aria-labelledby="wall-title">
           <div className="sa-wall__inner">
             <header className="sa-section-head">
               <p className="sa-eyebrow sa-eyebrow--amber">
                 <span className="sa-eyebrow__no">02</span> The wall
               </p>
-              <h2 id="wall-title" className="sa-display sa-display--2 mt-3 text-white">
+              <h2 id="wall-title" className="sa-display sa-display--2 mt-3">
                 Every seat is a billboard
               </h2>
               <div className="mt-5 grid gap-x-12 gap-y-4 lg:grid-cols-2">
-                <p className="text-[15px] leading-relaxed text-blue-100/70">
+                <p className="sa-lead">
                   Seats are not booked. The top {MANIFEST_SIZE} holders are seated in rank order and the rest
                   of the aeroplane stays empty, so the only way to move forward is to out-hold whoever is
                   already there.
                 </p>
-                <p className="text-[15px] leading-relaxed text-blue-100/70">
+                <p className="sa-lead">
                   Each seat is a square, and a square somebody holds is theirs to fill: a 1:1 image, shown here
                   and on the seat itself. Row 1 is the best placement on the aircraft, and it is not for sale at
                   any price — only for holding.
@@ -659,21 +669,27 @@ export default function App() {
         {/* ══════════════════════════════════════════════════════════════
             03 · Your pass
             ══════════════════════════════════════════════════════════════ */}
-        <section className="pt-20 sm:pt-24" aria-labelledby="pass-title">
+        <section id="check-in" className="sa-section scroll-mt-24" aria-labelledby="pass-title">
           <header className="sa-section-head">
             <p className="sa-eyebrow">
               <span className="sa-eyebrow__no">03</span> Check in
             </p>
-            <h2 id="pass-title" className="sa-display sa-display--2 mt-3 text-white">
+            <h2 id="pass-title" className="sa-display sa-display--2 mt-3">
               The aircraft seats you
             </h2>
-            <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-blue-100/70">
+            <p className="sa-lead mt-4">
               You do not pick a seat. Connect a wallet, and where you sit is whatever your holding says it is —
               recomputed the moment anybody else&apos;s changes.
             </p>
           </header>
 
-          <div className="mt-9 grid gap-6 lg:grid-cols-3 lg:items-start">
+          {/* Two columns, each a pairing rather than a leftover: on the left
+              what the aircraft does with your holding, on the right what you
+              come away with. Three columns left the radio 176px tall beside an
+              832px neighbour — a hole, not a composition. Stretched to a common
+              height with the radio taking up the slack, the section ends on a
+              line. */}
+          <div className="mt-9 grid gap-6 lg:grid-cols-[minmax(0,1.382fr)_minmax(0,1fr)]">
             <div className="flex flex-col gap-6">
               <CheckIn
                 wallet={wallet}
@@ -691,35 +707,94 @@ export default function App() {
                   lastSeat.current = null;
                 }}
               />
-              <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
+              <BoardingLadder
+                berth={berth}
+                holding={effectiveHolding}
+                address={seatKey}
+                manifestSize={manifest.entries.length}
+              />
             </div>
 
-            <BoardingLadder
-              berth={berth}
-              holding={effectiveHolding}
-              address={seatKey}
-              manifestSize={manifest.entries.length}
-            />
-
-            <RadioLog entries={log} />
+            <div className="flex flex-col gap-6">
+              <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
+              {/* The log takes whatever height the column has left, so a live
+                  panel is as tall as the page can make it rather than a stub. */}
+              <div className="min-h-[14rem] flex-1">
+                <RadioLog entries={log} />
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* ── Close ── */}
-        <div className="sa-close mt-20 sm:mt-24">
-          <Mark size={34} background="none" />
-          <p className="sa-close__line">One plane. Everyone&apos;s in it.</p>
-          <a href="#wall" className="sa-cta sa-shine mt-2">
-            Claim a seat <span aria-hidden>→</span>
-          </a>
+      </main>
+
+      {/* ══════════════════════════════════════════════════════════════
+          The footer
+          A page that simply stops reads as a page that ran out. This one
+          lands: the premise once more over the mark, then the three things
+          somebody who has read to the bottom still wants — where else to go,
+          what the aeroplane is actually reading, and whether any of it is
+          live. The status column is generated from the same values the
+          instruments are, so the footer cannot go stale against the page
+          above it.
+          ══════════════════════════════════════════════════════════════ */}
+      <footer className="sa-footer">
+        <div className="mx-auto max-w-[94rem] px-5 sm:px-8">
+          <div className="sa-close">
+            <Mark size={34} background="none" color="#0087EA" />
+            <p className="sa-close__line">One plane. Everyone&apos;s in it.</p>
+            <a href="#wall" className="sa-cta sa-shine mt-2">
+              Claim a seat <span aria-hidden>→</span>
+            </a>
+          </div>
+
+          <div className="sa-footer__grid">
+            <nav aria-labelledby="foot-aircraft">
+              <p className="sa-footer__h" id="foot-aircraft">The aircraft</p>
+              <div className="sa-footer__list">
+                <a href="#top">Outside · the whole aeroplane</a>
+                <a href="#wall">The wall · {MANIFEST_SIZE} seats, {manifest.open} open</a>
+                <a href="#check-in">Check in · where you sit</a>
+              </div>
+            </nav>
+
+            <div>
+              <p className="sa-footer__h">What flies it</p>
+              <dl className="sa-footer__list">
+                <div><dt>Market cap</dt><dd>Altitude</dd></div>
+                <div><dt>24h change</dt><dd>Pitch, and its rate is bank</dd></div>
+                <div><dt>Holders</dt><dd>Souls on board</dd></div>
+                <div><dt>Your bag</dt><dd>Your seat</dd></div>
+              </dl>
+            </div>
+
+            <div>
+              <p className="sa-footer__h">Reading now</p>
+              <dl className="sa-footer__list">
+                <div><dt>Altitude</dt><dd className="font-mono">{formatFeet(tick.marketCap)} ft</dd></div>
+                <div><dt>Band</dt><dd>{band.label}</dd></div>
+                <div><dt>Outside</dt><dd>{sky.live ? 'Live weather' : 'Modelled sky'}</dd></div>
+                {/* A live feed has no flight-sim input to offer, so the
+                    presence of jumpTo is the honest tell for which one this
+                    deployment is pointed at. */}
+                <div><dt>Market feed</dt><dd>{feed.jumpTo ? 'Simulated' : 'Live'}</dd></div>
+              </dl>
+            </div>
+          </div>
+
           <p className="sa-close__note">
             The horizon, the tapes, the lamps and the log all read one input — the 24-hour price change — and
             the altitude is the market cap: $1M puts you above the clouds, $10M in space, $50M at the moon. The
             sky is real: your own time of day, and the weather where you are. The market feed on this
             deployment is simulated, and every figure it produces is labelled as such.
           </p>
+
+          <div className="sa-footer__bar">
+            <span>Seat Airways · FL350 · Nonstop</span>
+            <span>Your bag is your seat</span>
+          </div>
         </div>
-      </main>
+      </footer>
 
       {advertising && (
         <AdvertDialog

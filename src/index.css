@@ -3,89 +3,196 @@
 
 /* ============================================================
    SEAT AIRWAYS
-   Graphite structure, amber integral lighting, cyan for data —
-   the same palette the instruments themselves are drawn in.
+   ────────────────────────────────────────────────────────────
+   A soft-UI panel with dark screens set into it.
+
+   The page is built the way the instrument panel of an aircraft
+   is: one light grey face, controls extruded out of it by light
+   rather than outlined, displays recessed into it, and a single
+   blue that lights whatever is live. There are almost no borders
+   in this stylesheet — an edge here is a change in shading, which
+   is what makes the surface read as a material instead of as a
+   diagram of one.
+
+   Two shadows make everything. A white one up and to the left
+   where the light is, and a grey one down and to the right where
+   it is not. Swap their positions to inset and the same control
+   reads as pressed. That is the entire vocabulary.
    ============================================================ */
+
+:root {
+  /* ── Proportion ───────────────────────────────────────────────
+     One ratio sets the page: φ, 1.618. Every type size is the body
+     size multiplied or divided by it (or by its square root, where
+     a whole step is too big a jump), and every measure of air is a
+     rem stepped by the same number. The point is not arithmetic
+     mysticism — it is that a page built on one ratio has no
+     arbitrary sizes in it, so nothing on it looks nearly-but-not-
+     quite related to anything else. */
+  --phi: 1.618;
+
+  /* Type: 15px body, stepped by φ and by √φ. */
+  --t-xs: 0.58rem;      /* 9.3px  — units, micro labels */
+  --t-sm: 0.737rem;     /* 11.8px — captions, legends */
+  --t-base: 0.9375rem;  /* 15px   — body */
+  --t-md: 1.193rem;     /* 19.1px — lead, card headings */
+  --t-lg: 1.517rem;     /* 24.3px — panel titles */
+  --t-xl: 1.929rem;     /* 30.9px */
+  --t-2xl: 2.454rem;    /* 39.3px — section heads */
+  --t-3xl: 3.121rem;    /* 49.9px */
+  --t-4xl: 3.971rem;    /* 63.5px */
+  --t-5xl: 6.426rem;    /* 102.8px — the hero's ceiling */
+
+  /* Air: the same ladder, in rem. */
+  --s-1: 0.618rem;
+  --s-2: 1rem;
+  --s-3: 1.618rem;
+  --s-4: 2.618rem;
+  --s-5: 4.236rem;
+  --s-6: 6.854rem;
+
+  --sa-section: clamp(var(--s-5), 7vw, var(--s-6));
+  --sa-gap: var(--s-3);
+  /* 66 characters at the body size — the measure prose is readable at,
+     which happens to be the body size times φ³. */
+  --sa-measure: 38rem;
+
+  /* ── The material ────────────────────────────────────────── */
+  --ui-bg: #DFE0E4;
+  --ui-sink: #D6D7DC;
+  --ui-surface: #EDEEF1;
+  --ui-hi: #F7F7F9;
+  --ui-off: #D0D1D3;
+  /* The kit's own greys are set for looking at, not for reading: its
+     label grey manages 2.1:1 on its own ground. These are the same
+     greys walked down until every one of them carries small text at
+     4.5:1 on the page, on a card, and on the wall band alike. */
+  --ui-ink: #24282F;
+  --ui-soft: #4F545C;
+  --ui-faint: #585D66;
+
+  /* The light, and the absence of it. Every elevation below is
+     these two colours at different offsets and blurs. */
+  --lit: rgba(255, 255, 255, 0.95);
+  --shade: rgba(170, 174, 187, 0.48);
+
+  /* ── Elevation ───────────────────────────────────────────── */
+  --e-sm:    -3px -3px 8px var(--lit),    3px 3px 8px var(--shade);
+  --e:       -6px -6px 16px var(--lit),   7px 7px 18px var(--shade);
+  --e-lg:    -12px -12px 30px var(--lit), 14px 14px 34px var(--shade);
+  --e-press: inset -3px -3px 7px rgba(255, 255, 255, 0.85), inset 3px 3px 7px rgba(166, 170, 183, 0.6);
+  --e-well:  inset -7px -7px 16px rgba(255, 255, 255, 0.72), inset 8px 8px 20px rgba(154, 158, 172, 0.62);
+
+  /* ── The surface of a raised thing ───────────────────────── */
+  --face: linear-gradient(145deg, #F4F5F8 0%, #E2E3E8 100%);
+  --face-flat: linear-gradient(145deg, #EEEFF2 0%, #E5E6EB 100%);
+
+  /* ── The blue ────────────────────────────────────────────────
+     Two of them, and the difference matters. The kit's own bright
+     gradient lights anything that is a graphic — a meter, a lamp,
+     a ring, an active edge — where contrast rules do not apply.
+     Anything carrying text gets the deeper one, which holds white
+     at 4.5:1 where the bright one manages only 3.7:1. Same family,
+     same page; one of them is simply legible. */
+  --g-accent: linear-gradient(160deg, #00C9F1 0%, #0087EA 100%);
+  --g-accent-text: linear-gradient(160deg, #007ACC 0%, #005FB8 100%);
+  --accent: #0087EA;
+  --accent-bright: #00C9F1;
+  --accent-deep: #005CAD;
+
+  /* ── Radii ───────────────────────────────────────────────── */
+  --r-sm: 10px;
+  --r: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-2xl: 36px;
+}
 
 body {
   margin: 0;
   overflow-x: hidden;
-  background-color: #0A0F16;
-  color: #EDE6D8;
-  /* Prose in a humanist sans; figures in mono, where they line up. Running
-     the whole page in monospace made an airline read like a terminal. */
-  font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  background-color: var(--ui-bg);
+  color: var(--ui-ink);
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 html {
-  background: #0A0F16;
+  background: var(--ui-bg);
   scroll-behavior: smooth;
 }
 
 ::selection {
-  color: #071019;
-  background: #7ecde0;
+  color: #fff;
+  background: var(--accent);
 }
 
 /* ============================================================
    Structure
-   ────────────────────────────────────────────────────────────
-   The page is a flight instrument, not a stack of dark cards.
-   Three grounds carry it: the night the whole page sits on, the
-   instrument panels around the live view, and one lighter band
-   under the seat map — because the wall is the second subject
-   and a subject needs its own room.
    ============================================================ */
 .sa-app {
   isolation: isolate;
   overflow-x: clip;
 }
+/* Soft UI needs a light source, and the page has to agree with the
+   controls about where it is: up and to the left. This is that
+   light, thrown across the whole ground so the extrusions below
+   are lit by the same lamp. */
 .sa-ground {
   background:
-    radial-gradient(1250px 720px at 50% -8%, #1A2333 0%, transparent 58%),
-    radial-gradient(980px 540px at 84% 18%, rgba(25, 68, 118, 0.20), transparent 66%),
-    radial-gradient(760px 460px at 8% 44%, rgba(126, 205, 224, 0.05), transparent 70%),
-    linear-gradient(180deg, #0B0E14 0%, #070910 100%);
+    radial-gradient(1400px 900px at 18% -10%, rgba(255, 255, 255, 0.85), transparent 62%),
+    radial-gradient(1100px 700px at 88% 8%, rgba(0, 201, 241, 0.07), transparent 66%),
+    linear-gradient(165deg, #E6E7EB 0%, #DCDDE2 48%, #D4D5DB 100%);
 }
-.sa-app::after {
-  content: '';
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.13;
-  background-image:
-    linear-gradient(rgba(165, 194, 221, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(165, 194, 221, 0.08) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: linear-gradient(to bottom, black, transparent 56%);
-}
+/* The dark theme's grid and scanlines do not survive the move to a
+   light panel — a panel face is a panel face, not a CRT. */
+.sa-scanlines { display: none; }
 
 .sa-skip {
   position: absolute;
   left: 1rem;
   top: -3rem;
   z-index: 60;
-  padding: 0.55rem 1rem;
-  background: #ffb300;
-  color: #0a0f16;
+  border-radius: var(--r-sm);
+  padding: 0.55rem 1.1rem;
+  background: var(--g-accent-text);
+  color: #fff;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  box-shadow: var(--e);
   transition: top 0.15s ease;
 }
 .sa-skip:focus { top: 0.75rem; }
 
+/* ── The gate sign ────────────────────────────────────────────
+   It floats over the page rather than sitting in it, so it is the
+   one surface given a real drop shadow and a blur behind it. */
 .sa-topbar {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(10, 15, 22, 0.88);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.24), inset 0 -1px 0 rgba(126, 205, 224, 0.05);
+  background: rgba(233, 234, 238, 0.82);
+  backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.75) inset, 0 10px 30px rgba(150, 155, 170, 0.28);
 }
 .sa-topbar dl { scrollbar-gutter: stable both-edges; }
+/* A departure board rules its figures apart. The rule is drawn in
+   the middle of the gap by a pseudo-element so the flex layout keeps
+   its own measure — and only once the row has stopped distributing
+   itself across a narrow screen. */
+.sa-topbar__fig { position: relative; }
+@media (min-width: 640px) {
+  .sa-topbar__fig + .sa-topbar__fig::before {
+    content: '';
+    position: absolute;
+    left: -0.875rem;
+    top: 0.1rem;
+    bottom: 0.1rem;
+    width: 2px;
+    border-radius: 2px;
+    background: linear-gradient(rgba(163, 167, 180, 0.4), rgba(255, 255, 255, 0.9));
+  }
+}
 
 .sa-shell,
 .sa-viewport,
@@ -97,168 +204,314 @@ html {
 }
 .sa-shell { width: 100%; }
 
-/* ── Type ─────────────────────────────────────────────────────────────
-   One display scale, used twice: the hero, and each section head. Setting
-   it in the sheet rather than in six utility strings is what keeps the two
-   in proportion when either changes. */
+/* ── Type ─────────────────────────────────────────────────────
+   Montserrat throughout, which is the kit's own face. One display
+   scale used twice — the hero and each section head — so the two
+   stay in proportion when either changes. */
 .sa-display {
-  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: -0.028em;
-  line-height: 0.92;
+  letter-spacing: -0.02em;
+  line-height: 0.94;
   text-wrap: balance;
-  font-size: clamp(2.6rem, 6.6vw, 5.1rem);
-  max-inline-size: 100%;
+  /* φ⁴ above the body size at its ceiling, φ² at its floor. The viewport
+     term lands it near 80px on a laptop, which is where it wants to be —
+     the clamp ends stay on the ratio so the type never leaves the scale. */
+  font-size: clamp(var(--t-2xl), 5.6vw, var(--t-5xl));
+  max-inline-size: 20ch;
   overflow-wrap: break-word;
+  color: var(--ui-ink);
 }
-.sa-display--2 { font-size: clamp(1.9rem, 4vw, 3.1rem); }
+/* One φ step down: the section heads. */
+.sa-display--2 {
+  font-size: clamp(var(--t-xl), 4vw, var(--t-3xl));
+  max-inline-size: 24ch;
+}
 
 .sa-eyebrow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.55rem 0.6rem;
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 10px;
+  font-size: var(--t-sm);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.26em;
-  color: rgba(126, 205, 224, 0.86);
+  letter-spacing: 0.24em;
+  color: var(--accent-deep);
 }
-.sa-eyebrow--amber { color: rgba(255, 179, 0, 0.9); }
+.sa-eyebrow--amber { color: var(--accent-deep); }
 .sa-eyebrow__no {
   padding-right: 0.6rem;
   border-right: 1px solid currentColor;
-  opacity: 0.6;
+  opacity: 0.55;
+}
+/* The section number is the label; the live state is a lamp riding
+   at the far end of the same line, recessed into the page the way a
+   status readout is recessed into a panel. */
+.sa-eyebrow__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  background: var(--ui-bg);
+  box-shadow: var(--e-press);
+  letter-spacing: 0.2em;
+  color: var(--ui-soft);
 }
 /* The live lamp. Small, and the only thing on the page that blinks. */
 .sa-live {
   width: 7px;
   height: 7px;
   border-radius: 9999px;
-  background: #7ecde0;
-  box-shadow: 0 0 10px rgba(126, 205, 224, 0.9);
+  background: var(--accent-bright);
+  box-shadow: 0 0 8px rgba(0, 201, 241, 0.9), 0 0 2px #fff inset;
   animation: sa-pulse-glow 2.2s ease-in-out infinite;
 }
 
+.sa-section { padding-top: var(--sa-section); }
+/* Body copy: the base size, set on a golden leading — 1.618 line
+   height is the one place the ratio is also the most readable answer. */
+.sa-lead {
+  max-inline-size: var(--sa-measure);
+  font-size: var(--t-base);
+  line-height: 1.618;
+  color: var(--ui-soft);
+}
+
 .sa-section-head { position: relative; }
+/* A seam in the panel face, not a drawn line: a groove is a dark
+   hairline with a lit one directly under it. */
 .sa-section-head::before {
   content: '';
   position: absolute;
   left: 0;
   top: -1.6rem;
   width: 100%;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.02) 60%, transparent);
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(163, 167, 180, 0.45), rgba(163, 167, 180, 0.08) 62%, transparent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
-/* ── Calls to action ─────────────────────────────────────────────────── */
+/* ── Calls to action ──────────────────────────────────────────
+   The kit's filled pill: deep blue gradient, white type, and a
+   coloured shadow so it sits above the panel rather than on it. */
 .sa-cta {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  padding: 0.9rem 1.7rem;
-  background: #ffb300;
-  color: #0a0f16;
-  font-size: 13px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  box-shadow: 0 12px 30px rgba(255, 179, 0, 0.18);
-  transition: background-color 0.15s ease, transform 0.15s ease;
-}
-.sa-cta:hover { background: #ffc42e; transform: translateY(-1px); }
-.sa-cta:focus-visible { outline: 2px solid #7ecde0; outline-offset: 3px; }
-
-.sa-ghost {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.9rem 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: rgba(237, 230, 216, 0.82);
+  border-radius: 999px;
+  padding: 0.95rem 1.9rem;
+  background: var(--g-accent-text);
+  color: #fff;
   font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.09em;
-  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  box-shadow:
+    -4px -4px 10px rgba(255, 255, 255, 0.7),
+    6px 8px 20px rgba(0, 105, 194, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
-.sa-ghost:hover { border-color: rgba(126, 205, 224, 0.7); color: #fff; background: rgba(126, 205, 224, 0.07); }
-.sa-ghost:focus-visible { outline: 2px solid #7ecde0; outline-offset: 3px; }
+.sa-cta:hover {
+  transform: translateY(-1px);
+  filter: saturate(1.1) brightness(1.06);
+  box-shadow:
+    -4px -4px 10px rgba(255, 255, 255, 0.75),
+    8px 12px 26px rgba(0, 105, 194, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+.sa-cta:active {
+  transform: translateY(1px);
+  box-shadow: inset 3px 3px 9px rgba(0, 70, 135, 0.45), inset -2px -2px 7px rgba(255, 255, 255, 0.22);
+}
+.sa-cta:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
 
-/* ── Control chips ────────────────────────────────────────────────────
-   Every strip on the page uses this one control. */
+/* The unfilled twin: extruded out of the panel in the panel's own
+   colour, so the pair reads as one control that is on and one that
+   is not — which is exactly how the kit draws ON and OFF. */
+.sa-ghost {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.95rem 1.7rem;
+  background: var(--face);
+  color: var(--ui-soft);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  box-shadow: var(--e);
+  transition: box-shadow 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.sa-ghost:hover { color: var(--ui-ink); box-shadow: var(--e-lg); transform: translateY(-1px); }
+.sa-ghost:active { box-shadow: var(--e-press); transform: translateY(1px); }
+.sa-ghost:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
+
+/* ── Control chips ────────────────────────────────────────────
+   Every strip on the page uses this one control, and it has exactly
+   two states: extruded (off) and pressed-and-lit (on). */
 .sa-chip {
   flex: none;
   white-space: nowrap;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  background: var(--face);
+  padding: 0.55rem 0.95rem;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: rgba(230, 224, 212, 0.6);
-  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  color: var(--ui-soft);
+  box-shadow: var(--e-sm);
+  transition: box-shadow 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
-.sa-chip:hover { border-color: rgba(255, 255, 255, 0.28); color: #fff; }
-.sa-chip:focus-visible { outline: 2px solid #7ecde0; outline-offset: 2px; }
-.sa-chip--on { color: #fff; }
-.sa-chip--cyan {
-  border-color: rgba(126, 205, 224, 0.7);
-  background: rgba(126, 205, 224, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(126, 205, 224, 0.12), 0 0 18px rgba(126, 205, 224, 0.08);
-}
+.sa-chip:hover { color: var(--ui-ink); box-shadow: var(--e); }
+.sa-chip:active { box-shadow: var(--e-press); }
+.sa-chip:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+/* On is the kit's filled pill. Both accents resolve to the same blue
+   now — the distinction they used to carry is made by position. */
+.sa-chip--on,
+.sa-chip--cyan,
 .sa-chip--amber {
-  border-color: rgba(255, 179, 0, 0.7);
-  background: rgba(255, 179, 0, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.12), 0 0 18px rgba(255, 179, 0, 0.08);
+  background: var(--g-accent-text);
+  color: #fff;
+  box-shadow:
+    3px 5px 14px rgba(0, 105, 194, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
+.sa-chip--on:hover { color: #fff; filter: brightness(1.06); box-shadow: 3px 6px 16px rgba(0, 105, 194, 0.4); }
+.sa-chip--on .tabular-nums,
+.sa-chip--on span { color: rgba(255, 255, 255, 0.78) !important; }
+
 .sa-strip-label {
   flex: none;
-  margin-right: 0.25rem;
+  margin-right: 0.4rem;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.22em;
-  color: rgba(230, 224, 212, 0.4);
+  letter-spacing: 0.2em;
+  color: var(--ui-faint);
 }
 
-/* ── Instrument panels ────────────────────────────────────────────────
-   The strips around the view are one family: same ground, same hairline,
-   distinguished only by which accent lights their top edge. */
-.sa-panel {
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(20, 24, 33, 0.72);
-  backdrop-filter: blur(6px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 12px 26px rgba(0, 0, 0, 0.14);
+/* ── Round buttons ────────────────────────────────────────────
+   The kit's + − ‹ › set: a circle extruded from the face, pressing
+   in when used. The zoom controls are exactly this control. */
+.ui-round {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  background: var(--face);
+  color: var(--ui-soft);
+  font-size: 1.05rem;
+  line-height: 1;
+  box-shadow: var(--e-sm);
+  transition: box-shadow 0.15s ease, color 0.15s ease;
 }
-.sa-panel--cyan {
-  border-top-color: rgba(126, 205, 224, 0.26);
-  background:
-    linear-gradient(90deg, rgba(126, 205, 224, 0.055), transparent 38%),
-    rgba(20, 24, 33, 0.72);
+.ui-round:hover:not(:disabled) { color: var(--accent-deep); box-shadow: var(--e); }
+.ui-round:active:not(:disabled) { box-shadow: var(--e-press); }
+.ui-round:disabled { opacity: 0.4; box-shadow: var(--e-press); }
+.ui-round:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+
+/* A pill-shaped text button, same material as the round one. */
+.ui-pill {
+  flex: none;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: var(--face);
+  padding: 0.5rem 0.95rem;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ui-soft);
+  box-shadow: var(--e-sm);
+  transition: box-shadow 0.15s ease, color 0.15s ease;
 }
-.sa-panel--amber {
-  border-top-color: rgba(255, 179, 0, 0.24);
-  background:
-    linear-gradient(90deg, rgba(255, 179, 0, 0.045), transparent 32%),
-    rgba(20, 24, 33, 0.72);
+.ui-pill:hover:not(:disabled) { color: var(--accent-deep); box-shadow: var(--e); }
+.ui-pill:active:not(:disabled) { box-shadow: var(--e-press); }
+.ui-pill:disabled { opacity: 0.4; box-shadow: var(--e-press); }
+.ui-pill:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+.ui-pill[aria-pressed='true'] {
+  background: var(--g-accent-text);
+  color: #fff;
+  box-shadow: 3px 5px 14px rgba(0, 105, 194, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
+/* ── The instrument deck ──────────────────────────────────────
+   Everything under the window is one raised panel. The strips
+   inside it are separated by grooves rather than by gaps, so it
+   reads as one moulded face with controls set into it. */
+.sa-deck {
+  border-radius: var(--r-xl);
+  background: var(--face-flat);
+  box-shadow: var(--e);
+  overflow: hidden;
+}
+.sa-deck > * + * {
+  border-top: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 -1px 0 rgba(163, 167, 180, 0.32);
+}
+.sa-deck__strip {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.95rem 1.15rem;
+}
+/* The accent lights the leading edge, so the groove between strips
+   stays one unbroken line. */
+.sa-deck__strip::before {
+  content: '';
+  position: absolute;
+  left: 0.55rem;
+  top: 50%;
+  width: 3px;
+  height: 1.6rem;
+  border-radius: 3px;
+  transform: translateY(-50%);
+  background: var(--g-accent);
+  opacity: 0.85;
+}
+.sa-deck__strip { padding-left: 1.5rem; }
+
+/* ── The viewport ─────────────────────────────────────────────
+   The one place the aircraft itself shows through. A screen is not
+   extruded, it is let into the panel: the bezel is raised, the glass
+   is sunk behind it, and the dark inside is the night the aeroplane
+   is actually flying in. */
 .sd-viewframe:not(.sd-full) {
-  padding: 1px;
-  background: linear-gradient(135deg, rgba(126, 205, 224, 0.42), rgba(255, 255, 255, 0.10) 35%, rgba(255, 179, 0, 0.28));
-  box-shadow: 0 26px 62px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.025);
+  border-radius: var(--r-2xl);
+  padding: 14px;
+  background: var(--face-flat);
+  box-shadow: var(--e-lg);
+}
+.sd-glass {
+  border-radius: var(--r-lg);
+  background: #05070F;
+  box-shadow:
+    0 0 0 1px rgba(150, 155, 170, 0.5),
+    inset 0 2px 14px rgba(0, 0, 0, 0.9),
+    6px 8px 20px rgba(150, 155, 170, 0.42) inset;
 }
 .sd-viewframe:not(.sd-full) .sd-glass { border: 0; }
+/* The glass itself: a soft sheen down the top-left, the way a screen
+   under a panel light actually looks. */
 .sd-glass::after {
   content: '';
   pointer-events: none;
   position: absolute;
   inset: 0;
   z-index: 3;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 70px rgba(1, 5, 15, 0.18);
+  border-radius: inherit;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.07) 0%, transparent 34%);
+  box-shadow: inset 0 0 60px rgba(1, 5, 15, 0.55);
 }
 .sa-view-loading {
   display: grid;
@@ -268,52 +521,67 @@ html {
   width: 100%;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 48%, rgba(126, 205, 224, 0.11), transparent 22%),
+    radial-gradient(circle at 50% 48%, rgba(0, 201, 241, 0.12), transparent 24%),
     linear-gradient(140deg, #07101c, #05070f 66%);
 }
 .sa-view-loading__mark {
   width: 2.6rem;
   height: 2.6rem;
-  border: 1px solid rgba(126, 205, 224, 0.22);
-  border-top-color: #7ecde0;
+  border: 2px solid rgba(0, 201, 241, 0.18);
+  border-top-color: var(--accent-bright);
   border-radius: 9999px;
   animation: sa-view-spin 1.1s linear infinite;
 }
 @keyframes sa-view-spin { to { transform: rotate(360deg); } }
+/* The control rail under the glass, moulded into the same bezel. */
 .sd-controls {
   min-height: 48px;
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: linear-gradient(110deg, rgba(15, 23, 35, 0.94), rgba(22, 31, 45, 0.76));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  margin-top: 12px !important;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: var(--ui-bg);
+  box-shadow: var(--e-press);
 }
 
-.sa-flight-state {
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: #141821;
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.14);
-}
+/* ── Where the flight is ──────────────────────────────────── */
+.sa-flight-state { overflow: hidden; }
+.sa-flight-summary { background: transparent !important; gap: 0 !important; }
 .sa-flight-summary > div {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(145deg, rgba(23, 32, 46, 0.95), rgba(14, 20, 30, 0.9));
+  background: transparent;
+}
+/* Each cell is divided from the next by a groove rather than a gap. */
+.sa-flight-summary > div + div::after {
+  content: '';
+  position: absolute;
+  inset: 0.6rem auto 0.6rem 0;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(rgba(163, 167, 180, 0.34), rgba(255, 255, 255, 0.85));
 }
 .sa-flight-summary > div::before {
   content: '';
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: linear-gradient(#7ecde0, transparent 72%);
-  opacity: 0.44;
+  inset: auto auto 0 1rem;
+  width: 1.6rem;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--g-accent);
+  opacity: 0.75;
 }
-.sa-progress {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(90deg, rgba(18, 31, 45, 0.92), rgba(20, 24, 33, 0.82));
+.sa-progress { background: transparent; }
+/* The meter: a track sunk into the face, the fill raised and lit. */
+.sa-track {
+  border-radius: 999px;
+  background: var(--ui-sink);
+  box-shadow: var(--e-press);
 }
 .sa-climb-fill {
   position: relative;
-  box-shadow: 0 0 14px rgba(126, 205, 224, 0.42);
+  border-radius: 999px;
+  background: var(--g-accent) !important;
+  box-shadow: 0 0 12px rgba(0, 160, 230, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 .sa-climb-fill::after {
   content: '';
@@ -321,19 +589,15 @@ html {
   top: 0;
   bottom: 0;
   right: 0;
-  width: 28px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62));
+  width: 22px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75));
 }
-.sa-flight-state > ul {
-  border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: transparent;
-}
+.sa-flight-state > ul { border: 0; background: transparent; }
 
-/* ── The wall ─────────────────────────────────────────────────────────
-   The seat map gets its own band: a lighter ground, full-bleed rules top
-   and bottom, and a hairline grid that reads as the grid the seats are.
-   It is the second subject on the page and this is what says so. */
+/* ── The wall ─────────────────────────────────────────────────
+   The seat map gets its own band: the panel face steps down a shade,
+   full-bleed, so the aircraft sits in a recess of its own. */
 .sa-wall {
   position: relative;
   margin-top: 5.5rem;
@@ -346,11 +610,11 @@ html {
   z-index: -1;
   width: 100vw;
   transform: translateX(-50%);
-  background:
-    linear-gradient(180deg, rgba(126, 205, 224, 0.05), transparent 22%),
-    linear-gradient(180deg, rgba(19, 25, 36, 0.92), rgba(13, 17, 25, 0.92));
-  border-top: 1px solid rgba(255, 255, 255, 0.10);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, #D9DADF 0%, #DDDEE3 40%, #D7D8DD 100%);
+  box-shadow:
+    inset 0 8px 20px rgba(160, 164, 178, 0.35),
+    inset 0 -8px 20px rgba(160, 164, 178, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.9);
 }
 .sa-wall::after {
   content: '';
@@ -358,72 +622,172 @@ html {
   left: 50%;
   top: 0;
   width: 100vw;
-  height: 2px;
+  height: 3px;
   transform: translateX(-50%);
-  background: linear-gradient(90deg, #7ecde0, #ffb300 46%, transparent);
-  opacity: 0.7;
+  background: var(--g-accent);
+  opacity: 0.85;
 }
 .sa-wall__inner { position: relative; }
 
 .sa-steps {
   display: grid;
-  gap: 1px;
+  gap: 1.25rem;
   margin-top: 2.5rem;
-  background: rgba(255, 255, 255, 0.09);
-  border: 1px solid rgba(255, 255, 255, 0.09);
 }
 @media (min-width: 768px) { .sa-steps { grid-template-columns: repeat(3, 1fr); } }
 .sa-step {
   position: relative;
-  padding: 1.4rem 1.4rem 1.5rem;
-  background: linear-gradient(160deg, rgba(24, 31, 44, 0.96), rgba(15, 20, 30, 0.96));
+  border-radius: var(--r-lg);
+  padding: 1.5rem 1.5rem 1.6rem;
+  background: var(--face);
+  box-shadow: var(--e);
 }
 .sa-step__no {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--g-accent-text);
+  color: #fff;
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.2em;
-  color: rgba(255, 179, 0, 0.85);
+  letter-spacing: 0;
+  box-shadow: 2px 4px 10px rgba(0, 105, 194, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 .sa-step__h {
-  margin-top: 0.55rem;
-  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
-  font-size: 1.18rem;
+  margin-top: 0.85rem;
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--t-md);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--ui-ink);
 }
 .sa-step__b {
-  margin-top: 0.45rem;
-  font-size: 13px;
-  line-height: 1.6;
-  color: rgba(230, 224, 212, 0.58);
+  margin-top: var(--s-1);
+  font-size: var(--t-sm);
+  line-height: 1.618;
+  color: var(--ui-soft);
 }
 
-/* ── Close ────────────────────────────────────────────────────────── */
+/* ── The footer ─────────────────────────────────────────────── */
+.sa-footer {
+  position: relative;
+  margin-top: var(--sa-section);
+  padding-top: clamp(3rem, 5vw, 4.5rem);
+}
+.sa-footer::before {
+  content: '';
+  position: absolute;
+  inset: 0 50%;
+  z-index: -1;
+  width: 100vw;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, #D8D9DE 0%, #CFD0D6 100%);
+  box-shadow: inset 0 8px 22px rgba(158, 162, 176, 0.34), 0 -1px 0 rgba(255, 255, 255, 0.85);
+}
+.sa-footer::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 100vw;
+  height: 3px;
+  transform: translateX(-50%);
+  background: var(--g-accent);
+  opacity: 0.8;
+}
+
 .sa-close {
   display: grid;
   justify-items: center;
   gap: 0.9rem;
-  padding-top: 3rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
   text-align: center;
 }
 .sa-close__line {
-  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(1.3rem, 3vw, 1.9rem);
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(var(--t-lg), 3.2vw, var(--t-xl));
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: -0.015em;
-  color: #fff;
+  color: var(--ui-ink);
 }
+
+.sa-footer__grid {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: clamp(2.75rem, 5vw, 4rem);
+}
+@media (min-width: 720px) { .sa-footer__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Each column is its own raised card — the kit does not put bare text
+   on a ground, it puts it on a panel. */
+.sa-footer__grid > * {
+  border-radius: var(--r-lg);
+  padding: 1.35rem 1.4rem 1.5rem;
+  background: var(--face);
+  box-shadow: var(--e-sm);
+}
+.sa-footer__h {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: var(--accent-deep);
+}
+.sa-footer__list {
+  display: grid;
+  gap: var(--s-1);
+  margin-top: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--ui-soft);
+}
+.sa-footer__list a {
+  color: inherit;
+  border-radius: var(--r-sm);
+  transition: color 0.15s ease;
+}
+.sa-footer__list a:hover { color: var(--accent-deep); }
+.sa-footer__list a:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
+.sa-footer__list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 0 rgba(163, 167, 180, 0.28);
+}
+.sa-footer__list > div:last-child { border-bottom: 0; box-shadow: none; padding-bottom: 0; }
+.sa-footer__list dt { color: var(--ui-faint); }
+.sa-footer__list dd { text-align: right; color: var(--ui-ink); font-weight: 500; }
+
 .sa-close__note {
-  max-width: 44rem;
-  font-size: 11.5px;
-  line-height: 1.75;
-  color: rgba(230, 224, 212, 0.4);
+  max-width: var(--sa-measure);
+  margin-top: clamp(var(--s-3), 3.5vw, var(--s-4));
+  font-size: var(--t-sm);
+  line-height: 1.7;
+  color: var(--ui-faint);
 }
+
+.sa-footer__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.5rem;
+  margin-top: 1.75rem;
+  padding: 1.25rem 0 clamp(2rem, 4vw, 3rem);
+  border-top: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 -1px 0 rgba(163, 167, 180, 0.3) inset;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ui-faint);
+}
+.sa-footer__bar > :last-child { margin-left: auto; }
 
 /* Anything that is a number, a seat, or an address. */
 .sa-data,
@@ -434,48 +798,35 @@ html {
 }
 
 .font-heading {
-  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.015em;
   text-wrap: balance;
 }
 
-/* ── CRT scanlines over the glass ─────────────────────────────────── */
-.sa-scanlines {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.35) 0px,
-    rgba(0, 0, 0, 0.35) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-}
-
-/* ── A caution lamp, pulsing ──────────────────────────────────────── */
+/* ── A caution lamp, pulsing ──────────────────────────────── */
 @keyframes sa-pulse-glow {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
+  50% { opacity: 0.4; }
 }
 .sa-pulse-glow { animation: sa-pulse-glow 1.6s ease-in-out infinite; }
 
-/* ── Sheen across the boarding pass ───────────────────────────────── */
+/* ── Sheen across a filled control ────────────────────────── */
 .sa-shine { position: relative; overflow: hidden; }
 .sa-shine::after {
   content: '';
   position: absolute;
   inset: 0;
   transform: translateX(-120%);
-  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.28) 50%, transparent 80%);
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.42) 50%, transparent 80%);
 }
 @keyframes sa-shine {
   to { transform: translateX(120%); }
 }
 .sa-shine:hover::after { animation: sa-shine 0.9s ease; }
 
-/* ── The flight deck ──────────────────────────────────────────────
-   The instruments animate by transform only, so containing paint
-   keeps the whole panel cheap to composite. */
+/* ── The flight deck ──────────────────────────────────────── */
 .sa-hud { contain: paint; }
 
 /* ── The ground going past ────────────────────────────────────────────
@@ -614,69 +965,201 @@ html {
    ────────────────────────────────────────────────────────────
    Two columns where there is room: the aircraft, and a panel
    beside it showing whatever seat the cursor is on. Under a
-   certain width they stack and the panel goes first, because
-   on a phone the thing you tapped has to be the thing you see.
+   certain width they stack and the panel goes first, because on
+   a phone the thing you tapped has to be the thing you see.
+
+   In soft UI the map states itself without a single border. A
+   seat nobody holds is a socket pressed into the fuselage; a seat
+   somebody holds is a tile extruded out of it; the seat that is
+   yours is extruded and lit blue. Held-versus-open stops being a
+   colour you have to learn from a legend and becomes something
+   you can see from across the room.
    ============================================================ */
-.sa-map { display: grid; gap: 1.75rem; }
+/* The map is one panel, not an aeroplane sitting next to a card.
+
+   Drawn as two floating objects it read as a diagram that had been
+   pasted onto the page; the aircraft had its own shadow, the
+   inspector had another, and the gap between them belonged to
+   neither. Built as a single moulded face — the fuselage raised out
+   of a well on the left, the readout on the panel beside it, one
+   groove between them — it becomes the same object as everything
+   else on the page, and the seat you are pointing at and the panel
+   telling you about it are visibly one instrument.
+
+   The two columns are φ apart, which is also very nearly the ratio
+   the cabin and the readout each need. */
+.sa-map {
+  display: grid;
+  border-radius: var(--r-2xl);
+  background: var(--face);
+  box-shadow: var(--e-lg);
+  overflow: hidden;
+}
 @media (min-width: 1100px) {
   .sa-map {
-    grid-template-columns: minmax(0, 1fr) 21rem;
-    align-items: start;
-    gap: 2.5rem;
+    grid-template-columns: minmax(0, 1.618fr) minmax(0, 1fr);
+    align-items: stretch;
+    max-width: 72rem;
+    margin-inline: auto;
   }
 }
-.sa-map__body { min-width: 0; }
+/* The aircraft sits in a recess cut into the panel. */
+.sa-map__body {
+  min-width: 0;
+  padding: var(--s-3) var(--s-2) var(--s-3);
+  background: var(--ui-sink);
+  box-shadow: var(--e-well);
+}
+@media (min-width: 1100px) {
+  .sa-map__body { padding: var(--s-3); }
+}
 .sa-map__cabin {
-  border-inline: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(18, 24, 36, 0.72);
-  backdrop-filter: blur(4px);
-  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+  border-radius: var(--r-lg);
+  background: var(--face-flat);
+  box-shadow: var(--e);
+  overflow: hidden;
+}
+/* Zone headers are grooves across the fuselage, not coloured bars. */
+.sa-map__cabin > section + section { box-shadow: 0 -1px 0 rgba(163, 167, 180, 0.32); }
+
+.sa-zone-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.1rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.8);
+}
+.sa-zone-head h3 {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent-deep);
+}
+.sa-zone-head--plain h3 { color: var(--ui-faint); }
+.sa-zone-head__note {
+  margin-left: auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ui-faint);
 }
 
-/* A seat with a holder but no advert on it yet. The hatch says the square is
-   live inventory rather than an empty seat — the difference the whole wall
-   turns on. */
-.sa-seat--held {
-  background-color: rgba(255, 255, 255, 0.07);
+/* ── A seat ───────────────────────────────────────────────── */
+.sa-seat {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--ui-sink);
+  box-shadow: var(--e-press);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+/* Open: a socket. Nothing in it, and it reads as nothing in it. */
+.sa-seat--open:hover {
+  box-shadow: inset -3px -3px 7px rgba(255, 255, 255, 0.9), inset 3px 3px 7px rgba(0, 135, 234, 0.3);
+}
+/* Held: a tile, extruded. The hatch says the square is live
+   inventory whose holder has not put anything on it yet. */
+.sa-seat--sold {
+  background: var(--face);
   background-image: repeating-linear-gradient(
     -45deg,
-    rgba(255, 255, 255, 0.05) 0 3px,
+    rgba(163, 167, 180, 0.16) 0 3px,
     transparent 3px 7px
   );
+  box-shadow: var(--e-sm);
 }
-.sa-seat:hover { transform: translateY(-1px); z-index: 1; }
-.sa-seat:hover::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+.sa-seat--sold:hover { transform: translateY(-2px); z-index: 1; box-shadow: var(--e); }
+/* An advert covers the tile, so the tile only has to be raised. */
+.sa-seat--advert { background: var(--face); background-image: none; box-shadow: var(--e-sm); }
+.sa-seat--advert:hover { transform: translateY(-2px); z-index: 1; box-shadow: var(--e); }
+/* Yours: raised, and the only seat on the aircraft wearing the blue. */
+.sa-seat--mine {
+  background: var(--g-accent);
+  box-shadow: 3px 5px 16px rgba(0, 135, 234, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  z-index: 1;
 }
+/* The exit row is worth a seat you can see from a distance. */
+.sa-seat--exit { box-shadow: inset -3px -3px 7px rgba(255, 255, 255, 0.9), inset 3px 3px 7px rgba(0, 135, 234, 0.22); }
+.sa-seat--lav { opacity: 0.72; }
+.sa-seat:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
 
+.sa-seat__rank { color: var(--ui-ink); }
+.sa-seat__id { color: var(--ui-faint); }
+.sa-seat--mine .sa-seat__rank,
+.sa-seat--mine .sa-seat__id { color: #fff; }
+/* The headrest — the line that turns a square into a seat. */
+.sa-seat__rest {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 8%;
+  height: 6%;
+  border-radius: 999px;
+  background: rgba(163, 167, 180, 0.5);
+}
+.sa-seat--advert .sa-seat__rest { background: rgba(0, 0, 0, 0.3); }
+.sa-seat--mine .sa-seat__rest { background: rgba(255, 255, 255, 0.75); }
+
+/* A folded run of rows nobody has taken. */
+.sa-gap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: var(--r);
+  padding: 0.7rem 0.9rem;
+  background: var(--ui-sink);
+  box-shadow: var(--e-press);
+  text-align: left;
+  transition: box-shadow 0.15s ease;
+}
+.sa-gap:hover { box-shadow: inset -3px -3px 7px rgba(255, 255, 255, 0.9), inset 3px 3px 7px rgba(0, 135, 234, 0.28); }
+.sa-gap__tick { width: 0.5rem; height: 0.75rem; border-radius: 2px; background: rgba(163, 167, 180, 0.45); }
+.sa-gap__text { font-size: 11.5px; color: var(--ui-soft); }
+.sa-gap__show {
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ui-faint);
+}
+.sa-gap:hover .sa-gap__show { color: var(--accent-deep); }
+.sa-rownum { color: var(--ui-faint); }
+
+.sa-map__side { padding: var(--s-3) var(--s-2); }
 @media (min-width: 1100px) {
-  .sa-map__side { position: sticky; top: 5.5rem; }
+  .sa-map__side {
+    padding: var(--s-3);
+    border-left: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: inset 1px 0 0 rgba(163, 167, 180, 0.3);
+  }
+  /* Sticky within the panel, so the seat you are pointing at stays
+     read out while the cabin scrolls past it. */
+  .sa-map__sticky { position: sticky; top: 6rem; }
 }
-.sa-map__card {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(165deg, rgba(24, 31, 44, 0.95), rgba(14, 19, 28, 0.95));
-  padding: 1rem;
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
-}
+.sa-map__card { padding: 0; }
 .sa-map__label {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: 9.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.24em;
-  color: rgba(126, 205, 224, 0.75);
+  color: var(--accent-deep);
 }
+/* The advert preview is a screen, so it is sunk like one. */
 .sa-map__preview {
   display: grid;
   place-items: center;
-  margin-top: 0.75rem;
+  margin-top: 0.85rem;
   aspect-ratio: 1;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.35);
+  border-radius: var(--r);
+  background: var(--ui-sink);
+  box-shadow: var(--e-well);
 }
 .sa-map__preview img { width: 100%; height: 100%; object-fit: cover; }
 .sa-map__preview-empty {
@@ -685,84 +1168,300 @@ html {
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: rgba(230, 224, 212, 0.25);
+  color: var(--ui-faint);
 }
 .sa-map__seat {
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
-  margin-top: 0.85rem;
-  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  margin-top: 1rem;
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
   font-size: 1.45rem;
   font-weight: 800;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--ui-ink);
 }
 .sa-map__rank {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: #ffb300;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  background: var(--g-accent-text);
+  color: #fff;
+  box-shadow: 1px 2px 7px rgba(0, 105, 194, 0.3);
 }
 .sa-map__unsold {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  color: rgba(230, 224, 212, 0.4);
+  color: var(--ui-faint);
 }
-.sa-map__facts { margin-top: 0.7rem; display: grid; gap: 0.4rem; }
-.sa-map__facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.sa-map__facts { margin-top: 0.85rem; display: grid; gap: 0.45rem; }
+.sa-map__facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 0 rgba(163, 167, 180, 0.25);
+}
+.sa-map__facts > div:last-child { border-bottom: 0; box-shadow: none; padding-bottom: 0; }
 .sa-map__facts dt {
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  color: rgba(230, 224, 212, 0.35);
+  color: var(--ui-faint);
 }
-.sa-map__facts dd { font-size: 12px; color: rgba(237, 230, 216, 0.85); }
+.sa-map__facts dd { font-size: 12px; color: var(--ui-ink); font-weight: 500; }
 .sa-map__note {
-  margin-top: 0.7rem;
+  margin-top: 0.8rem;
   font-size: 11.5px;
   line-height: 1.65;
-  color: rgba(230, 224, 212, 0.5);
+  color: var(--ui-soft);
 }
 .sa-map__alt {
-  margin-top: 0.7rem;
+  margin-top: 0.8rem;
   font-size: 11.5px;
   line-height: 1.55;
-  color: rgba(230, 224, 212, 0.7);
+  color: var(--ui-soft);
 }
-.sa-map__alt a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: rgba(126, 205, 224, 0.5); }
-.sa-map__alt a:hover { color: #7ecde0; }
+.sa-map__alt a { color: var(--accent-deep); text-decoration: underline; text-underline-offset: 2px; }
+.sa-map__alt a:hover { color: var(--accent); }
 .sa-map__advertise {
   width: 100%;
-  margin-top: 0.9rem;
-  border: 1px solid rgba(255, 179, 0, 0.7);
-  padding: 0.55rem;
+  margin-top: 1rem;
+  border-radius: 999px;
+  padding: 0.7rem;
+  background: var(--g-accent-text);
+  color: #fff;
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  color: #ffb300;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  box-shadow: 3px 5px 14px rgba(0, 105, 194, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: filter 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
-.sa-map__advertise:hover { background: #ffb300; color: #0a0f16; }
+.sa-map__advertise:hover { filter: brightness(1.07); transform: translateY(-1px); }
+.sa-map__advertise:active { transform: translateY(1px); box-shadow: inset 3px 3px 9px rgba(0, 70, 135, 0.45); }
+.sa-map__advertise:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
 
 .sa-map__legend {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.55rem 1.1rem;
-  margin-top: 1rem;
+  margin-top: 1.1rem;
+  padding: 0 0.35rem;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: rgba(230, 224, 212, 0.45);
+  color: var(--ui-faint);
 }
 .sa-map__legend li { display: flex; align-items: center; gap: 0.5rem; }
-.sa-map__count { color: rgba(230, 224, 212, 0.32); }
-.sa-key { width: 13px; height: 13px; flex: none; }
-.sa-key--open { border: 1px solid rgba(230, 224, 212, 0.25); }
-.sa-key--held { background: rgba(255, 255, 255, 0.13); }
-.sa-key--mine { border: 1px solid #ffb300; box-shadow: 0 0 8px #ffb300; }
+.sa-map__count { color: var(--ui-faint); }
+/* Each key is the seat state it stands for, drawn at 13px. */
+.sa-key { width: 14px; height: 14px; flex: none; border-radius: 4px; }
+.sa-key--open { background: var(--ui-sink); box-shadow: inset -1px -1px 2px rgba(255, 255, 255, 0.9), inset 1px 1px 2px rgba(166, 170, 183, 0.7); }
+.sa-key--held { background: var(--face); box-shadow: -1px -1px 2px rgba(255, 255, 255, 0.9), 1px 1px 2px rgba(166, 170, 183, 0.6); }
+.sa-key--mine { background: var(--g-accent); box-shadow: 1px 2px 5px rgba(0, 135, 234, 0.5); }
+
+/* ============================================================
+   The overhead panel
+   ────────────────────────────────────────────────────────────
+   A lamp is a bulb sunk into the face. Dark, it is a grey pip in
+   a socket; lit, it is a lens with light behind it. A caution
+   floods its whole cell rather than changing hue, which is the
+   one way to keep an urgent lamp urgent in a palette with a
+   single accent in it.
+   ============================================================ */
+.sa-lamps {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sa-lamps::-webkit-scrollbar { display: none; }
+.sa-lamp {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-shrink: 0;
+  min-width: 10.5rem;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 1.1rem;
+  transition: background 0.2s ease;
+}
+.sa-lamp + .sa-lamp::after {
+  content: '';
+  position: absolute;
+  inset: 0.7rem auto 0.7rem 0;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(rgba(163, 167, 180, 0.34), rgba(255, 255, 255, 0.85));
+}
+.sa-lamp__bulb {
+  flex: none;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  background: var(--ui-sink);
+  box-shadow: inset -1px -1px 3px rgba(255, 255, 255, 0.8), inset 2px 2px 4px rgba(150, 154, 168, 0.8);
+}
+.sa-lamp--on .sa-lamp__bulb {
+  background: radial-gradient(circle at 34% 30%, #EAFBFF, var(--accent-bright) 58%, var(--accent) 100%);
+  box-shadow: 0 0 10px rgba(0, 175, 235, 0.85), 0 0 22px rgba(0, 175, 235, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.7);
+}
+.sa-lamp__label {
+  display: block;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ui-faint);
+}
+.sa-lamp--on .sa-lamp__label { color: var(--ui-ink); }
+.sa-lamp__detail {
+  display: block;
+  white-space: nowrap;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--ui-faint);
+}
+/* A caution takes the cell. */
+.sa-lamp--caution {
+  background: var(--g-accent-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.sa-lamp--caution .sa-lamp__label,
+.sa-lamp--caution .sa-lamp__detail { color: #fff; }
+.sa-lamp--caution .sa-lamp__bulb {
+  background: radial-gradient(circle at 34% 30%, #fff, #CFEEFF 60%, #9FDCFF 100%);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
+}
+.sa-lamp--caution + .sa-lamp::after,
+.sa-lamp--caution::after { background: rgba(255, 255, 255, 0.3); }
+
+/* ============================================================
+   Cards
+   ────────────────────────────────────────────────────────────
+   Every panel on the page is the same object at three volumes:
+   raised, raised-and-accented, or sunk. Nothing is outlined.
+   ============================================================ */
+.ui-card {
+  border-radius: var(--r-xl);
+  background: var(--face);
+  box-shadow: var(--e);
+  overflow: hidden;
+}
+/* The one card that is asking for something gets the accent along
+   its top edge — the kit's own way of marking the active panel. */
+.ui-card--accent { position: relative; }
+.ui-card--accent::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--g-accent);
+}
+.ui-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.95rem 1.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 0 rgba(163, 167, 180, 0.28);
+}
+.ui-head h3 {
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--t-md);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  color: var(--ui-ink);
+}
+/* A groove: a dark hairline with a lit one directly beneath it. */
+.ui-rule {
+  border-top: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 -1px 0 rgba(163, 167, 180, 0.28);
+}
+/* A value well — a figure sunk into the card, the way the kit sets
+   a reading apart from the panel holding it. */
+.ui-well {
+  border-radius: var(--r);
+  background: var(--ui-sink);
+  box-shadow: var(--e-press);
+}
+/* The same groove, drawn under an element instead of over it. */
+.ui-rule-b {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 0 rgba(163, 167, 180, 0.26);
+}
+.ui-rule-b:last-child { border-bottom: 0; box-shadow: none; }
+/* A field: sunk, so typing into it feels like typing into the panel. */
+.ui-field {
+  width: 100%;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--ui-sink);
+  box-shadow: var(--e-press);
+  padding: 0.55rem 0.8rem;
+  font-size: 12px;
+  color: var(--ui-ink);
+}
+.ui-field::placeholder { color: var(--ui-faint); }
+.ui-field:focus { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+
+/* ── How full the cabin is, by zone ───────────────────────────
+   The same meter as the climb bar, at a quarter the size: a track
+   sunk into the panel with a lit fill in it. Four of them stacked
+   is a picture of the aircraft filling from the front. */
+.sa-fill { margin-top: var(--s-3); }
+.sa-fill__list { display: grid; gap: var(--s-1); margin-top: var(--s-2); }
+.sa-fill__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+}
+.sa-fill__name {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ui-ink);
+}
+.sa-fill__note {
+  grid-column: 1;
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ui-faint);
+}
+.sa-fill__n {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: var(--t-sm);
+  color: var(--ui-soft);
+}
+.sa-fill__track {
+  grid-column: 1 / -1;
+  height: 5px;
+  margin-top: 0.3rem;
+  border-radius: 999px;
+  background: var(--ui-sink);
+  box-shadow: inset -1px -1px 2px rgba(255, 255, 255, 0.9), inset 2px 2px 4px rgba(160, 164, 178, 0.7);
+}
+.sa-fill__bar {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 999px;
+  background: var(--g-accent);
+  box-shadow: 0 0 6px rgba(0, 160, 230, 0.5);
+}

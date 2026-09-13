@@ -54,21 +54,21 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose }: AdvertDialogP
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-seat-night/85 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#2B2F37]/45 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={`Advertise on seat ${seat}`}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-md border border-seat-edge bg-seat-panel p-5 shadow-2xl">
+      <div className="ui-card w-full max-w-md p-6">
         <header className="mb-4 flex items-baseline gap-3">
-          <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-seat-amber">Seat {seat}</h2>
-          <p className="text-[11px] uppercase tracking-[0.14em] text-blue-100/40">Your billboard</p>
+          <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-ui-deep">Seat {seat}</h2>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-ui-faint">Your billboard</p>
           <button
             ref={first}
             type="button"
             onClick={onClose}
-            className="ml-auto px-2 text-[18px] leading-none text-blue-100/50 hover:text-white"
+            className="ml-auto px-2 text-[18px] leading-none text-ui-soft hover:text-ui-ink"
             aria-label="Close"
           >
             ×
@@ -77,55 +77,55 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose }: AdvertDialogP
 
         <div className="flex gap-4">
           <div
-            className="grid h-24 w-24 flex-none place-items-center border border-seat-edge bg-black/40"
+            className="ui-well grid h-24 w-24 flex-none place-items-center overflow-hidden"
             aria-hidden={!image}
           >
             {image
               ? <img src={image} alt="" className="h-full w-full object-cover" />
-              : <span className="text-[10px] uppercase tracking-[0.14em] text-blue-100/30">1:1</span>}
+              : <span className="text-[10px] uppercase tracking-[0.14em] text-ui-faint">1:1</span>}
           </div>
 
           <div className="min-w-0 flex-1 space-y-3">
             <label className="block">
-              <span className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-blue-100/45">Image</span>
+              <span className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-ui-faint">Image</span>
               <input
                 type="file"
                 accept="image/*"
                 onChange={(e) => take(e.target.files?.[0])}
-                className="block w-full text-[11px] text-blue-100/70 file:mr-3 file:border file:border-seat-edge file:bg-white/5 file:px-2.5 file:py-1 file:text-[10px] file:uppercase file:tracking-[0.14em] file:text-seat-cyan hover:file:bg-white/10"
+                className="block w-full text-[11px] text-ui-soft file:mr-3 file:rounded-full file:border-0 file:bg-ui-bg file:px-3 file:py-1.5 file:text-[10px] file:font-bold file:uppercase file:tracking-[0.14em] file:text-ui-deep"
               />
             </label>
-            <p className="text-[10.5px] leading-relaxed text-blue-100/40">
+            <p className="text-[10.5px] leading-relaxed text-ui-faint">
               Cropped square from the centre and stored at {BANNER_SIZE}px. Any shape works; only the middle of it lands on the seat.
             </p>
           </div>
         </div>
 
         <label className="mt-4 block">
-          <span className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-blue-100/45">Description</span>
+          <span className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-ui-faint">Description</span>
           <input
             value={alt}
             onChange={(e) => setAlt(e.target.value)}
             maxLength={120}
             placeholder="What the advert says"
-            className="w-full border border-seat-edge bg-black/30 px-2.5 py-1.5 text-[12px] text-blue-50 placeholder:text-blue-100/25 focus:border-seat-cyan focus:outline-none"
+            className="ui-field"
           />
         </label>
 
         <label className="mt-3 block">
-          <span className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-blue-100/45">Link (optional)</span>
+          <span className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-ui-faint">Link (optional)</span>
           <input
             value={href}
             onChange={(e) => setHref(e.target.value)}
             inputMode="url"
             placeholder="https://"
-            className="w-full border border-seat-edge bg-black/30 px-2.5 py-1.5 text-[12px] text-blue-50 placeholder:text-blue-100/25 focus:border-seat-cyan focus:outline-none"
+            className="ui-field"
           />
         </label>
 
         {error && <p role="alert" className="mt-3 text-[11.5px] text-red-300">{error}</p>}
 
-        <p className="mt-4 border-t border-white/10 pt-3 text-[10.5px] leading-relaxed text-blue-100/40">
+        <p className="mt-4 ui-rule pt-3 text-[10.5px] leading-relaxed text-ui-faint">
           Saved in this browser only. Everyone else sees the published wall until yours is accepted onto it.
         </p>
 
@@ -134,7 +134,7 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose }: AdvertDialogP
             type="button"
             onClick={save}
             disabled={busy}
-            className="border border-seat-amber bg-seat-amber px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-seat-night disabled:opacity-40"
+            className="sa-cta px-5 py-2 text-[11px] disabled:opacity-40"
           >
             {busy ? 'Cropping…' : 'Put it up'}
           </button>
@@ -142,7 +142,7 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose }: AdvertDialogP
             <button
               type="button"
               onClick={() => { onClear(); onClose(); }}
-              className="border border-seat-edge px-4 py-1.5 text-[11px] uppercase tracking-[0.16em] text-blue-100/60 hover:text-white"
+              className="sa-ghost px-5 py-2 text-[11px]"
             >
               Take it down
             </button>

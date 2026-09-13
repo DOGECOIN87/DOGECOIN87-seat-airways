@@ -182,7 +182,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
         onPointerUp={endPointer}
         onPointerCancel={endPointer}
         onKeyDown={onKeyDown}
-        className={`sd-glass relative overflow-hidden border border-white/12 bg-[#05070F] ${full ? 'min-h-0 flex-1' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
+        className={`sd-glass relative overflow-hidden ${full ? 'min-h-0 flex-1' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00C9F1] ${
           zoomed ? 'cursor-grab active:cursor-grabbing' : ''
         }`}
         style={{ touchAction: 'none' }}
@@ -198,7 +198,10 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
         </div>
 
         {/* Keep frame context away from the view's own bottom telemetry. */}
-        <p className="pointer-events-none absolute right-3 top-3 border border-white/12 bg-[#05070F]/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-seat-cyan backdrop-blur-sm">
+        {/* The view draws its own callsign at the top left, so this badge is
+            capped at a share of the width and allowed to wrap rather than
+            run into it — on a phone the two were colliding. */}
+        <p className="pointer-events-none absolute right-3 top-3 max-w-[46%] rounded-2xl border border-white/12 bg-black/55 px-2.5 py-1 text-right text-[9px] font-bold uppercase leading-tight tracking-[0.16em] text-[#7FE3F7] backdrop-blur-sm sm:max-w-[60%] sm:px-3 sm:text-[10px] sm:tracking-[0.18em]">
           {label}
         </p>
       </div>
@@ -213,17 +216,17 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
             disabled={scale <= MIN + 0.001 && !onZoomOutBeyond}
             aria-label={scale <= MIN + 0.001 && zoomOutHint ? zoomOutHint : 'Zoom out'}
             title={scale <= MIN + 0.001 && zoomOutHint ? zoomOutHint : undefined}
-            className="h-9 w-9 shrink-0 border border-white/12 bg-white/[0.03] text-lg leading-none text-blue-100/70 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 disabled:hover:border-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+            className="ui-round"
           >
             −
           </button>
-          <span className="w-14 shrink-0 text-center text-[11px] tabular-nums text-blue-100/50">{scale.toFixed(1)}×</span>
+          <span className="w-14 shrink-0 text-center text-[11px] tabular-nums text-ui-faint">{scale.toFixed(1)}×</span>
           <button
             type="button"
             onClick={() => zoomAbout(scale * 1.25)}
             disabled={scale >= MAX - 0.001}
             aria-label="Zoom in"
-            className="h-9 w-9 shrink-0 border border-white/12 bg-white/[0.03] text-lg leading-none text-blue-100/70 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 disabled:hover:border-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+            className="ui-round"
           >
             +
           </button>
@@ -231,7 +234,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
             type="button"
             onClick={reset}
             disabled={!zoomed && pan.x === 0 && pan.y === 0}
-            className="ml-1 shrink-0 border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/60 transition-colors hover:border-white/25 hover:text-white disabled:opacity-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+            className="ui-pill ml-1"
           >
             Reset
           </button>
@@ -239,7 +242,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
             type="button"
             onClick={() => setFull((v) => !v)}
             aria-pressed={full}
-            className="ml-1 shrink-0 border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/60 transition-colors hover:border-white/25 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+            className="ui-pill ml-1"
           >
             {full ? 'Exit full screen' : 'Full screen'}
           </button>

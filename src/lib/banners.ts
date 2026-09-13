@@ -177,12 +177,14 @@ export const hasPublishedWall = Boolean(REMOTE);
    what the holder buying into row 1 is buying into. */
 
 const HOUSE_INK = {
-  navy: '#002663',
-  night: '#0A0F16',
-  amber: '#FFB300',
-  cyan: '#7ECDE0',
-  bone: '#EDE6D8',
-  cloth: '#36445C',
+  /* The names are the roles, not the hues, so re-liverying the airline is
+     this block and nothing else. */
+  navy: '#005FB8',   // the filled ground of a house advert
+  night: '#1B2027',  // the dark one
+  amber: '#0087EA',  // what a house advert shouts in
+  cyan: '#00C9F1',   // and what it says the quiet half in
+  bone: '#F2F3F5',   // the light ground
+  cloth: '#8E939E',  // the neutral
 } as const;
 
 /** The mark, scaled and placed on the 200-square house-advert canvas. */

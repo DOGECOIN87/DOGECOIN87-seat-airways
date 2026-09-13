@@ -44,11 +44,11 @@ const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing,
 
   if (!address && !previewing) {
     return (
-      <section className="border border-seat-amber/35 bg-[#141821]/85 backdrop-blur-sm" aria-label="Check in">
+      <section className="ui-card ui-card--accent" aria-label="Check in">
         <div className="px-5 py-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-seat-amber">Boarding</p>
-          <h3 className="font-heading mt-2 text-2xl leading-tight text-white">Where do you sit?</h3>
-          <p className="mt-2 max-w-[42ch] text-[13px] leading-relaxed text-blue-100/65">
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-ui-deep">Boarding</p>
+          <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">Where do you sit?</h3>
+          <p className="mt-2 max-w-[42ch] text-[13px] leading-relaxed text-ui-soft">
             Connect a wallet and the manifest answers it: bigger bag, further forward. Everyone under the
             last cutoff rides in the hold.
           </p>
@@ -57,26 +57,25 @@ const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing,
             type="button"
             onClick={connect}
             disabled={connecting}
-            className="sa-shine mt-5 inline-flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-extrabold uppercase tracking-wide text-seat-night transition-transform hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
-            style={{ background: '#FFB300' }}
+            className="sa-cta sa-shine mt-5 w-full justify-center disabled:opacity-60"
           >
             {connecting ? 'Checking in…' : 'Check in with a wallet'}
             {!connecting && <span aria-hidden>→</span>}
           </button>
 
           {error && (
-            <p role="alert" className="mt-3 text-[12px] leading-relaxed text-[#FF8A7E]">
+            <p role="alert" className="mt-3 text-[12px] font-semibold leading-relaxed text-[#B3261E]">
               {error}
             </p>
           )}
           {unavailable && !error && (
-            <p className="mt-3 text-[12px] leading-relaxed text-blue-100/45">
+            <p className="mt-3 text-[12px] leading-relaxed text-ui-faint">
               No wallet extension detected. Phantom, Solflare and Backpack all work.
             </p>
           )}
           {!live && (
-            <div className="mt-5 border-t border-white/10 pt-4">
-              <p className="text-[11px] leading-relaxed text-blue-100/45">
+            <div className="mt-5 ui-rule pt-4">
+              <p className="text-[11px] leading-relaxed text-ui-faint">
                 Demonstration mode — this deployment isn&apos;t pointed at a token yet. No wallet? Board as
                 a sample holder and watch the ladder decide:
               </p>
@@ -86,7 +85,7 @@ const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing,
                     key={h.label}
                     type="button"
                     onClick={() => onPreview?.(h.share)}
-                    className="border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/65 transition-colors hover:border-seat-cyan/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+                    className="border border-transparent bg-transparent px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ui-soft transition-colors hover:text-ui-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-blue"
                   >
                     {h.label}
                   </button>
@@ -100,41 +99,41 @@ const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing,
   }
 
   return (
-    <section className="border border-white/12 bg-[#141821]/80 backdrop-blur-sm" aria-label="Checked in">
-      <header className="flex items-center gap-3 border-b border-white/10 px-5 py-3.5">
+    <section className="ui-card" aria-label="Checked in">
+      <header className="flex items-center gap-3 ui-rule-b px-5 py-3.5">
         <span
           aria-hidden
-          className="h-2 w-2 shrink-0 bg-seat-amber"
+          className="h-2 w-2 shrink-0 bg-ui-blue"
           style={{ borderRadius: '9999px', boxShadow: '0 0 10px #FFB300' }}
         />
-        <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-blue-100/55">
+        <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-ui-soft">
           {previewing ? 'Sample holder' : `Checked in${walletName ? ` · ${walletName}` : ''}`}
         </p>
         <button
           type="button"
           onClick={previewing ? onClearPreview : disconnect}
-          className="ml-auto text-[10px] uppercase tracking-[0.16em] text-blue-100/40 underline-offset-4 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
+          className="ml-auto text-[10px] uppercase tracking-[0.16em] text-ui-faint underline-offset-4 transition-colors hover:text-ui-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-blue"
         >
           {previewing ? 'Back to check-in' : 'Sign out'}
         </button>
       </header>
 
-      <dl className="grid grid-cols-2 gap-px bg-white/[0.07]">
+      <dl className="grid grid-cols-2 gap-px bg-transparent">
         {[
           { k: 'Passenger', v: address ? short(address) : 'Sample holder' },
           { k: 'Cabin', v: berth.hold ? 'CARGO HOLD' : berth.rung },
           { k: 'Holding', v: holding ? formatTokens(holding.balance) : loading ? '—' : 'unread' },
           { k: 'Share of supply', v: holding ? formatShare(holding.share) : loading ? '—' : 'unread' },
         ].map((cell) => (
-          <div key={cell.k} className="bg-[#141821] px-5 py-3.5">
-            <dt className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100/40">{cell.k}</dt>
-            <dd className="mt-1 break-words text-[15px] leading-snug text-white">{cell.v}</dd>
+          <div key={cell.k} className="bg-transparent px-5 py-3.5">
+            <dt className="text-[10px] font-bold uppercase tracking-[0.18em] text-ui-faint">{cell.k}</dt>
+            <dd className="mt-1 break-words text-[15px] leading-snug text-ui-ink">{cell.v}</dd>
           </div>
         ))}
       </dl>
 
       {!live && (
-        <p className="border-t border-white/10 px-5 py-3 text-[11px] leading-relaxed text-blue-100/40">
+        <p className="ui-rule px-5 py-3 text-[11px] leading-relaxed text-ui-faint">
           {previewing
             ? 'A sample holder, to show the ladder working. Not a real balance.'
             : 'Demonstration figures — not your real balance.'}

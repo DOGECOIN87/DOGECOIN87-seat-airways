@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, type CabinRow, type ZoneKey } from '../content/cabin';
 import { safeHref, type Banner, type BannerSet } from '../lib/banners';
 import { shortAddress, type Manifest, type ManifestEntry } from '../lib/manifest';
@@ -16,10 +16,14 @@ import { formatShare, formatTokens } from '../lib/seatLadder';
  * placements at the front.
  */
 
-const ACCENT: Record<'cerise' | 'cyan' | 'violet', { line: string; text: string }> = {
-  cerise: { line: 'border-seat-amber/45', text: 'text-seat-amber' },
-  cyan: { line: 'border-seat-cyan/45', text: 'text-seat-cyan' },
-  violet: { line: 'border-seat-edge/60', text: 'text-seat-edge' },
+/* Zone rank used to be carried by three accent colours. With one blue in
+   the kit it is carried by emphasis instead: the classes forward sit in the
+   accent, the rest of the aeroplane in the quiet grey. Same information,
+   one hue. */
+const ACCENT: Record<'cerise' | 'cyan' | 'violet', string> = {
+  cerise: '',
+  cyan: '',
+  violet: 'sa-zone-head--plain',
 };
 
 interface SeatProps {
@@ -36,15 +40,17 @@ const Seat = ({ id, zone, entry, banner, mine, onVisit, onInspect }: SeatProps) 
   const lavatory = (LAVATORY_SEATS as readonly string[]).includes(id);
   const sold = entry !== null;
 
+  /* Raised means held, sunk means open, blue means yours. The whole legend
+     is three shadows, which is why the map can be read without one. */
   const state = mine
-    ? 'border-seat-amber shadow-[0_0_14px_rgba(255,179,0,0.55)]'
+    ? 'sa-seat--mine'
     : sold
-      ? 'border-white/25 hover:border-seat-cyan'
+      ? (banner ? 'sa-seat--advert' : 'sa-seat--sold')
       : zone === 'exit'
-        ? 'border-seat-cyan/45 hover:bg-seat-cyan/20 hover:border-seat-cyan'
+        ? 'sa-seat--open sa-seat--exit'
         : lavatory
-          ? 'border-dashed border-blue-100/25 hover:border-seat-amber'
-          : 'border-blue-100/18 hover:bg-seat-cyan/15 hover:border-seat-cyan';
+          ? 'sa-seat--open sa-seat--lav'
+          : 'sa-seat--open';
 
   const label = sold
     ? `Seat ${id}, rank ${entry.rank}, ${shortAddress(entry.address)}${banner ? `. Advert: ${banner.alt}` : ''}. Look from here.`
@@ -61,9 +67,7 @@ const Seat = ({ id, zone, entry, banner, mine, onVisit, onInspect }: SeatProps) 
       onMouseLeave={() => onInspect(null)}
       onBlur={() => onInspect(null)}
       style={{ width: 'var(--seat)', height: 'var(--seat)' }}
-      className={`sa-seat relative flex-none overflow-hidden border transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${state} ${
-        sold && !banner ? 'sa-seat--held' : ''
-      }`}
+      className={`sa-seat ${state}`}
     >
       {banner ? (
         <img src={banner.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -71,22 +75,17 @@ const Seat = ({ id, zone, entry, banner, mine, onVisit, onInspect }: SeatProps) 
         // No advert up yet, so the seat advertises itself: rank, then the
         // seat number under it, at a size somebody can actually read.
         <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-          <span className="font-mono text-[max(10px,0.42em)] font-semibold text-white/70">{entry.rank}</span>
-          <span className="mt-[0.15em] font-mono text-[max(7px,0.26em)] text-white/35">{id}</span>
+          <span className="sa-seat__rank font-mono text-[max(10px,0.42em)] font-semibold">{entry.rank}</span>
+          <span className="sa-seat__id mt-[0.15em] font-mono text-[max(7px,0.26em)]">{id}</span>
         </span>
       ) : (
-        <span className="absolute inset-0 grid place-items-center font-mono text-[max(7px,0.26em)] text-blue-100/20">
+        <span className="sa-seat__id absolute inset-0 grid place-items-center font-mono text-[max(7px,0.26em)] opacity-70">
           {id}
         </span>
       )}
 
       {/* Headrest — the line that turns a square into a seat. */}
-      <span
-        aria-hidden
-        className={`absolute inset-x-[12%] top-[8%] h-[6%] ${
-          banner ? 'bg-black/35' : mine ? 'bg-seat-amber/70' : sold ? 'bg-white/25' : 'bg-current opacity-20'
-        }`}
-      />
+      <span aria-hidden className="sa-seat__rest" />
     </button>
   );
 };
@@ -111,6 +110,25 @@ interface SeatMapProps {
 const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }: SeatMapProps) => {
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+
+  /* How full each zone is.
+
+     The map already shows this as a picture — the front is solid, the back
+     is empty — but a picture of it is not a number, and the number is what
+     somebody works out their own landing spot from. Put beside the map
+     rather than under it, it also gives the readout column something to be
+     when nothing is under the cursor. */
+  const zoneFill = useMemo(
+    () =>
+      CABIN_ZONES.map((zone) => {
+        const ids = zone.rows.flatMap((row) =>
+          [...row.left, ...row.right].map((c) => (row.n === null ? c : `${row.n}${c}`)),
+        );
+        const held = ids.filter((id) => manifest.seats.has(id)).length;
+        return { key: zone.key, name: zone.name, note: zone.note, held, total: ids.length };
+      }),
+    [manifest],
+  );
 
   /* Runs of rows with nobody in them collapse into one line.
 
@@ -172,29 +190,29 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
       /* One knob sets the whole grid: the seat is a square and everything is
          measured off it, so the map scales from a phone to a desktop without
          a second layout. */
-      style={{ '--seat-base': 'clamp(30px, 5.2vw, 76px)', '--seat': 'var(--seat-base)', '--cabin-w': 'min(100%, 40rem)' } as CSSProperties}
+      style={{ '--seat-base': 'clamp(30px, 5.4vw, 78px)', '--seat': 'var(--seat-base)', '--cabin-w': 'min(100%, 41rem)' } as CSSProperties}
     >
       <div className="sa-map__body">
         {/* ── Nose ── */}
         <svg viewBox="0 0 320 54" preserveAspectRatio="none" className="mx-auto block h-11 w-full max-w-[var(--cabin-w)]" aria-hidden>
           <path
             d="M160 6 C202 6 244 25 258 53 L62 53 C76 25 118 6 160 6 Z"
-            fill="rgba(0,38,99,0.34)"
-            stroke="rgba(126,205,224,0.3)"
+            fill="#E8E9ED"
+            stroke="rgba(163,167,180,0.55)"
             strokeWidth="1.25"
           />
-          <path d="M132 34 h56" stroke="rgba(126,205,224,0.28)" strokeWidth="1.5" />
-          <circle cx="160" cy="22" r="2.5" fill="#FFB300" />
+          <path d="M132 34 h56" stroke="rgba(163,167,180,0.6)" strokeWidth="1.5" />
+          <circle cx="160" cy="22" r="2.5" fill="#0087EA" />
         </svg>
 
         <div className="sa-map__cabin mx-auto max-w-[var(--cabin-w)]">
           {CABIN_ZONES.map((zone) => {
             const accent = ACCENT[zone.accent];
             return (
-              <section key={zone.key} className="border-b border-white/10">
-                <header className={`flex items-center gap-2 border-l-2 bg-white/[0.035] px-3.5 py-2 ${accent.line}`}>
-                  <h3 className={`text-[11px] font-bold uppercase tracking-[0.2em] ${accent.text}`}>{zone.name}</h3>
-                  <span className="ml-auto text-[10px] uppercase tracking-[0.14em] text-blue-100/35">{zone.note}</span>
+              <section key={zone.key}>
+                <header className={`sa-zone-head ${accent}`}>
+                  <h3>{zone.name}</h3>
+                  <span className="sa-zone-head__note">{zone.note}</span>
                 </header>
 
                 <div
@@ -207,25 +225,23 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
                         key={`gap-${block.gap.from}`}
                         type="button"
                         onClick={() => setShowAll(true)}
-                        className="group flex items-center gap-3 border border-dashed border-white/12 px-3 py-2.5 text-left transition-colors hover:border-seat-cyan/50"
+                        className="sa-gap"
                       >
                         <span aria-hidden className="flex gap-[3px]">
                           {[0, 1, 2, 3, 4, 5].map((i) => (
-                            <span key={i} className="h-3 w-2 border border-white/15" />
+                            <span key={i} className="sa-gap__tick" />
                           ))}
                         </span>
-                        <span className="text-[11.5px] text-blue-100/45">
+                        <span className="sa-gap__text">
                           Rows {block.gap.from}–{block.gap.to} ·{' '}
                           <span className="font-mono">{block.gap.seats}</span> seats nobody has taken
                         </span>
-                        <span className="ml-auto whitespace-nowrap text-[10px] uppercase tracking-[0.16em] text-blue-100/30 group-hover:text-seat-cyan">
-                          Show
-                        </span>
+                        <span className="sa-gap__show">Show</span>
                       </button>
                     ) : (
                       <div key={block.row.n ?? 'deck'} className="flex items-center justify-center gap-[5px]">
                         {block.row.n !== null && (
-                          <span className="w-6 flex-none text-right font-mono text-[10px] text-blue-100/30">{block.row.n}</span>
+                          <span className="sa-rownum w-6 flex-none text-right font-mono text-[10px]">{block.row.n}</span>
                         )}
                         {[block.row.left, block.row.right].map((bank, side) => (
                           <div key={side} className="contents">
@@ -248,7 +264,7 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
                           </div>
                         ))}
                         {block.row.n !== null && (
-                          <span className="w-6 flex-none font-mono text-[10px] text-blue-100/30">{block.row.n}</span>
+                          <span className="sa-rownum w-6 flex-none font-mono text-[10px]">{block.row.n}</span>
                         )}
                       </div>
                     ),
@@ -260,11 +276,11 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
 
           {/* ── Cargo hold ── */}
           <section>
-            <header className="flex items-center gap-2 border-l-2 border-white/20 bg-white/[0.035] px-3.5 py-2">
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-100/55">{CARGO_HOLD.name}</h3>
-              <span className="ml-auto text-[10px] uppercase tracking-[0.14em] text-blue-100/35">{CARGO_HOLD.note}</span>
+            <header className="sa-zone-head sa-zone-head--plain">
+              <h3>{CARGO_HOLD.name}</h3>
+              <span className="sa-zone-head__note">{CARGO_HOLD.note}</span>
             </header>
-            <p className="px-3.5 py-3.5 text-[12.5px] leading-relaxed text-blue-100/55">{CARGO_HOLD.body}</p>
+            <p className="px-4 py-4 text-[12.5px] leading-relaxed text-ui-soft">{CARGO_HOLD.body}</p>
           </section>
         </div>
 
@@ -272,11 +288,11 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
         <svg viewBox="0 0 320 64" preserveAspectRatio="none" className="mx-auto block h-12 w-full max-w-[var(--cabin-w)]" aria-hidden>
           <path
             d="M62 0 L258 0 C247 28 211 52 160 58 C109 52 73 28 62 0 Z"
-            fill="rgba(0,38,99,0.34)"
-            stroke="rgba(126,205,224,0.3)"
+            fill="#E8E9ED"
+            stroke="rgba(163,167,180,0.55)"
             strokeWidth="1.25"
           />
-          <path d="M160 10 L160 48" stroke="rgba(255,179,0,0.5)" strokeWidth="2.5" />
+          <path d="M160 10 L160 48" stroke="#0087EA" strokeWidth="2.5" opacity="0.7" />
         </svg>
       </div>
 
@@ -286,6 +302,7 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
           stays where it was. A popover on a tile would cover the three next
           to it, which is the whole reason this is a panel. */}
       <aside className="sa-map__side">
+        <div className="sa-map__sticky">
         <div className="sa-map__card">
           <p className="sa-map__label">{resting ? 'Best placement on board' : 'Seat'}</p>
 
@@ -362,6 +379,29 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
           <li><span aria-hidden className="sa-key sa-key--mine" /> Yours</li>
           <li className="sa-map__count tabular-nums">{manifest.entries.length} seated · {manifest.open} open</li>
         </ul>
+
+        {/* ── How full the aircraft is, by zone ── */}
+        <div className="sa-fill">
+          <p className="sa-map__label">Cabin</p>
+          <ul className="sa-fill__list">
+            {zoneFill.map((zone) => (
+              <li key={zone.key} className="sa-fill__row">
+                <span className="sa-fill__name">{zone.name}</span>
+                <span className="sa-fill__note">{zone.note}</span>
+                <span aria-hidden className="sa-fill__track">
+                  <span
+                    className="sa-fill__bar"
+                    style={{ width: `${Math.round((zone.held / zone.total) * 100)}%` }}
+                  />
+                </span>
+                <span className="sa-fill__n tabular-nums">
+                  {zone.held}/{zone.total}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        </div>
       </aside>
     </div>
   );

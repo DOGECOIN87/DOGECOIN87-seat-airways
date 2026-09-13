@@ -43,9 +43,9 @@ function useBarcode(seed: string) {
 
 const Field = ({ label, value, big }: { label: string; value: string; big?: boolean }) => (
   <div className="min-w-0">
-    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-100/40">{label}</p>
+    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-ui-faint">{label}</p>
     <p
-      className={`font-heading mt-1 truncate text-white ${big ? 'text-4xl leading-none' : 'text-xl leading-tight'}`}
+      className={`font-heading mt-1 truncate text-ui-ink ${big ? 'text-4xl leading-none' : 'text-xl leading-tight'}`}
       title={value}
     >
       {value}
@@ -64,17 +64,16 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
       : (zone?.perk ?? '');
 
   return (
-    <div className="sa-shine bg-gradient-to-br from-seat-amber/70 via-seat-edge/50 to-seat-cyan/60 p-px">
-      <div className="relative bg-[#141821]">
+    <div className="sa-shine ui-card ui-card--accent">
+      <div className="relative">
         {/* Upper stub */}
         <div className="px-5 pb-5 pt-5">
           <div className="flex items-center gap-2.5">
-<Mark size={22} background="none" color="#FFB300" className="flex-none" />
-            <p className="font-heading text-lg tracking-tight">
-              <span className="text-seat-amber">SEAT</span>{' '}
-              <span className="text-seat-cyan">AIRWAYS</span>
+            <Mark size={22} background="none" color="#0087EA" className="flex-none" />
+            <p className="font-heading text-lg tracking-tight text-ui-ink">
+              SEAT <span className="text-ui-deep">AIRWAYS</span>
             </p>
-            <span className="ml-auto text-[10px] uppercase tracking-[0.18em] text-blue-100/35">Boarding pass</span>
+            <span className="ml-auto text-[10px] uppercase tracking-[0.18em] text-ui-faint">Boarding pass</span>
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
@@ -91,12 +90,12 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
         <div className="relative">
           <span
             aria-hidden
-            className="absolute -left-[9px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 bg-seat-night"
+            className="absolute -left-[9px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 bg-ui-bg"
             style={{ borderRadius: '9999px' }}
           />
           <span
             aria-hidden
-            className="absolute -right-[9px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 bg-seat-night"
+            className="absolute -right-[9px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 bg-ui-bg"
             style={{ borderRadius: '9999px' }}
           />
           <div
@@ -104,7 +103,7 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
             className="mx-4 h-px"
             style={{
               background:
-                'repeating-linear-gradient(90deg, rgba(52,237,243,0.45) 0 7px, transparent 7px 14px)',
+                'repeating-linear-gradient(90deg, rgba(150,155,170,0.55) 0 7px, transparent 7px 14px)',
             }}
           />
         </div>
@@ -113,10 +112,10 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
         <div className="px-5 pb-5 pt-4">
           <svg viewBox="0 0 300 40" className="block h-9 w-full" aria-hidden preserveAspectRatio="none">
             {bars.map((b, i) => (
-              <rect key={i} x={b.x} y="0" width={b.w} height="40" fill="#DDE8FF" opacity={0.55 + (i % 3) * 0.15} />
+              <rect key={i} x={b.x} y="0" width={b.w} height="40" fill="#2B2F37" opacity={0.55 + (i % 3) * 0.15} />
             ))}
           </svg>
-          <p className="mt-3 text-[11.5px] leading-relaxed text-blue-100/55">{note}</p>
+          <p className="mt-3 text-[11.5px] leading-relaxed text-ui-soft">{note}</p>
         </div>
       </div>
     </div>

@@ -142,44 +142,54 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
           this frame, and repeating it inside the frame said the same thing
           twice in two type sizes. What belongs here is what an aviation
           photograph is captioned with: which aeroplane, and who is on it. */}
-      <div className="pointer-events-none absolute left-5 top-4 flex items-center gap-2.5">
+      <div className="pointer-events-none absolute left-3 top-3 flex max-w-[52%] items-center gap-2 sm:left-5 sm:top-4 sm:max-w-none sm:gap-2.5">
         <Mark size={22} background="none" />
         <span className="font-heading text-[15px] leading-none tracking-normal text-white/90">SA350</span>
-        <span aria-hidden className="h-3.5 w-px bg-white/25" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/50">
+        <span aria-hidden className="hidden h-3.5 w-px bg-white/25 sm:block" />
+        <span className="hidden font-mono text-[10px] uppercase tracking-[0.2em] text-white/50 sm:inline">
           Souls on board <span className="tabular-nums text-white/80">{taken.size}</span>
         </span>
       </div>
 
-      {/* ── Readout ── */}
-      <div className="pointer-events-none absolute bottom-4 left-5 flex items-end gap-6 border border-white/12 bg-[#05070F]/75 px-4 py-2.5 backdrop-blur-sm">
-        <div>
-          <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-blue-100/45">Altitude</p>
-          <p className="mt-0.5 font-mono text-xl leading-none text-white">
-            <span ref={capRead} />
+      {/* ── Readout ──────────────────────────────────────────────────
+          Both halves share one bottom row rather than being anchored to
+          opposite corners. Anchored, they overlapped on a phone — the frame
+          is simply not wide enough to hold the telemetry and the camera note
+          side by side, and two absolutely positioned blocks have no way to
+          find that out. In one wrapping row they stack instead. */}
+      <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-wrap items-end justify-between gap-2 sm:inset-x-5 sm:bottom-4">
+        <div className="flex items-end gap-4 rounded-xl border border-white/12 bg-[#05070F]/75 px-3 py-2 backdrop-blur-sm sm:gap-6 sm:px-4 sm:py-2.5">
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">Altitude</p>
+            <p className="mt-0.5 font-mono text-lg leading-none text-white sm:text-xl">
+              <span ref={capRead} />
+            </p>
+          </div>
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">24h</p>
+            <p className="mt-0.5 font-mono text-sm leading-none sm:text-base">
+              <span ref={chgRead} />
+            </p>
+          </div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#7FE3F7]">{band.label}</p>
+        </div>
+
+        {/* Where your seat is, in words — the drawn view is aria-hidden. */}
+        <div className="ml-auto text-right">
+          {claimed && (
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#00C9F1]">Your seat · {claimed.id}</p>
+          )}
+          {viewing && viewing.id !== claimed?.id && (
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-white/50">
+              Camera · {viewing.id}
+            </p>
+          )}
+          <p className="mt-1 hidden font-mono text-[10px] uppercase tracking-[0.2em] text-white/35 sm:block">
+            Drag to walk around
           </p>
         </div>
-        <div>
-          <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-blue-100/45">24h</p>
-          <p className="mt-0.5 font-mono text-base leading-none">
-            <span ref={chgRead} />
-          </p>
-        </div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-seat-cyan">{band.label}</p>
       </div>
 
-      {/* Where your seat is, in words — the drawn view is aria-hidden. */}
-      <div className="pointer-events-none absolute bottom-4 right-5 text-right">
-        {claimed && (
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-seat-amber">Your seat · {claimed.id}</p>
-        )}
-        {viewing && viewing.id !== claimed?.id && (
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-100/45">
-            Camera · {viewing.id}
-          </p>
-        )}
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-white/35">Drag to walk around</p>
-      </div>
     </div>
   );
 };

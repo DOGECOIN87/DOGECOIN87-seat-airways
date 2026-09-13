@@ -119,6 +119,51 @@ A deployment that wants everyone to see the same wall points `VITE_BANNERS_URL`
 at a JSON document of `{ "<seat>": { image, alt, href } }`; that set is
 read-only and beats anything a browser has put up locally.
 
+## The interface
+
+The page is a soft-UI panel with dark screens set into it — the same way the
+instrument panel of an aircraft is built. One light grey face, controls
+extruded out of it by light rather than outlined, displays recessed into it,
+and a single blue that lights whatever is live.
+
+There are almost no borders in `src/index.css`. An edge is a change in
+shading: a white shadow up and to the left where the light is, a grey one
+down and to the right where it is not. Swap their positions to inset and the
+same control reads as pressed. That is the entire vocabulary, and it is what
+lets the seat map state itself without a legend — **an open seat is a socket
+pressed into the fuselage, a held seat is a tile extruded out of it, and your
+seat is the one wearing the blue.**
+
+Two things about the palette are worth knowing before changing it.
+
+**There are two blues, and the difference is contrast.** The bright gradient
+(`--g-accent`, `#00C9F1 → #0087EA`) lights anything that is a graphic — a
+meter, a lamp, a ring, an active edge. Anything carrying text gets
+`--g-accent-text` (`#007ACC → #005FB8`), which holds white at 4.5:1 where the
+bright one manages 3.7:1. Same family; one of them is simply legible.
+
+**The greys are darker than a soft-UI kit's usually are.** A label grey chosen
+for how it looks manages about 2:1 on its own ground. Every grey here was
+walked down until it carries small text at 4.5:1 against all four grounds it
+is ever set on — the page, a card, the wall band, and the inside of a recess.
+If you change one, check it against the darkest of those (`--ui-sink`), not
+against the page.
+
+The values live in two places that must stay in step: the custom properties at
+the top of `src/index.css`, and the `ui` palette in `tailwind.config.js`. They
+are the same palette reached two different ways.
+
+Type and spacing are one ratio, φ. Every size is the 15px body size multiplied
+or divided by 1.618 (or by its square root, where a whole step is too big a
+jump), and every measure of air is a rem stepped by the same number — so
+nothing on the page is nearly-but-not-quite related to anything else. The
+scale is `--t-xs` through `--t-5xl` and `--s-1` through `--s-6`.
+
+The aircraft keeps its own materials. Inside the dark screens the livery is
+still navy and the cabin lighting is still amber, because those are things the
+aeroplane is made of rather than interface colours — the `seat` palette in
+`tailwind.config.js`, kept deliberately separate from `ui`.
+
 ## The market feed is simulated
 
 `src/lib/flightFeed.ts` is the **only** file that has to change to go live:
