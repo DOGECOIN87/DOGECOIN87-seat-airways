@@ -23,6 +23,34 @@ import { MARK_PATH } from '../components/Mark';
 /** Nose tip and tail tip, in the cabin's own z (row 1 sits at z = 0). */
 const NOSE_Z = -7.6;
 const TAIL_Z = 31.8;
+
+/* Where the wing sits on the fuselage.
+ *
+ * The wing, the winglet raked off its tip, the navigation lamp on that
+ * winglet, the flap-track fairings under it and the engines hanging from it
+ * are one assembly that has to move as one. Each of them used to carry its
+ * own copy of the wing's fore-and-aft numbers, so shifting the wing meant
+ * finding five sets of literals and getting every one of them right —
+ * and missing one left the engines hanging in the air where the wing used
+ * to be. Everything below derives from this.
+ *
+ * `rootZ` is the station of the root leading edge: the nose is at NOSE_Z,
+ * the tail at TAIL_Z, so a smaller number is further forward. `tipZ` is the
+ * tip's leading edge, aft of the root's — that difference is the sweep. */
+const WING = {
+  rootZ: 7.6,
+  rootChord: 6.4,
+  tipZ: 14.7,
+  tipChord: 1.9,
+  span: 15.6,
+  /** Root underside, and how far the tip rises above it: the dihedral. */
+  rootY: -1.15,
+  rise: 1.7,
+  /** The engine hangs this far aft of the root leading edge. */
+  engineZ: 1.6,
+  /** The winglet's own chord-wise extent, off the tip. */
+  wingletRun: 1.1,
+};
 const R = CABIN.radius;
 
 /* ── Fuselage ─────────────────────────────────────────────────────────────
@@ -263,7 +291,8 @@ function engine(mirror: number, mat: EngineMaterials, track: <T extends { dispos
   pylon.castShadow = pylon.receiveShadow = true;
   g.add(pylon);
 
-  g.position.set(6.6 * mirror, -2.25, 11.4);
+  // Hung from the wing, so it moves with it rather than being left behind.
+  g.position.set(6.6 * mirror, -2.25, WING.rootZ + WING.engineZ);
   return g;
 }
 
@@ -504,9 +533,9 @@ export function createAirframe(): AirframeHandles {
   for (const side of [1, -1]) {
     const wing = new THREE.Mesh(
       track(panelGeometry({
-        originX: side * R * 0.6, originY: -1.15, span: side * 15.6, rise: 1.7,
-        rootZ: 9.8, rootChord: 6.4, rootThick: 0.86,
-        tipZ: 16.9, tipChord: 1.9, tipThick: 0.16,
+        originX: side * R * 0.6, originY: WING.rootY, span: side * WING.span, rise: WING.rise,
+        rootZ: WING.rootZ, rootChord: WING.rootChord, rootThick: 0.86,
+        tipZ: WING.tipZ, tipChord: WING.tipChord, tipThick: 0.16,
       })),
       wingMat,
     );
@@ -517,8 +546,8 @@ export function createAirframe(): AirframeHandles {
     const winglet = new THREE.Mesh(
       track(panelGeometry({
         originX: side * 16.2, originY: 0.5, span: side * 0.35, rise: 1.9,
-        rootZ: 16.9, rootChord: 1.9, rootThick: 0.16,
-        tipZ: 18.0, tipChord: 0.9, tipThick: 0.09,
+        rootZ: WING.tipZ, rootChord: WING.tipChord, rootThick: 0.16,
+        tipZ: WING.tipZ + WING.wingletRun, tipChord: 0.9, tipThick: 0.09,
       })),
       navy,
     );
@@ -528,18 +557,18 @@ export function createAirframe(): AirframeHandles {
     // Navigation lamps sit at the actual winglet tips: starboard is green,
     // port is red. The tiny colour accents make the scale legible at dusk.
     const nav = new THREE.Mesh(track(new THREE.SphereGeometry(0.105, 16, 10)), side > 0 ? starboardLamp : portLamp);
-    nav.position.set(side * 16.57, 2.42, 18.02);
+    nav.position.set(side * 16.57, 2.42, WING.tipZ + WING.wingletRun + 0.02);
     group.add(nav);
 
     // Three flap-track fairings under each wing break the huge smooth slab
     // into credible manufactured surfaces without adding noisy panel lines.
     for (const t of [0.33, 0.53, 0.71]) {
       const fairing = new THREE.Mesh(track(new THREE.SphereGeometry(1, 16, 10)), pylonMat);
-      const chord = THREE.MathUtils.lerp(6.4, 1.9, t);
+      const chord = THREE.MathUtils.lerp(WING.rootChord, WING.tipChord, t);
       fairing.position.set(
-        side * (R * 0.6 + 15.6 * t),
-        -1.15 + 1.7 * t - 0.17,
-        THREE.MathUtils.lerp(9.8, 16.9, t) + chord * 0.72,
+        side * (R * 0.6 + WING.span * t),
+        WING.rootY + WING.rise * t - 0.17,
+        THREE.MathUtils.lerp(WING.rootZ, WING.tipZ, t) + chord * 0.72,
       );
       fairing.scale.set(0.16, 0.11, 0.72 - t * 0.25);
       fairing.castShadow = fairing.receiveShadow = true;
