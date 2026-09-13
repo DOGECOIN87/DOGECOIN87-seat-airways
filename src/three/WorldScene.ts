@@ -304,7 +304,17 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   /* ── Ground ── */
   const farmland = farmlandTexture();
   const moon = moonTexture();
-  farmland.repeat.set(22, 22);
+  /* Three-kilometre tiles, not five and a half.
+  
+     The plate is 120 km across and the aircraft covers a few hundred metres a
+     second, so the only question that matters is how much detail there is to
+     see that against. At the old scale one repeat of the pattern took the
+     better part of a minute to cross the frame, and the ground read as a
+     still photograph with a slow drift on it — which is what "not flying
+     forward" actually looks like. Finer tiles put field boundaries at a few
+     hundred metres, where real ones are, and the same speed becomes visible
+     because there is something to measure it by. */
+  farmland.repeat.set(40, 40);
   /* Bigger tiles than the farmland's. A crater is a landform, not a field:
      at five-kilometre tiles the largest one in the texture was a few hundred
      metres across and the plain read as flat grey from any altitude worth
@@ -374,18 +384,36 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     opacity: 0.85,
     fog: true,
   });
-  const CLOUDS = 520;
+  const CLOUDS = 620;
   const clouds = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), cloudMat, CLOUDS);
   clouds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const cloudSeeds: { x: number; z: number; y: number; s: number }[] = [];
   for (let i = 0; i < CLOUDS; i++) {
     const a = Math.random() * Math.PI * 2;
-    const r = 400 + Math.sqrt(Math.random()) * 22000;
+    /* A square-root spread over the whole deck puts almost every cloud far
+       away, where nothing appears to move. Ground twenty kilometres off
+       barely shifts in a second; a cloud two hundred metres from the wingtip
+       crosses the entire frame in one. So a third of the deck is seeded close
+       in, and that third is what the speed reads off.
+
+       They are the cue, not the ground: from two kilometres up the ground's
+       angular rate is a few degrees a second no matter how fast the aircraft
+       is genuinely going. */
+    const near = i % 3 === 0;
+    const r = near ? 260 + Math.random() * 4200 : 2000 + Math.sqrt(Math.random()) * 22000;
     cloudSeeds.push({
       x: Math.cos(a) * r,
       z: Math.sin(a) * r,
-      y: (Math.random() - 0.5) * 340,
-      s: 900 + Math.random() * 2400,
+      /* The far deck is a layer; the near cloud is scattered well below it.
+
+         Kept in a tight band at deck height, every near cloud sat above an
+         exterior camera that looks thirteen degrees *down* at the aircraft —
+         so the one thing fast enough to read as speed was always just off the
+         top of the frame, and the deck only ever appeared as a line on the
+         horizon. Scattered down through the band the aircraft actually flies
+         in, they pass the wingtip, which is where you see them from. */
+      y: near ? -1450 + Math.random() * 1850 : (Math.random() - 0.5) * 340,
+      s: (near ? 380 : 900) + Math.random() * (near ? 1250 : 2400),
     });
   }
   scene.add(clouds);
@@ -638,7 +666,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 
     /* The cloud deck sits at a fixed altitude; the aircraft climbs past it. */
     cloudDeckY = 2400;
-    const cover = onMoon || inSpace ? 0 : Math.max(skyState.cloudCover, overcast ? 0.95 : 0.12);
+    /* Even a clear day has fair-weather cumulus at this altitude, and without
+       a few of them there is nothing between the aircraft and a horizon
+       twenty kilometres off for the eye to clock movement against. */
+    const cover = onMoon || inSpace ? 0 : Math.max(skyState.cloudCover, overcast ? 0.95 : 0.27);
     clouds.visible = cover > 0.05;
     if (clouds.visible) {
       cloudMat.opacity = 0.35 + cover * 0.55;
