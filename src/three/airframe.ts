@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CABIN, rowZ } from './cabin';
+import { MARK_PATH } from '../components/Mark';
 
 /**
  * The aircraft, from outside.
@@ -295,6 +296,119 @@ function liveryRibbon(side: number): THREE.BufferGeometry {
   return g;
 }
 
+/* ── Livery ───────────────────────────────────────────────────────────────
+   An aeroplane with no mark on its fin is a model kit somebody forgot to
+   decal. The fin is the single most valuable surface an airline owns, and it
+   is the one the exterior camera is parked to see, so the mark goes on it —
+   both sides, facing forward on each, as it would be applied.
+
+   Both decals are drawn to a canvas rather than modelled, which is the only
+   way type stays type at every zoom, and both wait on the web fonts: a
+   texture baked before Archivo arrives would keep a fallback face for the
+   life of the page. */
+
+/** Repaint once the display face has actually arrived. */
+function whenFontsReady(redraw: () => void, tex: THREE.CanvasTexture) {
+  const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+  if (!fonts?.ready) return;
+  void fonts.ready.then(() => {
+    redraw();
+    tex.needsUpdate = true;
+  });
+}
+
+/** The mark, on transparent, for the fin. */
+function finMarkTexture(fill: string): THREE.CanvasTexture {
+  const size = 512;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d') as CanvasRenderingContext2D;
+  const k = size / 1536;
+  g.scale(k, k);
+  g.fillStyle = fill;
+  g.fill(new Path2D(MARK_PATH), 'evenodd');
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+/** `SEAT AIRWAYS`, on transparent, for the forward fuselage. */
+function titleTexture(fill: string): THREE.CanvasTexture {
+  const w = 1024, h = 192;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d') as CanvasRenderingContext2D;
+  const draw = () => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = fill;
+    g.textBaseline = 'middle';
+    g.textAlign = 'left';
+    g.font = '800 128px Archivo, "Helvetica Neue", Arial, sans-serif';
+    // Titles are letterspaced on every aircraft that carries them; canvas has
+    // no tracking, so the string is set a glyph at a time.
+    const text = 'SEAT AIRWAYS';
+    const track = 7;
+    let width = 0;
+    for (const ch of text) width += g.measureText(ch).width + track;
+    let x = (w - width) / 2;
+    for (const ch of text) {
+      g.fillText(ch, x, h / 2 + 4);
+      x += g.measureText(ch).width + track;
+    }
+  };
+  draw();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 16;
+  whenFontsReady(draw, tex);
+  return tex;
+}
+
+/**
+ * A decal that lies on the barrel rather than through it.
+ *
+ * Same construction as the cheatline — every vertex put on the body of
+ * revolution at its own station — but carrying UVs, so artwork stretched over
+ * it curves with the fuselage instead of floating off it at the shoulders.
+ */
+function barrelDecal(side: number, z0: number, z1: number, yTop: number, yBot: number): THREE.BufferGeometry {
+  const cols = 40, rows = 6;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  for (let i = 0; i <= cols; i++) {
+    const u = i / cols;
+    const z = THREE.MathUtils.lerp(z0, z1, u);
+    const r = radiusAt(z);
+    for (let j = 0; j <= rows; j++) {
+      const v = j / rows;
+      const localY = THREE.MathUtils.lerp(yTop, yBot, v);
+      const x = side * Math.sqrt(Math.max(0.0001, r * r - localY * localY)) * 1.0025;
+      pos.push(x, riseAt(z) + localY, z);
+      /* u runs aft with z, and the nose is at −z, so the texture's left edge
+         has to land at the *low* z end. On the port side the surface is seen
+         from the other hand and the mapping flips again, which is what makes
+         titles read nose-forward on both sides rather than mirrored on one. */
+      uv.push(side > 0 ? 1 - u : u, 1 - v);
+    }
+  }
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      const a = i * (rows + 1) + j;
+      const b = a + rows + 1;
+      if (side > 0) idx.push(a, b, a + 1, a + 1, b, b + 1);
+      else idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 /** Crisp door seams make the smooth fuselage feel manufactured, not toy-like. */
 function doorFrame(side: number, z: number): THREE.BufferGeometry {
   const top = 0.77;
@@ -467,6 +581,33 @@ export function createAirframe(): AirframeHandles {
   fin.position.y = R * 0.72;
   fin.castShadow = fin.receiveShadow = true;
   group.add(fin);
+
+  /* The mark on the fin, one decal per side, sitting just proud of the
+     panel's own half-thickness at that height so it never punches through. */
+  const finMarkTex = track(finMarkTexture('#F4F7FB'));
+  const finMarkMat = track(new THREE.MeshStandardMaterial({
+    map: finMarkTex, transparent: true, roughness: 0.34, metalness: 0.04,
+    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+  }));
+  const FIN_MARK = 3.0;
+  for (const side of [1, -1]) {
+    const decal = new THREE.Mesh(track(new THREE.PlaneGeometry(FIN_MARK, FIN_MARK)), finMarkMat);
+    // 42% up the fin, where the panel is still 0.38 m thick.
+    decal.position.set(side * 0.2, R * 0.72 + 2.56, 27.75);
+    decal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    group.add(decal);
+  }
+
+  /* Titles on the forward fuselage, above the window line, where an airline
+     puts them and where the exterior camera looks straight at them. */
+  const titleTex = track(titleTexture('#0E2E5E'));
+  const titleMat = track(new THREE.MeshStandardMaterial({
+    map: titleTex, transparent: true, roughness: 0.36, metalness: 0.03,
+    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+  }));
+  for (const side of [1, -1]) {
+    group.add(new THREE.Mesh(track(barrelDecal(side, 0.4, 9.6, 1.06, 0.42)), titleMat));
+  }
 
   const topBeacon = new THREE.Mesh(track(new THREE.SphereGeometry(0.09, 14, 10)), beaconLamp);
   topBeacon.position.set(0, R * 0.72 + 6.12, 28.65);

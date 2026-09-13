@@ -39,7 +39,7 @@ import { berthFromManifest } from './lib/seatLadder';
 import { useManifest } from './lib/useManifest';
 import { MANIFEST_SIZE } from './lib/manifest';
 import {
-  demoBanners,
+  houseAdverts,
   fetchPublished,
   hasPublishedWall,
   localBanners,
@@ -98,9 +98,9 @@ const FACINGS: { key: Facing; label: string }[] = [
 /**
  * Where the camera is.
  *
- * `seat` is the default and where the page opens: you are sitting down,
- * looking forward. `exterior` is what you get by zooming all the way out —
- * one plane, everyone in it.
+ * `exterior` is the default and where the page opens: the whole aeroplane,
+ * from outside. `seat` is a step inward — sitting down, looking forward — and
+ * is where clicking any seat on the wall takes you.
  */
 type Camera = 'exterior' | 'deck' | 'seat' | 'hold';
 
@@ -114,6 +114,17 @@ function representativeSeat(zone: ZoneKey, position: SeatPosition): CabinSeat {
   const inZone = ALL_SEATS.filter((s) => s.zone === zone);
   return inZone.find((s) => s.position === position) ?? inZone[0];
 }
+
+/**
+ * A control chip.
+ *
+ * Every strip on the page — head turn, walk the aircraft, seat position,
+ * flight sim, altitude — is the same control, so it is written once. It used
+ * to be the same forty-term class string copied six times, which is how the
+ * strips had quietly drifted apart from one another.
+ */
+const chip = (on: boolean, accent: 'cyan' | 'amber' = 'cyan') =>
+  `sa-chip${on ? ` sa-chip--on sa-chip--${accent}` : ''}`;
 
 const SceneLoading = ({ exterior = false }: { exterior?: boolean }) => (
   <div
@@ -136,8 +147,10 @@ export default function App() {
   const band = useMemo(() => bandFor(tick.marketCap), [tick.marketCap]);
 
   const [mode, setMode] = useState<FlightMode>('live');
-  /** The page opens in a seat, looking forward — not on the flight deck. */
-  const [camera, setCamera] = useState<Camera>('seat');
+  /* The page opens outside, on the whole aeroplane. It is the one frame that
+     explains the premise without a caption — one plane, everyone in it — and
+     every other camera is a step inward from it. */
+  const [camera, setCamera] = useState<Camera>('exterior');
   const [facing, setFacing] = useState<Facing>('forward');
   /** Where you are sitting. Independent of where you are ticketed. */
   const [viewZone, setViewZone] = useState<ZoneKey>('economy');
@@ -178,16 +191,16 @@ export default function App() {
     if (!hasPublishedWall) return;
     void fetchPublished().then(setPublished);
   }, []);
-  /* Until this deployment is pointed at a token, the front rows carry drawn
-     placeholders so the wall reads as a wall. A holder's own upload, and the
-     published set, both beat them. */
-  const samples = useMemo(
-    () => (manifest.live ? {} : demoBanners(manifest.entries.slice(0, 14).map((e) => e.seat.id))),
-    [manifest.live, manifest.entries],
+  /* Held seats with nothing on them yet carry the airline's own campaigns, the
+     way unsold inventory does on a real aircraft. A holder's own upload, and
+     the published set, both beat them. */
+  const house = useMemo(
+    () => houseAdverts(manifest.entries.slice(0, 16).map((e) => e.seat.id)),
+    [manifest.entries],
   );
   const banners = useMemo(
-    () => ({ ...samples, ...local, ...published }),
-    [samples, local, published],
+    () => ({ ...house, ...local, ...published }),
+    [house, local, published],
   );
   const claimed = berth.seat?.id ?? null;
   const claimedSeat = berth.seat;
@@ -308,6 +321,20 @@ export default function App() {
     if (zone === 'deck') setFacing('forward');
   };
 
+  /* The view lives at the top of the page and the wall lives below it, so
+     clicking a seat has to bring the two back together — otherwise the camera
+     moves somewhere nobody is looking. */
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const showView = useCallback(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top;
+    // Only if it is actually off screen: scrolling a view somebody is already
+    // looking at is worse than not scrolling at all.
+    if (top > 40 && top < window.innerHeight - 160) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
   /** Walk the camera to a seat. Looking is free; sitting there is not. */
   const visit = (id: string, zoneKey: ZoneKey) => {
     const seat = findSeat(id);
@@ -315,21 +342,18 @@ export default function App() {
     setCamera(zoneKey === 'deck' ? 'deck' : 'seat');
     setFacing('forward');
     if (seat) setViewPosition(seat.position);
+    showView();
   };
 
 
   return (
     <div className="sa-app relative min-h-screen text-white">
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(1200px 800px at 50% -10%, #1B2231 0%, transparent 62%), linear-gradient(180deg, #0B0E14 0%, #070910 100%)',
-          }}
-        />
-        <div className="sa-scanlines absolute inset-0 opacity-[0.035]" />
+        <div className="sa-ground absolute inset-0" />
+        <div className="sa-scanlines absolute inset-0 opacity-[0.03]" />
       </div>
+
+      <a href="#wall" className="sa-skip">Skip to the seat map</a>
 
       {/* ── Gate sign ──────────────────────────────────────────────────
           An airline's vernacular is a brand bar over a strip of flight data,
@@ -337,15 +361,15 @@ export default function App() {
           of the screen rather than scrolling away, because the numbers are the
           thing that is live — you should be able to see the altitude move
           while you are reading the seat map. */}
-      <header className="sa-topbar sticky top-0 z-40 border-b border-white/10 bg-[#0A0F16]/88 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[92rem] flex-wrap items-center gap-x-6 gap-y-2 px-5 py-2.5 sm:px-8">
-          <div className="flex shrink-0 items-center gap-3">
+      <header className="sa-topbar sticky top-0 z-40">
+        <div className="mx-auto flex max-w-[94rem] flex-wrap items-center gap-x-7 gap-y-2 px-5 py-2.5 sm:px-8">
+          <a href="#top" className="flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-seat-cyan">
             <Mark size={30} background="none" title="SEAT AIRWAYS" />
             <span className="whitespace-nowrap font-heading text-lg leading-none text-white">Seat Airways</span>
             <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-white/40 sm:inline">
               FL350 · Nonstop
             </span>
-          </div>
+          </a>
 
           <dl className="sd-chrome ml-auto flex w-full min-w-0 items-center justify-between gap-x-7 overflow-x-auto sm:w-auto sm:max-w-[70%] sm:justify-start">
             {[
@@ -363,264 +387,247 @@ export default function App() {
         </div>
       </header>
 
-      <section className="sa-shell mx-auto max-w-[92rem] px-5 pb-24 pt-7 sm:px-8 sm:pt-9">
-        <div className="sa-hero mb-5 flex flex-col justify-between gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end">
-          <div>
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-seat-cyan/80">Live flight simulator · FL350</p>
-            <h1 className="mt-1.5 font-heading text-3xl leading-none text-white sm:text-4xl">One plane. Everyone&apos;s in it.</h1>
-          </div>
-          <p className="max-w-md text-sm leading-relaxed text-blue-100/55 sm:text-right">
-            Market movement becomes altitude and attitude. Walk the cabin, then orbit the aircraft outside.
+      <main id="top" className="sa-shell mx-auto max-w-[94rem] px-5 pb-28 sm:px-8">
+        {/* ══════════════════════════════════════════════════════════════
+            01 · The aeroplane
+            The page opens on the whole aircraft, from outside, because that
+            is the sentence the product is: one plane, everyone in it. Every
+            other camera on the page is a step inward from this frame.
+            ══════════════════════════════════════════════════════════════ */}
+        <section className="sa-hero pt-10 sm:pt-14" aria-labelledby="hero-title">
+          <p className="sa-eyebrow">
+            <span className="sa-live" aria-hidden />
+            Live · FL350 · {band.label}
           </p>
-        </div>
-        {/* ── The view ── */}
-        <div className={lamps.shaking ? 'sa-viewport sd-shake' : 'sa-viewport'}>
-          <ViewFrame
-            label={
-              camera === 'exterior'
-                ? 'Outside · FL350'
-                : camera === 'hold'
-                  ? 'Cargo hold · below the floor'
-                  : camera === 'deck'
-                  ? 'Flight deck'
-                  : `${viewZoneDef.name} · ${viewSeat.id} · ${facing === 'forward' ? 'forward' : `looking ${facing}`}`
-            }
-            onZoomOutBeyond={camera === 'exterior' ? undefined : () => setCamera('exterior')}
-            zoomOutHint="Zoom out of the aircraft"
-            actions={
-              camera === 'seat' ? (
-                <div className="flex shrink-0 items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible" role="group" aria-label="Turn your head">
-                  {FACINGS.map((f) => {
-                    const on = facing === f.key;
-                    return (
+          <div className="mt-4 grid gap-x-14 gap-y-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-end">
+            <h1 id="hero-title" className="sa-display text-white">
+              One plane.
+              <br />
+              Everyone&apos;s in&nbsp;it.
+            </h1>
+            <div className="lg:pb-3">
+              <p className="max-w-xl text-[15px] leading-relaxed text-blue-100/70 sm:text-base">
+                A flight simulator flown by one number. Market cap is altitude and the 24-hour change is
+                attitude, so the aeroplane you are looking at is the chart. Inside it, thirty rows of seats go
+                to the top holders in order — and every one of them is a billboard.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <a href="#wall" className="sa-cta sa-shine">
+                  Claim a seat <span aria-hidden>→</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => { setCamera('seat'); setFacing('forward'); showView(); }}
+                  className="sa-ghost"
+                >
+                  Step inside the cabin
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── The view ── */}
+          <div ref={viewportRef} className={`mt-9 scroll-mt-24 ${lamps.shaking ? 'sa-viewport sd-shake' : 'sa-viewport'}`}>
+            <ViewFrame
+              label={
+                camera === 'exterior'
+                  ? `Outside · ${band.label}`
+                  : camera === 'hold'
+                    ? 'Cargo hold · below the floor'
+                    : camera === 'deck'
+                      ? 'Flight deck'
+                      : `${viewZoneDef.name} · ${viewSeat.id} · ${facing === 'forward' ? 'forward' : `looking ${facing}`}`
+              }
+              onZoomOutBeyond={camera === 'exterior' ? undefined : () => setCamera('exterior')}
+              zoomOutHint="Zoom out of the aircraft"
+              actions={
+                camera === 'seat' ? (
+                  <div className="sd-chrome flex shrink-0 items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible" role="group" aria-label="Turn your head">
+                    {FACINGS.map((f) => (
                       <button
                         key={f.key}
                         type="button"
                         onClick={() => setFacing(f.key)}
-                        aria-pressed={on}
-                        className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
-                          on
-                            ? 'border-seat-cyan/70 bg-seat-cyan/15 text-white'
-                            : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
-                        }`}
+                        aria-pressed={facing === f.key}
+                        className={chip(facing === f.key)}
                       >
                         {f.label}
                       </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setCamera('seat')}
-                  className="shrink-0 whitespace-nowrap border border-white/12 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-100/60 transition-colors hover:border-white/25 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
-                >
-                  Back to your seat
-                </button>
-              )
-            }
-          >
-            {camera === 'hold' ? (
-              <CargoHold feed={feed} band={band} belowCutoff={belowCutoff} />
-            ) : camera === 'exterior' ? (
-              <Suspense fallback={<SceneLoading exterior />}>
-                <ExteriorView
-                  feed={feed}
-                  sky={sky}
-                  band={band}
-                  taken={taken}
-                  claimed={claimedSeat}
-                  viewing={viewSeat}
-                />
-              </Suspense>
-            ) : camera === 'deck' ? (
-              <FlightDeck feed={feed} lamps={lamps} sky={sky} band={band} />
-            ) : (
-              <Suspense fallback={<SceneLoading />}>
-                <CabinView3D
-                  feed={feed}
-                  sky={sky}
-                  band={band}
-                  seat={viewSeat}
-                  zone={viewZoneDef}
-                  facing={facing}
-                  taken={taken}
-                />
-              </Suspense>
-            )}
-          </ViewFrame>
-        </div>
-
-        {/* ── Walk the aircraft ── */}
-        <div className="sa-flight-nav mt-4 flex flex-col gap-3 border border-white/10 bg-[#141821]/70 px-4 py-4 backdrop-blur-sm sm:flex-row sm:items-center">
-          <div className="sd-chrome -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-            <span className="mr-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-blue-100/40">Walk the aircraft</span>
-            <button
-              type="button"
-              onClick={() => setCamera('exterior')}
-              aria-pressed={camera === 'exterior'}
-              className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
-                camera === 'exterior'
-                  ? 'border-seat-cyan/70 bg-seat-cyan/15 text-white'
-                  : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
-              }`}
+                    ))}
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setCamera('seat')} className={chip(false)}>
+                    {camera === 'exterior' ? 'Step inside' : 'Back to your seat'}
+                  </button>
+                )
+              }
             >
-              Outside
-            </button>
-            {CABIN_ZONES.map((z) => {
-              const on = viewZone === z.key;
-              return (
+              {camera === 'hold' ? (
+                <CargoHold feed={feed} band={band} belowCutoff={belowCutoff} />
+              ) : camera === 'exterior' ? (
+                <Suspense fallback={<SceneLoading exterior />}>
+                  <ExteriorView feed={feed} sky={sky} band={band} taken={taken} claimed={claimedSeat} viewing={viewSeat} />
+                </Suspense>
+              ) : camera === 'deck' ? (
+                <FlightDeck feed={feed} lamps={lamps} sky={sky} band={band} />
+              ) : (
+                <Suspense fallback={<SceneLoading />}>
+                  <CabinView3D feed={feed} sky={sky} band={band} seat={viewSeat} zone={viewZoneDef} facing={facing} taken={taken} />
+                </Suspense>
+              )}
+            </ViewFrame>
+          </div>
+
+          {/* ── Walk the aircraft ── */}
+          <div className="sa-panel sa-panel--cyan mt-3 flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center">
+            <div className="sd-chrome -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+              <span className="sa-strip-label">Walk the aircraft</span>
+              <button type="button" onClick={() => setCamera('exterior')} aria-pressed={camera === 'exterior'} className={chip(camera === 'exterior')}>
+                Outside
+              </button>
+              {CABIN_ZONES.map((z) => (
                 <button
                   key={z.key}
                   type="button"
                   onClick={() => walkTo(z.key)}
-                  aria-pressed={on}
-                    className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
-                      on
-                        ? 'border-seat-cyan/70 bg-seat-cyan/15 text-white'
-                        : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
-                    }`}
+                  aria-pressed={camera !== 'exterior' && camera !== 'hold' && viewZone === z.key}
+                  className={chip(camera !== 'exterior' && camera !== 'hold' && viewZone === z.key)}
                 >
                   {z.name}
                 </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setCamera('hold')}
-              aria-pressed={camera === 'hold'}
-              className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
-                camera === 'hold'
-                  ? 'border-seat-cyan/70 bg-seat-cyan/15 text-white'
-                  : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
-              }`}
-            >
-              Cargo hold
-            </button>
-          </div>
+              ))}
+              <button type="button" onClick={() => setCamera('hold')} aria-pressed={camera === 'hold'} className={chip(camera === 'hold')}>
+                Cargo hold
+              </button>
+            </div>
 
-          {camera === 'seat' && (
-            <div className="sd-chrome -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:ml-auto sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-blue-100/40">Seat</span>
-              {POSITIONS.map((p) => {
-                const on = viewPosition === p.key;
-                return (
+            {camera === 'seat' && (
+              <div className="sd-chrome -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:ml-auto sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+                <span className="sa-strip-label">Seat</span>
+                {POSITIONS.map((pos) => (
                   <button
-                    key={p.key}
+                    key={pos.key}
                     type="button"
-                    onClick={() => setViewPosition(p.key)}
-                    aria-pressed={on}
-                    className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
-                      on
-                        ? 'border-seat-cyan/70 bg-seat-cyan/15 text-white'
-                        : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
-                    }`}
+                    onClick={() => setViewPosition(pos.key)}
+                    aria-pressed={viewPosition === pos.key}
+                    className={chip(viewPosition === pos.key)}
                   >
-                    {p.label}
+                    {pos.label}
                   </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* ── Where the flight is ── */}
-        <section className="sa-flight-state mt-4" aria-label="Flight state">
-          <dl className="sa-flight-summary grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4">
-            {[
-              { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, s: formatCap(tick.marketCap) },
-              { k: '24h', v: formatChange(tick.change24h), s: tick.change24h >= 0 ? 'Climbing' : 'Descending' },
-              { k: 'Outside', v: sky.label, s: sky.live ? 'Live weather' : 'Modelled weather' },
-              { k: 'Band', v: band.label, s: band.next ?? 'Nowhere higher to go' },
-            ].map((cell) => (
-              <div key={cell.k} className="bg-[#141821]/80 px-4 py-3.5">
-                <dt className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100/40">{cell.k}</dt>
-                <dd className="mt-1 text-base leading-snug text-white sm:text-lg">{cell.v}</dd>
-                <dd className="mt-0.5 text-[11px] leading-snug text-blue-100/45">{cell.s}</dd>
+                ))}
               </div>
-            ))}
-          </dl>
-
-          {/* Climb meter toward the next band */}
-          <div className="sa-progress bg-[#141821]/80 px-4 py-3">
-            <div className="flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-[0.16em] text-blue-100/40">
-              <span>{band.label}</span>
-              <span>{band.next ?? 'The moon'}</span>
-            </div>
-            <div className="mt-2 h-1.5 w-full bg-white/[0.07]">
-              <div
-                className="sa-climb-fill h-full bg-gradient-to-r from-seat-cyan to-seat-amber transition-[width] duration-500"
-                style={{ width: `${Math.max(1.5, band.toNext * 100)}%` }}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* ── Flight sim ── */}
-        <div className="sa-sim-panel mt-4 flex flex-col gap-3 border border-white/10 bg-[#141821]/70 px-4 py-4 backdrop-blur-sm">
-          <div className="sd-chrome -mx-1 flex items-center gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-            <span className="mr-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-blue-100/40">Flight sim</span>
-            {MODES.map((m) => {
-              const on = mode === m.key;
-              return (
-                <button
-                  key={m.key}
-                  type="button"
-                  onClick={() => flyMode(m.key)}
-                  aria-pressed={on}
-                  className={`shrink-0 whitespace-nowrap border px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
-                    on
-                      ? 'border-seat-amber/70 bg-seat-amber/15 text-white'
-                      : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              );
-            })}
+            )}
           </div>
 
-          {feed.jumpTo && (
+          {/* ── Where the flight is ── */}
+          <section className="sa-flight-state mt-3" aria-label="Flight state">
+            <dl className="sa-flight-summary grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4">
+              {[
+                { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, s: formatCap(tick.marketCap) },
+                { k: '24h', v: formatChange(tick.change24h), s: tick.change24h >= 0 ? 'Climbing' : 'Descending' },
+                { k: 'Outside', v: sky.label, s: sky.live ? 'Live weather' : 'Modelled weather' },
+                { k: 'Band', v: band.label, s: band.next ?? 'Nowhere higher to go' },
+              ].map((cell) => (
+                <div key={cell.k} className="px-4 py-3.5">
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100/40">{cell.k}</dt>
+                  <dd className="mt-1 text-base leading-snug text-white sm:text-lg">{cell.v}</dd>
+                  <dd className="mt-0.5 text-[11px] leading-snug text-blue-100/45">{cell.s}</dd>
+                </div>
+              ))}
+            </dl>
+
+            {/* Climb meter toward the next band */}
+            <div className="sa-progress px-4 py-3">
+              <div className="flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-[0.16em] text-blue-100/40">
+                <span>{band.label}</span>
+                <span>{band.next ?? 'The moon'}</span>
+              </div>
+              <div className="mt-2 h-1.5 w-full bg-white/[0.07]">
+                <div
+                  className="sa-climb-fill h-full bg-gradient-to-r from-seat-cyan to-seat-amber transition-[width] duration-500"
+                  style={{ width: `${Math.max(1.5, band.toNext * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            <Annunciators lamps={lamps} />
+          </section>
+
+          {/* ── Flight sim ── */}
+          <div className="sa-panel sa-panel--amber mt-3 flex flex-col gap-3 px-4 py-3.5">
             <div className="sd-chrome -mx-1 flex items-center gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-              <span className="mr-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-blue-100/40">Market cap</span>
-              {ALTITUDES.map((a) => (
-                <button
-                  key={a.label}
-                  type="button"
-                  onClick={() => {
-                    feed.jumpTo?.(a.cap);
-                    setMode('cruise');
-                  }}
-                  className="shrink-0 whitespace-nowrap border border-white/12 bg-white/[0.03] px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-blue-100/60 transition-colors hover:border-seat-cyan/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan"
-                >
-                  {a.label}
-                  <span className="ml-2 tabular-nums text-blue-100/35">{formatCap(a.cap)}</span>
+              <span className="sa-strip-label">Flight sim</span>
+              {MODES.map((m) => (
+                <button key={m.key} type="button" onClick={() => flyMode(m.key)} aria-pressed={mode === m.key} className={chip(mode === m.key, 'amber')}>
+                  {m.label}
                 </button>
               ))}
             </div>
-          )}
-        </div>
 
-        <div className="sa-annunciator-strip">
-          <Annunciators lamps={lamps} />
-        </div>
+            {feed.jumpTo && (
+              <div className="sd-chrome -mx-1 flex items-center gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+                <span className="sa-strip-label">Market cap</span>
+                {ALTITUDES.map((alt) => (
+                  <button
+                    key={alt.label}
+                    type="button"
+                    onClick={() => { feed.jumpTo?.(alt.cap); setMode('cruise'); }}
+                    className={chip(false)}
+                  >
+                    {alt.label}
+                    <span className="ml-2 tabular-nums text-blue-100/35">{formatCap(alt.cap)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
-        {/* ── Cabin + pass ── */}
-        <div id="cabin" className="sa-cabin-grid mt-16 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start lg:gap-12 scroll-mt-24">
-          <div>
-            <header className="border-b border-white/10 pb-4">
-              <h2 className="font-heading text-3xl text-white sm:text-4xl">Cabin</h2>
-              <p className="mt-1.5 text-sm text-blue-100/60">
-                Only the top {MANIFEST_SIZE} holders get a seat, and they get them in order. You don&apos;t book
-                one — you take it off whoever is holding less than you. Click any seat to see the flight from it.
+        {/* ══════════════════════════════════════════════════════════════
+            02 · The wall
+            The seat map is the second thing on the page and the reason for
+            the first. Every seat is a square, every held square is a
+            billboard, and the front of the cabin is the front of the wall —
+            so it is given the width, the ground and the type to say so.
+            ══════════════════════════════════════════════════════════════ */}
+        <section id="wall" className="sa-wall scroll-mt-20" aria-labelledby="wall-title">
+          <div className="sa-wall__inner">
+            <header className="sa-section-head">
+              <p className="sa-eyebrow sa-eyebrow--amber">
+                <span className="sa-eyebrow__no">02</span> The wall
               </p>
-              <p className="mt-2 text-[12px] leading-relaxed text-blue-100/45">
-                Every seat is a square, so every seat is a billboard: hold one and you can put a 1:1 image on it.
-                The front rows are the best placements, and the only way to reach them is to out-hold the person
-                already there.
-              </p>
+              <h2 id="wall-title" className="sa-display sa-display--2 mt-3 text-white">
+                Every seat is a billboard
+              </h2>
+              <div className="mt-5 grid gap-x-12 gap-y-4 lg:grid-cols-2">
+                <p className="text-[15px] leading-relaxed text-blue-100/70">
+                  Seats are not booked. The top {MANIFEST_SIZE} holders are seated in rank order and the rest
+                  of the aeroplane stays empty, so the only way to move forward is to out-hold whoever is
+                  already there.
+                </p>
+                <p className="text-[15px] leading-relaxed text-blue-100/70">
+                  Each seat is a square, and a square somebody holds is theirs to fill: a 1:1 image, shown here
+                  and on the seat itself. Row 1 is the best placement on the aircraft, and it is not for sale at
+                  any price — only for holding.
+                </p>
+              </div>
             </header>
-            <div className="mt-7">
+
+            <ol className="sa-steps">
+              {[
+                { n: '01', h: 'Hold', b: 'Connect a wallet. Your balance is your bag, and nothing else counts.' },
+                { n: '02', h: 'Get seated', b: 'The manifest ranks every holder and seats them from row 1 back. Out-hold someone and you take their seat.' },
+                { n: '03', h: 'Advertise', b: 'Put a square image on the seat you hold. It goes up on the wall, at the position you earned.' },
+              ].map((step) => (
+                <li key={step.n} className="sa-step">
+                  <span className="sa-step__no">{step.n}</span>
+                  <h3 className="sa-step__h">{step.h}</h3>
+                  <p className="sa-step__b">{step.b}</p>
+                </li>
+              ))}
+            </ol>
+
+            <div className="mt-10">
               <SeatMap
                 manifest={manifest}
                 banners={banners}
@@ -631,35 +638,44 @@ export default function App() {
               />
             </div>
           </div>
+        </section>
 
-          <div className="flex flex-col gap-8 lg:sticky lg:top-24">
-            <div>
-              <header className="border-b border-white/10 pb-4">
-                <h2 className="font-heading text-3xl text-white sm:text-4xl">Your pass</h2>
-                <p className="mt-1.5 text-sm text-blue-100/60">
-                  Screenshot it. It&apos;s the whole marketing budget.
-                </p>
-              </header>
+        {/* ══════════════════════════════════════════════════════════════
+            03 · Your pass
+            ══════════════════════════════════════════════════════════════ */}
+        <section className="pt-20 sm:pt-24" aria-labelledby="pass-title">
+          <header className="sa-section-head">
+            <p className="sa-eyebrow">
+              <span className="sa-eyebrow__no">03</span> Check in
+            </p>
+            <h2 id="pass-title" className="sa-display sa-display--2 mt-3 text-white">
+              The aircraft seats you
+            </h2>
+            <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-blue-100/70">
+              You do not pick a seat. Connect a wallet, and where you sit is whatever your holding says it is —
+              recomputed the moment anybody else&apos;s changes.
+            </p>
+          </header>
 
-              <div className="mt-7 flex flex-col gap-5">
-                <CheckIn
-                  wallet={wallet}
-                  holding={effectiveHolding}
-                  berth={berth}
-                  live={holdingsSource.live}
-                  loading={loadingHolding}
-                  previewing={Boolean(preview)}
-                  onPreview={(share) => {
-                    const supply = 1_000_000_000;
-                    setPreview({ balance: share * supply, supply, share, live: false });
-                  }}
-                  onClearPreview={() => {
-                    setPreview(null);
-                    lastSeat.current = null;
-                  }}
-                />
-                <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
-              </div>
+          <div className="mt-9 grid gap-6 lg:grid-cols-3 lg:items-start">
+            <div className="flex flex-col gap-6">
+              <CheckIn
+                wallet={wallet}
+                holding={effectiveHolding}
+                berth={berth}
+                live={holdingsSource.live}
+                loading={loadingHolding}
+                previewing={Boolean(preview)}
+                onPreview={(share) => {
+                  const supply = 1_000_000_000;
+                  setPreview({ balance: share * supply, supply, share, live: false });
+                }}
+                onClearPreview={() => {
+                  setPreview(null);
+                  lastSeat.current = null;
+                }}
+              />
+              <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
             </div>
 
             <BoardingLadder
@@ -671,24 +687,23 @@ export default function App() {
 
             <RadioLog entries={log} />
           </div>
-        </div>
+        </section>
 
-        <div className="mt-16 text-center">
-          <a
-            href="#cabin"
-            className="sa-shine inline-flex items-center gap-2 px-7 py-3 text-sm font-extrabold uppercase tracking-wide text-seat-night"
-            style={{ background: '#FFB300' }}
-          >
+        {/* ── Close ── */}
+        <div className="sa-close mt-20 sm:mt-24">
+          <Mark size={34} background="none" />
+          <p className="sa-close__line">One plane. Everyone&apos;s in it.</p>
+          <a href="#wall" className="sa-cta sa-shine mt-2">
             Claim a seat <span aria-hidden>→</span>
           </a>
-          <p className="mx-auto mt-5 max-w-2xl text-[11px] leading-relaxed text-blue-100/40">
-            The horizon, the tapes, the lamps and the log all read one input — 24h price change — and the
-            altitude is the market cap: $1M puts you above the clouds, $10M in space, $50M at the moon. The
-            sky is real: your own time of day, and the weather where you are. The market feed is simulated
-            for now, and swapping it is one file.
+          <p className="sa-close__note">
+            The horizon, the tapes, the lamps and the log all read one input — the 24-hour price change — and
+            the altitude is the market cap: $1M puts you above the clouds, $10M in space, $50M at the moon. The
+            sky is real: your own time of day, and the weather where you are. The market feed on this
+            deployment is simulated, and every figure it produces is labelled as such.
           </p>
         </div>
-      </section>
+      </main>
 
       {advertising && (
         <AdvertDialog

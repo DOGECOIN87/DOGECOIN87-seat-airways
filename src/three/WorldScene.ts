@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { cloudTexture, earthTexture, farmlandTexture, moonTexture, radialTexture } from './terrain';
+import { cloudTexture, earthTexture, farmlandTexture, moonSurface, radialTexture } from './terrain';
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
@@ -30,7 +30,10 @@ const ALTITUDE = {
   moon: [1200, 1200],
 } as const;
 
-const GROUND = 60000;
+/* The ground plate. Wide enough that its edge sits well past anything the
+   haze still resolves at the bands that use it — an edge you can see is a
+   horizon in the wrong place. */
+const GROUND = 120000;
 
 /** Where the camera is sitting, and which way it is looking. */
 export interface ViewPose {
@@ -109,14 +112,35 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 
   /* ── Sky ─────────────────────────────────────────────────────────────
      Preetham scattering. Turbidity and the Mie term carry the weather:
-     clear air is thin and blue, overcast is thick and grey. */
+     clear air is thin and blue, overcast is thick and grey.
+
+     Leaving the atmosphere is *not* those coefficients going to zero. The
+     Preetham model divides by them, so scaling them down does not thin the
+     air, it blows the whole dome out to a flat white — which is what the
+     space band used to look like. The air is instead taken away by dimming
+     the dome's own output, from the zenith downward: `skyFade` runs 1 in
+     atmosphere to 0 above it, and the limb term keeps a bright blue band
+     hugging the horizon after the zenith has gone black. That band is the
+     whole photograph of the edge of space, and it is the one part of the sky
+     that genuinely survives up there. */
   const sky = new Sky();
   sky.scale.setScalar(160000);
   scene.add(sky);
-  const skyU = sky.material.uniforms;
+  const skyU = sky.material.uniforms as typeof sky.material.uniforms & {
+    skyFade: { value: number };
+  };
   skyU.rayleigh.value = 2.2;
   skyU.mieCoefficient.value = 0.005;
   skyU.mieDirectionalG.value = 0.8;
+  skyU.skyFade = { value: 1 };
+  sky.material.fragmentShader = sky.material.fragmentShader
+    .replace('uniform float mieDirectionalG;', 'uniform float mieDirectionalG;\n\t\tuniform float skyFade;')
+    .replace(
+      'gl_FragColor = vec4( texColor, 1.0 );',
+      `float limb = 1.0 - smoothstep( 0.0, 0.17, direction.y );
+			gl_FragColor = vec4( texColor * ( skyFade + ( 1.0 - skyFade ) * limb * 0.5 ), 1.0 );`,
+    );
+  sky.material.needsUpdate = true;
 
   const sunPos = new THREE.Vector3();
   const sun = new THREE.DirectionalLight(0xffffff, 2.4);
@@ -258,13 +282,55 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 
   /* ── Ground ── */
   const farmland = farmlandTexture();
-  const moon = moonTexture();
-  farmland.repeat.set(11, 11);
-  moon.repeat.set(12, 12);
+  const moon = moonSurface();
+  farmland.repeat.set(22, 22);
+  moon.map.repeat.set(24, 24);
+  moon.bump.repeat.set(24, 24);
   const groundMat = new THREE.MeshStandardMaterial({ map: farmland, roughness: 1, metalness: 0 });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(GROUND, GROUND), groundMat);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
+
+  /* ── The limb ─────────────────────────────────────────────────────────
+     A flat plate is a fair model of the ground until you can see far enough
+     along it to notice it is not flat. In the space band you can: the whole
+     promise of that band is that the horizon starts to curve, and a plane
+     cannot curve.
+
+     So above the atmosphere the ground is swapped for a sphere whose north
+     pole sits exactly where the plate did, at y = 0, and the horizon becomes
+     its limb. The radius is not the Earth's — at a true 6,371 km the curve
+     over this band's 16–60 km would be a couple of degrees and read as
+     nothing. It is instead interpolated down as you climb, from nearly flat
+     at the bottom of the band to a hard curve at the top, so the curvature
+     itself is the thing the climb buys you. The shell around it is the
+     atmosphere seen edge on: back faces, additive, so it lights the rim the
+     way the real one does without costing a shader. */
+  const planetTex = earthTexture(2048);
+  planetTex.wrapS = planetTex.wrapT = THREE.RepeatWrapping;
+  planetTex.repeat.set(3, 1.5);
+  const limb = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 96, 64),
+    new THREE.MeshStandardMaterial({ map: planetTex, roughness: 0.95, metalness: 0 }),
+  );
+  limb.visible = false;
+  scene.add(limb);
+  const limbAir = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 64, 48),
+    new THREE.MeshBasicMaterial({
+      color: 0x74b4ff,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    }),
+  );
+  limbAir.visible = false;
+  scene.add(limbAir);
+  /* Nearly flat where the band begins, and a real planet by the top of it. */
+  const LIMB_R = { low: 4_200_000, high: 620_000 };
 
   /* ── Cloud deck ──────────────────────────────────────────────────────
      Billboarded puffs on one instanced mesh: cheap, and from inside they
@@ -301,6 +367,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const extTarget = new THREE.Vector3();
   const extDir = new THREE.Vector3();
   const skyColour = new THREE.Color();
+  const skyTint = new THREE.Color();
+  const groundTint = new THREE.Color();
+  const WHITE = new THREE.Color(0xffffff);
+  const EARTH = new THREE.Color(0x6f6a58);
   const cloudTint = new THREE.Color();
   const cloudLit = new THREE.Color();
   const NEUTRAL_CLOUD = new THREE.Color(0xb9c2cf);
@@ -334,32 +404,53 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const height = lerp(lo, hi, band.progress);
 
     /* Sun from the real solar position: elevation from the clock and the
-       latitude, azimuth swung across the sky by the hour. */
-    const elevation = onMoon || inSpace ? 14 : skyState.elevation;
+       latitude, azimuth swung across the sky by the hour.
+
+       Above the atmosphere the visitor's local night is somebody else's noon,
+       and a planet lit edge-on is a black disc with a rim. So the sun is put
+       where it lights the thing you came up here to look at: high over the
+       limb in space, low over the moon, where a grazing sun is what gives
+       regolith its relief. */
+    const elevation = onMoon ? 17 : inSpace ? 46 : skyState.elevation;
     const phi = THREE.MathUtils.degToRad(90 - elevation);
     const theta = THREE.MathUtils.degToRad(skyState.sunX * 80);
     sunPos.setFromSphericalCoords(1, phi, theta);
     skyU.sunPosition.value.copy(sunPos);
     sun.position.copy(sunPos).multiplyScalar(100000);
-    sun.intensity = onMoon || inSpace ? 3.4 : Math.max(0.05, Math.sin(THREE.MathUtils.degToRad(Math.max(elevation, -6))) * 3);
+    /* The disc itself. It reddens and weakens as it goes down rather than
+       simply switching off, which is the half of golden hour a plain
+       intensity ramp misses. */
+    sun.intensity = onMoon || inSpace ? 3.4 : Math.max(0.04, Math.sin(THREE.MathUtils.degToRad(Math.max(elevation, -6))) * 3.2);
+    if (!onMoon && !inSpace) sun.color.setStyle(skyState.palette.disc).lerp(WHITE, 0.3);
+    else sun.color.setHex(0xffffff);
 
-    /* Weather thickens the air; altitude thins it out again. */
+    /* Weather thickens the air. Altitude does not thin it — it takes it away;
+       see the note on `skyFade` where the dome is built. The coefficients
+       stay at the values the model is valid for at every band. */
     const overcast = skyState.weather === 'overcast' || skyState.weather === 'fog';
     const rain = skyState.weather === 'rain' || skyState.weather === 'storm';
-    const thin = inSpace ? 1 - band.progress * 0.9 : 1;
-    skyU.turbidity.value = (overcast ? 14 : rain ? 10 : 3.2) * thin;
-    skyU.rayleigh.value = (overcast ? 0.6 : 2.4) * thin;
-    skyU.mieCoefficient.value = (overcast ? 0.03 : 0.005) * thin;
+    /* Above the cloud deck the air overhead is genuinely thinner and cleaner:
+       less Mie haze, deeper blue. That is the whole look of that band. */
+    const high = band.band === 'above-clouds' ? band.progress : 0;
+    skyU.turbidity.value = overcast ? 14 : rain ? 10 : lerp(3.2, 1.6, high);
+    skyU.rayleigh.value = overcast ? 0.6 : lerp(2.4, 3.1, high);
+    skyU.mieCoefficient.value = (overcast ? 0.03 : 0.005) * lerp(1, 0.45, high);
+    /* $10M is *defined* as the sky going black, so most of it has to go the
+       moment the band is entered — the announcement and the window have to
+       agree. What is left drains on the climb to the moon: the zenith first,
+       the blue band on the limb last. */
+    const airless = inSpace ? 0.55 + 0.45 * THREE.MathUtils.smoothstep(band.progress, 0, 0.6) : 0;
+    skyU.skyFade.value = 1 - airless;
     sky.visible = !onMoon;
 
     /* Above the atmosphere the sky is simply gone, and the stars arrive. */
-    const starOpacity = onMoon ? 1 : inSpace ? Math.min(1, 0.25 + band.progress) : Math.max(0, skyState.palette.stars - 0.35);
+    const starOpacity = onMoon ? 1 : inSpace ? Math.min(1, 0.2 + airless * 1.1) : Math.max(0, skyState.palette.stars - 0.35);
     starMat.opacity = starOpacity;
-    renderer.setClearColor(onMoon || (inSpace && band.progress > 0.5) ? 0x000000 : 0x000814, 1);
+    renderer.setClearColor(0x000000, 1);
 
     /* The sun becomes an object once there is no air left to scatter it. The
        Sky shader draws its own below that, so showing both would double it. */
-    const sunVisibility = onMoon ? 1 : inSpace ? Math.min(1, band.progress * 1.6) : 0;
+    const sunVisibility = onMoon ? 1 : inSpace ? airless : 0;
     sunDisc.visible = sunGlow.visible = sunVisibility > 0.01;
     if (sunDisc.visible) {
       sunDisc.position.copy(sunPos).multiplyScalar(110000);
@@ -380,15 +471,95 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     }
 
     /* Ground: farmland below, regolith at the moon, and haze that thickens
-       with distance so the horizon dissolves rather than ending. */
-    if (onMoon && groundMat.map !== moon) { groundMat.map = moon; groundMat.needsUpdate = true; }
-    if (!onMoon && groundMat.map !== farmland) { groundMat.map = farmland; groundMat.needsUpdate = true; }
-    ground.visible = !inSpace || band.progress < 0.6;
+       with distance so the horizon dissolves rather than ending. Above the
+       atmosphere the plate gives way to the limb, which is a sphere. */
+    if (onMoon && groundMat.map !== moon.map) {
+      groundMat.map = moon.map;
+      // Relief, so a grazing sun casts the crater shadows rather than the
+      // texture pretending to have them already.
+      groundMat.bumpMap = moon.bump;
+      groundMat.bumpScale = 3.2;
+      groundMat.color.setHex(0xffffff);
+      groundMat.needsUpdate = true;
+    }
+    if (!onMoon && groundMat.map !== farmland) {
+      groundMat.map = farmland;
+      groundMat.bumpMap = null;
+      groundMat.needsUpdate = true;
+    }
+    ground.visible = !inSpace;
+    limb.visible = limbAir.visible = inSpace;
+    if (inSpace) {
+      /* The radius shrinks as you climb, so the horizon bends further the
+         higher the market cap goes — the curve is the altitude, read off the
+         window rather than off a tape. */
+      const r = lerp(LIMB_R.low, LIMB_R.high, THREE.MathUtils.smoothstep(band.progress, 0, 0.85));
+      limb.scale.setScalar(r);
+      limb.position.y = -r;
+      limbAir.scale.setScalar(r * 1.014);
+      limbAir.position.y = -r;
+      /* Turn it under the aircraft rather than sliding a texture: on a sphere
+         that is what travelling actually is, and it keeps the poles out of
+         the frame. */
+      /* Tilted a quarter turn so the point directly below the aircraft sits on
+         the sphere's equator. Leave it at the pole and the equirectangular
+         map converges exactly where you are looking hardest. */
+      limb.rotation.y = -shift.x / r;
+      limb.rotation.x = Math.PI / 2 + shift.z / r;
+      /* The limb's own airglow thins with the rest of it. */
+      (limbAir.material as THREE.MeshBasicMaterial).opacity = 0.16 + airless * 0.26;
+      // The far side of a 4,200 km sphere is past any sane far plane; the
+      // near cap and its horizon are not, so the frustum follows the radius.
+      const far = Math.max(200000, Math.sqrt((r + height) * (r + height) - r * r) * 1.35);
+      if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
+    } else if (camera.far !== 200000) {
+      camera.far = 200000;
+      camera.updateProjectionMatrix();
+    }
 
     skyColour.setStyle(skyState.palette.horizon);
     fog.color.copy(onMoon ? new THREE.Color(0x000000) : skyColour);
-    fog.density = onMoon ? 0.0000015 : inSpace ? 0.0000009 : overcast ? 0.00006 : 0.000016;
-    ambient.intensity = onMoon || inSpace ? 0.12 : overcast ? 0.75 : 0.55;
+    /* Haze is air, so it goes with the air. On the moon there is none at all
+       and the ground runs sharp all the way to a knife-edge horizon, which is
+       the single thing that reads as vacuum. */
+    fog.density = onMoon
+      ? 0
+      : inSpace
+        ? lerp(0.0000045, 0.0000004, airless)
+        : overcast
+          ? 0.00006
+          : lerp(0.000016, 0.0000075, high);
+    /* Skylight.
+
+       A directional sun on its own is a model of a world with no atmosphere,
+       and at any elevation worth looking at — dawn, golden hour, dusk — it
+       delivers almost nothing, which is why the farmland used to render as
+       mud under a burning sky. What actually lights the ground at those hours
+       is the whole dome above it. So the hemisphere light takes the sky's own
+       colour and carries the load as the sun drops: warm and strong under a
+       sunset, blue and low after dark, flat and bright under overcast. */
+    const day = THREE.MathUtils.clamp((elevation + 5) / 22, 0, 1);
+    if (onMoon) {
+      // Vacuum. No sky, so no skylight: only the sun and what the regolith
+      // bounces, which is the whole reason lunar shadows read as black.
+      ambient.intensity = 0.05;
+      ambient.color.setHex(0x9aa4b4);
+      ambient.groundColor.setHex(0x3b3833);
+    } else if (inSpace) {
+      ambient.intensity = lerp(0.4, 0.12, airless);
+      ambient.color.setHex(0x8fb6e8);
+      ambient.groundColor.setHex(0x2c3a4e);
+    } else {
+      /* Pulled back toward neutral before it is used. A sunset tints what it
+         lights; it does not dye it. Feeding the palette in at full chroma
+         turned an airline-white fuselage the colour of the sky, which is the
+         difference between golden hour and a colour cast. */
+      skyTint.setStyle(skyState.palette.glow).lerp(WHITE, 0.52);
+      groundTint.setStyle(skyState.palette.horizon).lerp(EARTH, 0.58);
+      ambient.color.copy(skyTint);
+      ambient.groundColor.copy(groundTint);
+      ambient.intensity = overcast ? 0.95 : lerp(0.8, 0.46, day);
+    }
 
     /* Advance along the heading. Airspeed is in knots; the altitude term
        keeps the angular rate — and so the sense of speed — constant. */
@@ -560,6 +731,11 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     puff.dispose();
     ground.geometry.dispose();
     groundMat.dispose();
+    limb.geometry.dispose();
+    (limb.material as THREE.Material).dispose();
+    limbAir.geometry.dispose();
+    (limbAir.material as THREE.Material).dispose();
+    planetTex.dispose();
     clouds.geometry.dispose();
     cloudMat.dispose();
     starGeo.dispose();

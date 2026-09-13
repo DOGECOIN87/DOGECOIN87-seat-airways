@@ -29,15 +29,25 @@ html {
   background: #7ecde0;
 }
 
-/* The page is a flight instrument, not a stack of dark cards. These quiet
-   structural layers create depth around the live scene while keeping the
-   controls crisp and deliberately utilitarian. */
+/* ============================================================
+   Structure
+   ────────────────────────────────────────────────────────────
+   The page is a flight instrument, not a stack of dark cards.
+   Three grounds carry it: the night the whole page sits on, the
+   instrument panels around the live view, and one lighter band
+   under the seat map — because the wall is the second subject
+   and a subject needs its own room.
+   ============================================================ */
 .sa-app {
   isolation: isolate;
   overflow-x: clip;
+}
+.sa-ground {
   background:
-    radial-gradient(1050px 560px at 78% 12%, rgba(25, 68, 118, 0.15), transparent 68%),
-    radial-gradient(800px 460px at 12% 36%, rgba(126, 205, 224, 0.055), transparent 70%);
+    radial-gradient(1250px 720px at 50% -8%, #1A2333 0%, transparent 58%),
+    radial-gradient(980px 540px at 84% 18%, rgba(25, 68, 118, 0.20), transparent 66%),
+    radial-gradient(760px 460px at 8% 44%, rgba(126, 205, 224, 0.05), transparent 70%),
+    linear-gradient(180deg, #0B0E14 0%, #070910 100%);
 }
 .sa-app::after {
   content: '';
@@ -45,21 +55,37 @@ html {
   position: fixed;
   inset: 0;
   z-index: -1;
-  opacity: 0.14;
+  opacity: 0.13;
   background-image:
     linear-gradient(rgba(165, 194, 221, 0.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(165, 194, 221, 0.08) 1px, transparent 1px);
   background-size: 72px 72px;
-  mask-image: linear-gradient(to bottom, black, transparent 66%);
+  mask-image: linear-gradient(to bottom, black, transparent 56%);
 }
+
+.sa-skip {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 60;
+  padding: 0.55rem 1rem;
+  background: #ffb300;
+  color: #0a0f16;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: top 0.15s ease;
+}
+.sa-skip:focus { top: 0.75rem; }
 
 .sa-topbar {
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22), inset 0 -1px 0 rgba(126, 205, 224, 0.045);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(10, 15, 22, 0.88);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.24), inset 0 -1px 0 rgba(126, 205, 224, 0.05);
 }
-
-.sa-topbar dl {
-  scrollbar-gutter: stable both-edges;
-}
+.sa-topbar dl { scrollbar-gutter: stable both-edges; }
 
 .sa-shell,
 .sa-viewport,
@@ -70,23 +96,159 @@ html {
   max-width: 100%;
 }
 .sa-shell { width: 100%; }
-.sa-hero { position: relative; }
-.sa-hero > * { min-width: 0; }
-.sa-hero h1 { max-inline-size: 100%; overflow-wrap: anywhere; }
-.sa-hero::after {
+
+/* ── Type ─────────────────────────────────────────────────────────────
+   One display scale, used twice: the hero, and each section head. Setting
+   it in the sheet rather than in six utility strings is what keeps the two
+   in proportion when either changes. */
+.sa-display {
+  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.028em;
+  line-height: 0.92;
+  text-wrap: balance;
+  font-size: clamp(2.6rem, 6.6vw, 5.1rem);
+  max-inline-size: 100%;
+  overflow-wrap: break-word;
+}
+.sa-display--2 { font-size: clamp(1.9rem, 4vw, 3.1rem); }
+
+.sa-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.26em;
+  color: rgba(126, 205, 224, 0.86);
+}
+.sa-eyebrow--amber { color: rgba(255, 179, 0, 0.9); }
+.sa-eyebrow__no {
+  padding-right: 0.6rem;
+  border-right: 1px solid currentColor;
+  opacity: 0.6;
+}
+/* The live lamp. Small, and the only thing on the page that blinks. */
+.sa-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #7ecde0;
+  box-shadow: 0 0 10px rgba(126, 205, 224, 0.9);
+  animation: sa-pulse-glow 2.2s ease-in-out infinite;
+}
+
+.sa-section-head { position: relative; }
+.sa-section-head::before {
   content: '';
   position: absolute;
-  bottom: -1px;
   left: 0;
-  width: min(12rem, 32%);
+  top: -1.6rem;
+  width: 100%;
   height: 1px;
-  background: linear-gradient(90deg, #7ecde0, #ffb300, transparent);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.02) 60%, transparent);
+}
+
+/* ── Calls to action ─────────────────────────────────────────────────── */
+.sa-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.9rem 1.7rem;
+  background: #ffb300;
+  color: #0a0f16;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  box-shadow: 0 12px 30px rgba(255, 179, 0, 0.18);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.sa-cta:hover { background: #ffc42e; transform: translateY(-1px); }
+.sa-cta:focus-visible { outline: 2px solid #7ecde0; outline-offset: 3px; }
+
+.sa-ghost {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.9rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(237, 230, 216, 0.82);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+.sa-ghost:hover { border-color: rgba(126, 205, 224, 0.7); color: #fff; background: rgba(126, 205, 224, 0.07); }
+.sa-ghost:focus-visible { outline: 2px solid #7ecde0; outline-offset: 3px; }
+
+/* ── Control chips ────────────────────────────────────────────────────
+   Every strip on the page uses this one control. */
+.sa-chip {
+  flex: none;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.5rem 0.8rem;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(230, 224, 212, 0.6);
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+.sa-chip:hover { border-color: rgba(255, 255, 255, 0.28); color: #fff; }
+.sa-chip:focus-visible { outline: 2px solid #7ecde0; outline-offset: 2px; }
+.sa-chip--on { color: #fff; }
+.sa-chip--cyan {
+  border-color: rgba(126, 205, 224, 0.7);
+  background: rgba(126, 205, 224, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(126, 205, 224, 0.12), 0 0 18px rgba(126, 205, 224, 0.08);
+}
+.sa-chip--amber {
+  border-color: rgba(255, 179, 0, 0.7);
+  background: rgba(255, 179, 0, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.12), 0 0 18px rgba(255, 179, 0, 0.08);
+}
+.sa-strip-label {
+  flex: none;
+  margin-right: 0.25rem;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: rgba(230, 224, 212, 0.4);
+}
+
+/* ── Instrument panels ────────────────────────────────────────────────
+   The strips around the view are one family: same ground, same hairline,
+   distinguished only by which accent lights their top edge. */
+.sa-panel {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(20, 24, 33, 0.72);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 12px 26px rgba(0, 0, 0, 0.14);
+}
+.sa-panel--cyan {
+  border-top-color: rgba(126, 205, 224, 0.26);
+  background:
+    linear-gradient(90deg, rgba(126, 205, 224, 0.055), transparent 38%),
+    rgba(20, 24, 33, 0.72);
+}
+.sa-panel--amber {
+  border-top-color: rgba(255, 179, 0, 0.24);
+  background:
+    linear-gradient(90deg, rgba(255, 179, 0, 0.045), transparent 32%),
+    rgba(20, 24, 33, 0.72);
 }
 
 .sd-viewframe:not(.sd-full) {
   padding: 1px;
   background: linear-gradient(135deg, rgba(126, 205, 224, 0.42), rgba(255, 255, 255, 0.10) 35%, rgba(255, 179, 0, 0.28));
-  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.025);
+  box-shadow: 0 26px 62px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.025);
 }
 .sd-viewframe:not(.sd-full) .sd-glass { border: 0; }
 .sd-glass::after {
@@ -96,7 +258,7 @@ html {
   inset: 0;
   z-index: 3;
   border: 1px solid rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 70px rgba(1, 5, 15, 0.22);
+  box-shadow: inset 0 0 70px rgba(1, 5, 15, 0.18);
 }
 .sa-view-loading {
   display: grid;
@@ -126,33 +288,11 @@ html {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
-.sa-flight-nav,
-.sa-sim-panel {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 12px 26px rgba(0, 0, 0, 0.12);
-}
-.sa-flight-nav {
-  border-top-color: rgba(126, 205, 224, 0.23);
-  background:
-    linear-gradient(90deg, rgba(126, 205, 224, 0.055), transparent 38%),
-    rgba(20, 24, 33, 0.70);
-}
-.sa-flight-nav button[aria-pressed='true'] {
-  box-shadow: inset 0 0 0 1px rgba(126, 205, 224, 0.12), 0 0 18px rgba(126, 205, 224, 0.08);
-}
-.sa-sim-panel {
-  border-top-color: rgba(255, 179, 0, 0.22);
-  background:
-    linear-gradient(90deg, rgba(255, 179, 0, 0.045), transparent 32%),
-    rgba(20, 24, 33, 0.70);
-}
-.sa-sim-panel button[aria-pressed='true'] {
-  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.12), 0 0 18px rgba(255, 179, 0, 0.08);
-}
 .sa-flight-state {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.10);
   background: #141821;
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.14);
 }
 .sa-flight-summary > div {
   position: relative;
@@ -184,25 +324,105 @@ html {
   width: 28px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62));
 }
-.sa-annunciator-strip {
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-top: 0;
-  background: rgba(20, 24, 33, 0.80);
-}
-.sa-annunciator-strip > ul {
+.sa-flight-state > ul {
   border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: transparent;
 }
-.sa-cabin-grid > div > header { position: relative; }
-.sa-cabin-grid > div > header::after {
+
+/* ── The wall ─────────────────────────────────────────────────────────
+   The seat map gets its own band: a lighter ground, full-bleed rules top
+   and bottom, and a hairline grid that reads as the grid the seats are.
+   It is the second subject on the page and this is what says so. */
+.sa-wall {
+  position: relative;
+  margin-top: 5.5rem;
+  padding: 4.5rem 0 4rem;
+}
+.sa-wall::before {
   content: '';
   position: absolute;
-  bottom: -1px;
-  left: 0;
-  width: 72px;
-  height: 1px;
-  background: #ffb300;
+  inset: 0 50%;
+  z-index: -1;
+  width: 100vw;
+  transform: translateX(-50%);
+  background:
+    linear-gradient(180deg, rgba(126, 205, 224, 0.05), transparent 22%),
+    linear-gradient(180deg, rgba(19, 25, 36, 0.92), rgba(13, 17, 25, 0.92));
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.sa-wall::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 100vw;
+  height: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #7ecde0, #ffb300 46%, transparent);
+  opacity: 0.7;
+}
+.sa-wall__inner { position: relative; }
+
+.sa-steps {
+  display: grid;
+  gap: 1px;
+  margin-top: 2.5rem;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+@media (min-width: 768px) { .sa-steps { grid-template-columns: repeat(3, 1fr); } }
+.sa-step {
+  position: relative;
+  padding: 1.4rem 1.4rem 1.5rem;
+  background: linear-gradient(160deg, rgba(24, 31, 44, 0.96), rgba(15, 20, 30, 0.96));
+}
+.sa-step__no {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: rgba(255, 179, 0, 0.85);
+}
+.sa-step__h {
+  margin-top: 0.55rem;
+  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.18rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+.sa-step__b {
+  margin-top: 0.45rem;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(230, 224, 212, 0.58);
+}
+
+/* ── Close ────────────────────────────────────────────────────────── */
+.sa-close {
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+  padding-top: 3rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+.sa-close__line {
+  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.3rem, 3vw, 1.9rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+.sa-close__note {
+  max-width: 44rem;
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: rgba(230, 224, 212, 0.4);
 }
 
 /* Anything that is a number, a seat, or an address. */
@@ -348,9 +568,14 @@ html {
     max-height: none;
   }
   .sa-topbar dl { gap: 0.75rem; }
-  .sa-hero { margin-bottom: 1rem; }
-  .sa-hero h1 { max-width: 13ch; font-size: clamp(1.65rem, 8vw, 1.9rem); }
   .sd-controls { margin-top: 0.65rem; }
+  /* The hero headline is the one piece of type on the page big enough to
+     force a horizontal scrollbar on a narrow screen, so it is capped by
+     measure rather than by viewport width alone. */
+  .sa-display { font-size: clamp(2rem, 10.5vw, 2.9rem); max-width: 12ch; }
+  .sa-display--2 { font-size: clamp(1.6rem, 8vw, 2.1rem); max-width: 16ch; }
+  .sa-wall { margin-top: 3.5rem; padding: 3rem 0 2.75rem; }
+  .sa-cta, .sa-ghost { flex: 1 1 auto; justify-content: center; }
 }
 
 /* Full screen: the real answer on a phone, and worth having on a laptop.
@@ -383,3 +608,161 @@ html {
   html { scroll-behavior: auto; }
   .sd-shake, .sa-pulse-glow, .sa-shine::after, .sa-sweep, .sa-view-loading__mark { animation: none !important; }
 }
+
+/* ============================================================
+   The seat map
+   ────────────────────────────────────────────────────────────
+   Two columns where there is room: the aircraft, and a panel
+   beside it showing whatever seat the cursor is on. Under a
+   certain width they stack and the panel goes first, because
+   on a phone the thing you tapped has to be the thing you see.
+   ============================================================ */
+.sa-map { display: grid; gap: 1.75rem; }
+@media (min-width: 1100px) {
+  .sa-map {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+    align-items: start;
+    gap: 2.5rem;
+  }
+}
+.sa-map__body { min-width: 0; }
+.sa-map__cabin {
+  border-inline: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(18, 24, 36, 0.72);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+}
+
+/* A seat with a holder but no advert on it yet. The hatch says the square is
+   live inventory rather than an empty seat — the difference the whole wall
+   turns on. */
+.sa-seat--held {
+  background-color: rgba(255, 255, 255, 0.07);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.05) 0 3px,
+    transparent 3px 7px
+  );
+}
+.sa-seat:hover { transform: translateY(-1px); z-index: 1; }
+.sa-seat:hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+@media (min-width: 1100px) {
+  .sa-map__side { position: sticky; top: 5.5rem; }
+}
+.sa-map__card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(165deg, rgba(24, 31, 44, 0.95), rgba(14, 19, 28, 0.95));
+  padding: 1rem;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
+}
+.sa-map__label {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: rgba(126, 205, 224, 0.75);
+}
+.sa-map__preview {
+  display: grid;
+  place-items: center;
+  margin-top: 0.75rem;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+}
+.sa-map__preview img { width: 100%; height: 100%; object-fit: cover; }
+.sa-map__preview-empty {
+  padding: 0 0.75rem;
+  font-size: 10px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(230, 224, 212, 0.25);
+}
+.sa-map__seat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+.sa-map__rank {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffb300;
+}
+.sa-map__unsold {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: rgba(230, 224, 212, 0.4);
+}
+.sa-map__facts { margin-top: 0.7rem; display: grid; gap: 0.4rem; }
+.sa-map__facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.sa-map__facts dt {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: rgba(230, 224, 212, 0.35);
+}
+.sa-map__facts dd { font-size: 12px; color: rgba(237, 230, 216, 0.85); }
+.sa-map__note {
+  margin-top: 0.7rem;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: rgba(230, 224, 212, 0.5);
+}
+.sa-map__alt {
+  margin-top: 0.7rem;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: rgba(230, 224, 212, 0.7);
+}
+.sa-map__alt a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: rgba(126, 205, 224, 0.5); }
+.sa-map__alt a:hover { color: #7ecde0; }
+.sa-map__advertise {
+  width: 100%;
+  margin-top: 0.9rem;
+  border: 1px solid rgba(255, 179, 0, 0.7);
+  padding: 0.55rem;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #ffb300;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.sa-map__advertise:hover { background: #ffb300; color: #0a0f16; }
+
+.sa-map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 1.1rem;
+  margin-top: 1rem;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(230, 224, 212, 0.45);
+}
+.sa-map__legend li { display: flex; align-items: center; gap: 0.5rem; }
+.sa-map__count { color: rgba(230, 224, 212, 0.32); }
+.sa-key { width: 13px; height: 13px; flex: none; }
+.sa-key--open { border: 1px solid rgba(230, 224, 212, 0.25); }
+.sa-key--held { background: rgba(255, 255, 255, 0.13); }
+.sa-key--mine { border: 1px solid #ffb300; box-shadow: 0 0 8px #ffb300; }

@@ -6,6 +6,7 @@ import { formatCap, formatChange } from '../lib/flightModel';
 import type { SkyState } from '../lib/sky';
 import { useAttitude } from '../lib/useAttitude';
 import type { CabinSeat } from '../content/cabin';
+import Mark from './Mark';
 
 /**
  * The whole aircraft, from outside.
@@ -136,12 +137,18 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
         </p>
       )}
 
-      {/* ── Titles ── */}
-      <div className="pointer-events-none absolute left-5 top-4">
-        <p className="font-heading text-3xl leading-none text-white">$SEAT</p>
-        <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.28em] text-white/55">
-          One plane. Everyone&apos;s in it.
-        </p>
+      {/* ── Aircraft plate ──────────────────────────────────────────────
+          Identity, not a headline. The page's own headline is directly above
+          this frame, and repeating it inside the frame said the same thing
+          twice in two type sizes. What belongs here is what an aviation
+          photograph is captioned with: which aeroplane, and who is on it. */}
+      <div className="pointer-events-none absolute left-5 top-4 flex items-center gap-2.5">
+        <Mark size={22} background="none" />
+        <span className="font-heading text-[15px] leading-none tracking-normal text-white/90">SA350</span>
+        <span aria-hidden className="h-3.5 w-px bg-white/25" />
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/50">
+          Souls on board <span className="tabular-nums text-white/80">{taken.size}</span>
+        </span>
       </div>
 
       {/* ── Readout ── */}

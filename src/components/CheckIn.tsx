@@ -46,11 +46,11 @@ const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing,
     return (
       <section className="border border-seat-amber/35 bg-[#141821]/85 backdrop-blur-sm" aria-label="Check in">
         <div className="px-5 py-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-seat-amber">Check in</p>
-          <h3 className="font-heading mt-2 text-2xl leading-tight text-white">The aircraft seats you.</h3>
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-seat-amber">Boarding</p>
+          <h3 className="font-heading mt-2 text-2xl leading-tight text-white">Where do you sit?</h3>
           <p className="mt-2 max-w-[42ch] text-[13px] leading-relaxed text-blue-100/65">
-            You don&apos;t pick a seat. Connect a wallet and your holding decides the cabin — bigger bag,
-            further forward. Everyone under the last cutoff rides in the hold.
+            Connect a wallet and the manifest answers it: bigger bag, further forward. Everyone under the
+            last cutoff rides in the hold.
           </p>
 
           <button

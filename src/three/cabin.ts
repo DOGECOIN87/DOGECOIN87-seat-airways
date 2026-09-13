@@ -571,7 +571,9 @@ export function createCabin(): CabinHandles {
     new THREE.CylinderGeometry(CEIL_R, CEIL_R, cabinLength, 48, 1, true, half, 2 * (Math.PI - half)),
     new THREE.MeshStandardMaterial({
       color: 0xece7dc, side: THREE.BackSide, roughness: 0.95, metalness: 0,
-      emissive: 0xd6cfbe, emissiveIntensity: 0.16,
+      /* The ceiling is the cabin's light fitting, not a surface near one, so
+         most of what it shows is its own. */
+      emissive: 0xe6dcc6, emissiveIntensity: 0.42,
     }),
   );
   ceiling.rotation.x = Math.PI / 2;
@@ -746,10 +748,18 @@ export function createCabin(): CabinHandles {
   }
 
   /* ── Lighting ───────────────────────────────────────────────────────────
-     Two washes along the ceiling join, plus lamps close enough together that
-     the cabin brightens and dims as you look down it. three's lights are
-     physical, so intensity is candela: a value in the tens lights nothing at
-     cabin distances. */
+     A cabin is lit indirectly. The lamps are in a cove at the shoulder and
+     what you see is the ceiling they throw light onto, which is why the crown
+     of a real cabin is an even, warm, shadowless field rather than a row of
+     hot spots.
+
+     Modelling that the other way round — a point light hung under the crown —
+     is what blew the ceiling out to white: three's lights are physical, so a
+     source 22 cm from the panel it lights delivers a couple of hundred times
+     the irradiance of the same source across the aisle, and no exposure
+     setting recovers a surface that far over. The lamps now sit in the cove,
+     more than a metre from the crown, and the ceiling's own emissive carries
+     the indirect term a rasteriser cannot compute. */
   for (const x of [-0.83, 0.83]) {
     const strip = new THREE.Mesh(
       new THREE.BoxGeometry(0.1, 0.035, cabinLength),
@@ -759,16 +769,23 @@ export function createCabin(): CabinHandles {
     strip.rotation.z = x > 0 ? -0.2 : 0.2;
     group.add(strip);
   }
-  for (let z = -3; z < cabinLength - 2; z += 2.6) {
-    const lamp = new THREE.PointLight(0xffd9a8, 13, 9, 2);
-    lamp.position.set(0, CABIN.ceilingY - 0.22, z);
-    group.add(lamp);
+  for (let z = -3; z < cabinLength - 2; z += 2.4) {
+    // The cove itself: up across the ceiling, down over the bin doors.
+    for (const x of [-0.88, 0.88]) {
+      const cove = new THREE.PointLight(0xffe3bb, 3.4, 4.4, 2);
+      cove.position.set(x, CABIN.binTopY + 0.03, z);
+      group.add(cove);
+    }
     // Under the bins, where nothing above can reach.
     for (const x of [-0.95, 0.95]) {
-      const wash = new THREE.PointLight(0xffe6c4, 4.5, 4.2, 2);
+      const wash = new THREE.PointLight(0xffe6c4, 3.2, 3.8, 2);
       wash.position.set(x, CABIN.binBottomY - 0.06, z);
       group.add(wash);
     }
+    // A little down the aisle, so the cabin recedes into light and not murk.
+    const aisle = new THREE.PointLight(0xffdcb0, 2.4, 4.6, 2);
+    aisle.position.set(0, CABIN.binBottomY + 0.12, z);
+    group.add(aisle);
   }
 
   /* ── Bulkhead ───────────────────────────────────────────────────────────
@@ -856,17 +873,67 @@ export function createCabin(): CabinHandles {
 
   /* ── Passengers, in the seats that are sold ─────────────────────────────
      Heads clear the headrests, because a cabin you are sitting in is mostly
-     the backs of other people's heads. */
-  const headGeo = new THREE.SphereGeometry(0.097, 18, 14);
-  headGeo.scale(1, 1.14, 1.02);
-  const hairGeo = new THREE.SphereGeometry(0.104, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.72);
-  hairGeo.scale(1, 1.16, 1.04);
-  const bodyGeo = new THREE.CapsuleGeometry(0.18, 0.22, 5, 14);
+     the backs of other people's heads. Which is the whole problem with
+     drawing them as spheres: a sphere on a capsule is a balloon on a bean,
+     and thirty rows of them read as a ball pit rather than a cabin.
+
+     What a head actually is, from a seat behind it, is a mass of hair with a
+     neck under it. So the head is shaped like one — an egg, tapered at the
+     crown, narrowed at the jaw, flatter at the back than the front — and it
+     carries its own neck, since the neck is skin and the torso is not and an
+     instance can only be one colour. The hair is the same shape one step
+     larger with its face and underside sunk back inside, which leaves a cap
+     over the crown, the back and the sides and a hairline where a hairline
+     belongs. */
+  const eggify = (g: THREE.BufferGeometry, r: number) => {
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const t = y / r;                                   // −1 chin, +1 crown
+      const crown = 1 - Math.max(0, t) * 0.17;           // tapers to the top
+      const jaw = 1 - Math.max(0, -t - 0.3) * 0.5;       // and in at the jaw
+      const k = crown * jaw;
+      // +z is aft: the back of the head, which is the flatter side.
+      p.setXYZ(i, x * k * 0.96, y * 1.2, z * k * (z > 0 ? 1.0 : 1.06));
+    }
+    g.computeVertexNormals();
+    return g;
+  };
+
+  const HEAD_R = 0.092;
+  const skull = eggify(new THREE.SphereGeometry(HEAD_R, 22, 16), HEAD_R);
+  const neck = new THREE.CylinderGeometry(0.05, 0.062, 0.12, 14, 1, true);
+  neck.translate(0, -0.1, 0.006);
+  const headGeo = mergeParts([{ g: skull.clone(), c: 0xffffff }, { g: neck, c: 0xffffff }]);
+
+  const hairGeo = skull.clone();
+  hairGeo.scale(1.055, 1.045, 1.055);
+  {
+    const p = hairGeo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      // Sink the face and the underside back inside the skull, so what is
+      // left is hair and the rest is head.
+      const front = Math.max(0, -z) / HEAD_R;
+      const under = Math.max(0, -y) / (HEAD_R * 1.2);
+      const k = 1 - 0.14 * Math.min(1, front * 1.25 + under * 1.5);
+      p.setXYZ(i, x * k, y * k, z * k);
+    }
+    hairGeo.computeVertexNormals();
+  }
+  skull.dispose();
+
+  /* A torso with shoulders. Mostly hidden behind the seat in front, but it is
+     what you see of the person beside you, and a capsule has no shoulders. */
+  const shoulders = roundedBox(0.44, 0.46, 0.27, 0.12);
+  shoulders.translate(0, 0.02, 0);
+  const bodyGeo = shoulders;
+
   const mk = (g: THREE.BufferGeometry, rough: number) =>
     new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: rough }), seatCount);
-  const heads = mk(headGeo, 0.7);
-  const hairs = mk(hairGeo, 0.92);
-  const bodies = mk(bodyGeo, 0.95);
+  const heads = mk(headGeo, 0.62);
+  const hairs = mk(hairGeo, 0.96);
+  const bodies = mk(bodyGeo, 0.9);
   heads.count = hairs.count = bodies.count = 0;
   group.add(heads); group.add(hairs); group.add(bodies);
 
@@ -892,8 +959,15 @@ export function createCabin(): CabinHandles {
         // A little slouch and lean, so the rows are not a rank of dummies.
         const lean = (((seed * 29) % 100) / 100 - 0.5) * 0.13;
         const slouch = (((seed * 17) % 100) / 100) * 0.05;
+        /* People are not one size. Eight per cent either way is the spread
+           that stops a cabin reading as a moulding taken from one mould, and
+           it is small enough that nobody looks like a child or a giant. */
+        const build = 0.92 + (((seed * 41) % 100) / 100) * 0.16;
+        // Heads sit at a slight tilt of their own, independent of the lean.
+        const nod = ((((seed * 53) % 100) / 100) - 0.5) * 0.12;
 
-        dummy.rotation.set(0, lean * 2.2, lean);
+        dummy.scale.setScalar(build);
+        dummy.rotation.set(nod, lean * 2.2, lean);
 
         dummy.position.set(x + lean * 0.16, HEAD_Y - slouch, z - 0.04);
         dummy.updateMatrix();
@@ -901,18 +975,18 @@ export function createCabin(): CabinHandles {
         colour.setHex(SKIN[seed % SKIN.length]);
         heads.setColorAt(n, colour);
 
-        dummy.position.set(x + lean * 0.16, HEAD_Y - slouch + 0.012, z - 0.04);
-        dummy.updateMatrix();
+        // The hair rides the same head, so it takes the same transform.
         hairs.setMatrixAt(n, dummy.matrix);
-        colour.setHex(HAIR[seed % HAIR.length]);
+        colour.setHex(HAIR[(seed * 3) % HAIR.length]);
         hairs.setColorAt(n, colour);
 
         dummy.rotation.set(0, lean * 1.4, lean * 0.6);
-        dummy.position.set(x + lean * 0.1, CABIN.floorY + 0.9 - slouch, z - 0.02);
+        dummy.position.set(x + lean * 0.1, CABIN.floorY + 0.86 - slouch, z - 0.015);
         dummy.updateMatrix();
         bodies.setMatrixAt(n, dummy.matrix);
-        colour.setHex(CLOTHES[seed % CLOTHES.length]);
+        colour.setHex(CLOTHES[(seed * 7) % CLOTHES.length]);
         bodies.setColorAt(n, colour);
+        dummy.scale.setScalar(1);
         n++;
       }
     }
