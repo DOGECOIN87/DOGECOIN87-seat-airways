@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { cloudTexture, earthTexture, farmlandTexture, moonTexture, radialTexture } from './terrain';
+import { cloudTexture, earthTexture, farmlandTextures, moonTexture, radialTexture } from './terrain';
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
@@ -302,7 +302,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   aircraft.add(earthAir);
 
   /* ── Ground ── */
-  const farmland = farmlandTexture();
+  const farmland = farmlandTextures();
   const moon = moonTexture();
   /* Three-kilometre tiles, not five and a half.
   
@@ -314,13 +314,30 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      forward" actually looks like. Finer tiles put field boundaries at a few
      hundred metres, where real ones are, and the same speed becomes visible
      because there is something to measure it by. */
-  farmland.repeat.set(40, 40);
+  farmland.day.repeat.set(40, 40);
+  /* The lights repeat with the land, because they are the same land. */
+  farmland.night.repeat.set(40, 40);
   /* Bigger tiles than the farmland's. A crater is a landform, not a field:
      at five-kilometre tiles the largest one in the texture was a few hundred
      metres across and the plain read as flat grey from any altitude worth
      being at. */
   moon.repeat.set(9, 9);
-  const groundMat = new THREE.MeshStandardMaterial({ map: farmland, roughness: 1, metalness: 0 });
+  /* Towns after dark.
+
+     The night map is emissive rather than a second lit surface: street
+     lighting and lit windows are things that emit, and a diffuse map cannot
+     be seen once the sun that lights it has set — which is precisely when a
+     town is worth looking at. `emissiveIntensity` is driven from the real
+     solar elevation each frame, so the lights come up through dusk and are
+     gone by mid-morning, on the visitor's own clock. */
+  const groundMat = new THREE.MeshStandardMaterial({
+    map: farmland.day,
+    emissive: new THREE.Color(0xffffff),
+    emissiveMap: farmland.night,
+    emissiveIntensity: 0,
+    roughness: 1,
+    metalness: 0,
+  });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(GROUND, GROUND), groundMat);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
@@ -347,9 +364,15 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      planetary features arrive magnified into flat bands of colour. Farmland
      tiled to roughly a hundred kilometres gives what you actually see from
      the edge of space — texture, not geography. */
-  const planetTex = farmlandTexture();
+  /* A clone rather than a second generation: it shares the canvas already
+     drawn, so the limb costs a uniform rather than another 2048-square pass
+     over every field, town and building in the tile. No night map here —
+     the space band forces the sun to 46 degrees to light the planet at all,
+     and a daylit hemisphere has no city lights to show. */
+  const planetTex = farmland.day.clone();
   planetTex.wrapS = planetTex.wrapT = THREE.RepeatWrapping;
   planetTex.repeat.set(240, 120);
+  planetTex.needsUpdate = true;
   const limb = new THREE.Mesh(
     new THREE.SphereGeometry(1, 96, 64),
     new THREE.MeshStandardMaterial({ map: planetTex, roughness: 0.98, metalness: 0 }),
@@ -547,12 +570,22 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
        atmosphere the plate gives way to the limb, which is a sphere. */
     if (onMoon && groundMat.map !== moon) {
       groundMat.map = moon;
+      // Nobody is home up here.
+      groundMat.emissiveMap = null;
       groundMat.needsUpdate = true;
     }
-    if (!onMoon && groundMat.map !== farmland) {
-      groundMat.map = farmland;
+    if (!onMoon && groundMat.map !== farmland.day) {
+      groundMat.map = farmland.day;
+      groundMat.emissiveMap = farmland.night;
       groundMat.needsUpdate = true;
     }
+    /* Lights up through dusk, out by mid-morning. Civil twilight is about
+       six degrees below the horizon, so the ramp is hung either side of
+       that rather than on sunset itself — which is when you can first see a
+       town from the air, not when the sun clears the horizon. */
+    groundMat.emissiveIntensity = onMoon
+      ? 0
+      : 1 - THREE.MathUtils.smoothstep(skyState.elevation, -8, 3);
     ground.visible = !inSpace;
     limb.visible = limbAir.visible = inSpace;
     if (inSpace) {
@@ -662,6 +695,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     if (map) {
       const tile = GROUND / map.repeat.x;
       map.offset.set(shift.x / tile, shift.z / tile);
+      /* The emissive map has to travel with the diffuse one to the pixel.
+         Drifting them apart slides every town's lights off the town. */
+      groundMat.emissiveMap?.offset.copy(map.offset);
     }
 
     /* The cloud deck sits at a fixed altitude; the aircraft climbs past it. */
@@ -815,7 +851,8 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const dispose = () => {
     cabin.dispose();
     airframe.dispose();
-    farmland.dispose();
+    farmland.day.dispose();
+    farmland.night.dispose();
     moon.dispose();
     puff.dispose();
     ground.geometry.dispose();

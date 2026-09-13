@@ -27,10 +27,27 @@ function noise2(x: number, y: number, seed: number): number {
  * gives what enclosure actually produced: a few large fields, many small ones,
  * and boundaries that run for a while and then stop.
  */
-export function farmlandTexture(size = 2048): THREE.CanvasTexture {
+export interface GroundTextures {
+  /** What the land looks like lit. */
+  day: THREE.CanvasTexture;
+  /** What of it is still visible once the sun has gone: an emissive map. */
+  night: THREE.CanvasTexture;
+}
+
+export function farmlandTextures(size = 2048): GroundTextures {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d') as CanvasRenderingContext2D;
+
+  /* The night map is painted in the same pass, in the same coordinates, as
+     the day one — which is the whole reason they are generated together: a
+     town's lights have to be where the town is. Two passes over two
+     independent random streams would put a city's glow in a field. */
+  const nc = document.createElement('canvas');
+  nc.width = nc.height = size;
+  const n = nc.getContext('2d') as CanvasRenderingContext2D;
+  n.fillStyle = '#000000';
+  n.fillRect(0, 0, size, size);
 
   g.fillStyle = '#4a5c3a';
   g.fillRect(0, 0, size, size);
@@ -153,11 +170,232 @@ export function farmlandTexture(size = 2048): THREE.CanvasTexture {
     g.stroke();
   }
 
+  /* ── Settlements ──────────────────────────────────────────────────
+     At the scale this tile is laid down — three kilometres across, so
+     roughly a metre and a half to the pixel — a building is about eight
+     pixels. Small, but not sub-pixel, which means the honest way to draw a
+     town here is to draw its buildings rather than to suggest a grey smudge
+     where one would be.
+
+     Sizes are kept deliberately modest. The tile repeats every three
+     kilometres, and a landmark city would announce that repeat far more
+     loudly than any field boundary: one distinctive silhouette arriving
+     over and over is exactly the tell the field generator above was written
+     to avoid. A market town and a scatter of villages read as countryside.
+     A skyline reads as wallpaper. */
+  const settlements: { x: number; y: number; r: number; core: number }[] = [];
+
+  // One market town, kept off the tile edges so it is not cut in half.
+  settlements.push({
+    x: size * (0.24 + rand() * 0.42),
+    y: size * (0.2 + rand() * 0.4),
+    r: size * (0.075 + rand() * 0.03),
+    core: 0.42,
+  });
+
+  /* Two hamlets, and no more. Six settlements to a three-kilometre tile put
+     a glowing shape every few hundred metres, and at that density the eye
+     stops reading them as towns and starts reading the lattice they repeat
+     on — the tile, advertised. Sparse is both truer to real countryside and
+     the only way the repeat stays hidden. */
+  for (let i = 0; i < 2; i++) {
+    settlements.push({
+      x: rand() * size,
+      y: rand() * size,
+      r: size * (0.014 + rand() * 0.016),
+      core: 0.3,
+    });
+  }
+
+  for (const t of settlements) drawSettlement(g, n, t, rand, size);
+
+  /* Rural light: farmsteads, and the odd vehicle on a lane. Scattered single
+     points are what sells the dark between towns — an unlit countryside
+     reads as a hole in the map rather than as land. */
+  n.fillStyle = 'rgba(255,214,150,0.55)';
+  for (let i = 0; i < 140; i++) {
+    n.fillRect(rand() * size, rand() * size, 1.6, 1.6);
+  }
+
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 16;
   tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+
+  const nightTex = new THREE.CanvasTexture(nc);
+  nightTex.wrapS = nightTex.wrapT = THREE.RepeatWrapping;
+  nightTex.anisotropy = 16;
+  nightTex.colorSpace = THREE.SRGBColorSpace;
+
+  return { day: tex, night: nightTex };
+}
+
+/**
+ * One town, painted into the day and night canvases at once.
+ *
+ * A town is its street plan first and its buildings second: cut a grid,
+ * rotate it off the tile's axes so no two towns line up with each other or
+ * with the field boundaries, then fill the blocks with footprints that grow
+ * larger and denser toward the middle. Building *colour* does most of the
+ * work at altitude — a town is warm grey-brown against green fields, and
+ * that contrast is what makes it read long before any single roof does.
+ *
+ * The night pass lights the same streets and a fraction of the same
+ * buildings. Only a fraction: a town with every window lit reads as a
+ * stadium. Sodium along the streets, a colder white in the few big central
+ * roofs, and a glow over the whole thing — which is most of what you
+ * actually see of a distant town at night.
+ */
+function drawSettlement(
+  g: CanvasRenderingContext2D,
+  n: CanvasRenderingContext2D,
+  t: { x: number; y: number; r: number; core: number },
+  rand: () => number,
+  size: number,
+) {
+  const { r } = t;
+  const angle = rand() * Math.PI;
+  /* Slate, tile, tar and the occasional pale industrial roof. Kept close in
+     value so the town reads as one mass at altitude and only resolves into
+     separate buildings when you are near it. */
+  const roofs = ['#7f766b', '#6b635a', '#8a7d6e', '#5f584f', '#94856f', '#776b5f', '#a09384'];
+
+  g.save();
+  n.save();
+  for (const ctx of [g, n]) {
+    ctx.translate(t.x, t.y);
+    ctx.rotate(angle);
+  }
+
+  /* The outline, worked out once and then used three times: as the made
+     ground, as the clip the streets are cut to, and as the shape of the
+     glow above it. Clipping the streets to a circle instead — which is what
+     this did first — turned every village into a perfectly round disc of
+     crosshatch, and a field of those reads as a textile print rather than
+     as land. */
+  const blob: [number, number][] = [];
+  for (let a = 0; a < 14; a++) {
+    const th = (a / 14) * Math.PI * 2;
+    const rr = r * (0.72 + rand() * 0.56);
+    blob.push([Math.cos(th) * rr, Math.sin(th) * rr]);
+  }
+  const tracePath = (ctx: CanvasRenderingContext2D, scale = 1) => {
+    ctx.beginPath();
+    blob.forEach(([px, py], i) => {
+      if (i === 0) ctx.moveTo(px * scale, py * scale);
+      else ctx.lineTo(px * scale, py * scale);
+    });
+    ctx.closePath();
+  };
+
+  g.fillStyle = 'rgba(104,97,86,0.62)';
+  tracePath(g);
+  g.fill();
+
+  const street = Math.max(6, r * 0.16);
+
+  /* Streets, clipped to the blob, so the outline stays organic while the
+     interior stays rectilinear — which is how a town that grew around a
+     crossroads looks from the air. */
+  g.save();
+  n.save();
+  for (const ctx of [g, n]) {
+    tracePath(ctx);
+    ctx.clip();
+  }
+
+  /* Narrow, and a warm grey rather than white. At six pixels of a
+     twenty-nine pixel block the streets were a fifth of the town's area and
+     it read as white netting over a field — roads are the gaps between
+     buildings, not the subject. */
+  g.strokeStyle = 'rgba(176,170,157,0.62)';
+  g.lineWidth = Math.max(1, r * 0.021);
+  n.strokeStyle = 'rgba(255,186,92,0.5)';
+  n.lineWidth = Math.max(1, r * 0.03);
+  for (let i = -7; i <= 7; i++) {
+    const o = i * street;
+    if (Math.abs(o) > r) continue;
+    for (const ctx of [g, n]) {
+      ctx.beginPath(); ctx.moveTo(-r, o); ctx.lineTo(r, o); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(o, -r); ctx.lineTo(o, r); ctx.stroke();
+    }
+  }
+
+  /* Buildings, block by block. Footprint and the chance of there being a
+     building at all both fall off with distance from the centre, which is
+     the difference between a town and a housing estate. */
+  for (let i = -7; i <= 7; i++) {
+    for (let j = -7; j <= 7; j++) {
+      const bx = i * street;
+      const by = j * street;
+      const d = Math.hypot(bx, by) / r;
+      if (d > 1) continue;
+      if (rand() > 1.05 - d * 0.75) continue;
+
+      const central = d < t.core;
+      const pad = street * 0.16;
+      const w = street * (central ? 0.54 + rand() * 0.28 : 0.3 + rand() * 0.3);
+      const h = street * (central ? 0.54 + rand() * 0.28 : 0.3 + rand() * 0.3);
+      const ox = bx + pad + rand() * Math.max(0, street - w - pad * 2) * 0.6;
+      const oy = by + pad + rand() * Math.max(0, street - h - pad * 2) * 0.6;
+
+      g.fillStyle = roofs[Math.floor(rand() * roofs.length)];
+      g.fillRect(ox, oy, w, h);
+
+      if (rand() < (central ? 0.55 : 0.26)) {
+        n.fillStyle = central ? 'rgba(255,236,200,0.92)' : 'rgba(255,206,140,0.7)';
+        n.fillRect(ox, oy, Math.max(1, w * 0.8), Math.max(1, h * 0.8));
+      }
+    }
+  }
+  g.restore();
+  n.restore();
+
+  /* The lit air over a town. Additive, so it stacks on the streets and
+     windows already there rather than washing them out. */
+  n.globalCompositeOperation = 'lighter';
+  const glow = n.createRadialGradient(0, 0, 0, 0, 0, r * 1.15);
+  glow.addColorStop(0, 'rgba(255,178,86,0.20)');
+  glow.addColorStop(0.55, 'rgba(255,160,70,0.07)');
+  glow.addColorStop(1, 'rgba(255,150,60,0)');
+  n.fillStyle = glow;
+  /* Poured into the town's own outline rather than a circle, and blurred,
+     so the halo has the shape of the place under it. */
+  n.filter = `blur(${Math.max(2, r * 0.18)}px)`;
+  tracePath(n, 1.25);
+  n.fill();
+  n.filter = 'none';
+  n.globalCompositeOperation = 'source-over';
+
+  /* Roads out. A town nobody can reach is a model village, and a lit ribbon
+     leaving one is the clearest thing in a night landscape. */
+  const spokes = 2 + Math.floor(rand() * 3);
+  for (let i = 0; i < spokes; i++) {
+    const a = rand() * Math.PI * 2;
+    const len = size * (0.14 + rand() * 0.3);
+    const ex = Math.cos(a) * len;
+    const ey = Math.sin(a) * len;
+    const bend = (rand() - 0.5) * len * 0.4;
+    const cpx = ex * 0.5 - bend;
+    const cpy = ey * 0.5 + bend;
+
+    g.strokeStyle = 'rgba(198,190,172,0.36)';
+    g.lineWidth = Math.max(0.9, r * 0.028);
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.quadraticCurveTo(cpx, cpy, ex, ey);
+    g.stroke();
+
+    n.strokeStyle = 'rgba(255,170,80,0.16)';
+    n.lineWidth = Math.max(0.8, r * 0.03);
+    n.beginPath();
+    n.moveTo(0, 0);
+    n.quadraticCurveTo(cpx, cpy, ex, ey);
+    n.stroke();
+  }
+
+  g.restore();
+  n.restore();
 }
 
 /**
