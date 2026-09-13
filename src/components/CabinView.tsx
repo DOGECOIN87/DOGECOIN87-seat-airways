@@ -222,7 +222,7 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
           <rect x={f.cx - f.rx - 14} y={f.cy - f.ry - 14} width={f.rx * 2 + 28} height={f.ry * 2 + 28} rx={f.rx * 0.64} fill="#0B0C0F" />
           <g clipPath="url(#cv-pane)">
             <g transform={`translate(${f.cx} 0)`}>
-              <OutsideWorld ref={world} idPrefix="cv" sky={sky} band={band} horizonY={f.cy} spread={1000} />
+              <OutsideWorld ref={world} idPrefix="cv" sky={sky} band={band} horizonY={f.cy} spread={1000} driftSeconds={78} />
             </g>
             {(exitRow || zone.key === 'business') && (
               <g>

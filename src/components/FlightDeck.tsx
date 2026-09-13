@@ -255,7 +255,7 @@ const FlightDeck = ({ feed, lamps, sky, band }: FlightDeckProps) => {
         {/* ══ OUTSIDE ═══════════════════════════════════════════════════ */}
         <g clipPath="url(#fd-glass)">
           <g transform="translate(600 0)">
-            <OutsideWorld ref={world} idPrefix="fd" sky={sky} band={band} horizonY={GLASS_CY} spread={1400} />
+            <OutsideWorld ref={world} idPrefix="fd" sky={sky} band={band} horizonY={GLASS_CY} spread={1400} driftSeconds={78} />
           </g>
           <rect x="100" y={GLASS.top} width="1000" height={GLASS.bottom - GLASS.top} fill="#0A1424" opacity="0.10" />
           <path d={`M240 ${GLASS.bottom} L420 ${GLASS.top} L470 ${GLASS.top} L290 ${GLASS.bottom} Z`} fill="#ffffff" opacity="0.045" />

@@ -9,6 +9,7 @@
 
 body {
   margin: 0;
+  overflow-x: hidden;
   background-color: #0A0F16;
   color: #EDE6D8;
   /* Prose in a humanist sans; figures in mono, where they line up. Running
@@ -16,6 +17,192 @@ body {
   font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+html {
+  background: #0A0F16;
+  scroll-behavior: smooth;
+}
+
+::selection {
+  color: #071019;
+  background: #7ecde0;
+}
+
+/* The page is a flight instrument, not a stack of dark cards. These quiet
+   structural layers create depth around the live scene while keeping the
+   controls crisp and deliberately utilitarian. */
+.sa-app {
+  isolation: isolate;
+  overflow-x: clip;
+  background:
+    radial-gradient(1050px 560px at 78% 12%, rgba(25, 68, 118, 0.15), transparent 68%),
+    radial-gradient(800px 460px at 12% 36%, rgba(126, 205, 224, 0.055), transparent 70%);
+}
+.sa-app::after {
+  content: '';
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.14;
+  background-image:
+    linear-gradient(rgba(165, 194, 221, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(165, 194, 221, 0.08) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom, black, transparent 66%);
+}
+
+.sa-topbar {
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22), inset 0 -1px 0 rgba(126, 205, 224, 0.045);
+}
+
+.sa-topbar dl {
+  scrollbar-gutter: stable both-edges;
+}
+
+.sa-shell,
+.sa-viewport,
+.sd-viewframe,
+.sd-glass {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+.sa-shell { width: 100%; }
+.sa-hero { position: relative; }
+.sa-hero > * { min-width: 0; }
+.sa-hero h1 { max-inline-size: 100%; overflow-wrap: anywhere; }
+.sa-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: min(12rem, 32%);
+  height: 1px;
+  background: linear-gradient(90deg, #7ecde0, #ffb300, transparent);
+}
+
+.sd-viewframe:not(.sd-full) {
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(126, 205, 224, 0.42), rgba(255, 255, 255, 0.10) 35%, rgba(255, 179, 0, 0.28));
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+.sd-viewframe:not(.sd-full) .sd-glass { border: 0; }
+.sd-glass::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 70px rgba(1, 5, 15, 0.22);
+}
+.sa-view-loading {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(126, 205, 224, 0.11), transparent 22%),
+    linear-gradient(140deg, #07101c, #05070f 66%);
+}
+.sa-view-loading__mark {
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 1px solid rgba(126, 205, 224, 0.22);
+  border-top-color: #7ecde0;
+  border-radius: 9999px;
+  animation: sa-view-spin 1.1s linear infinite;
+}
+@keyframes sa-view-spin { to { transform: rotate(360deg); } }
+.sd-controls {
+  min-height: 48px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(110deg, rgba(15, 23, 35, 0.94), rgba(22, 31, 45, 0.76));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.sa-flight-nav,
+.sa-sim-panel {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 12px 26px rgba(0, 0, 0, 0.12);
+}
+.sa-flight-nav {
+  border-top-color: rgba(126, 205, 224, 0.23);
+  background:
+    linear-gradient(90deg, rgba(126, 205, 224, 0.055), transparent 38%),
+    rgba(20, 24, 33, 0.70);
+}
+.sa-flight-nav button[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1px rgba(126, 205, 224, 0.12), 0 0 18px rgba(126, 205, 224, 0.08);
+}
+.sa-sim-panel {
+  border-top-color: rgba(255, 179, 0, 0.22);
+  background:
+    linear-gradient(90deg, rgba(255, 179, 0, 0.045), transparent 32%),
+    rgba(20, 24, 33, 0.70);
+}
+.sa-sim-panel button[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.12), 0 0 18px rgba(255, 179, 0, 0.08);
+}
+.sa-flight-state {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: #141821;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.12);
+}
+.sa-flight-summary > div {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(23, 32, 46, 0.95), rgba(14, 20, 30, 0.9));
+}
+.sa-flight-summary > div::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: linear-gradient(#7ecde0, transparent 72%);
+  opacity: 0.44;
+}
+.sa-progress {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(90deg, rgba(18, 31, 45, 0.92), rgba(20, 24, 33, 0.82));
+}
+.sa-climb-fill {
+  position: relative;
+  box-shadow: 0 0 14px rgba(126, 205, 224, 0.42);
+}
+.sa-climb-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 28px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62));
+}
+.sa-annunciator-strip {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-top: 0;
+  background: rgba(20, 24, 33, 0.80);
+}
+.sa-annunciator-strip > ul {
+  border: 0;
+  background: transparent;
+}
+.sa-cabin-grid > div > header { position: relative; }
+.sa-cabin-grid > div > header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 72px;
+  height: 1px;
+  background: #ffb300;
 }
 
 /* Anything that is a number, a seat, or an address. */
@@ -33,12 +220,6 @@ body {
   letter-spacing: -0.018em;
   text-wrap: balance;
 }
-
-/* ── Signage glow, for the title only ─────────────────────────────────
-   Airport signage is lit, not neon. Enough spill to read as illuminated,
-   not so much that it looks like a casino. */
-.sa-glow-amber { text-shadow: 0 0 10px rgba(255, 179, 0, 0.42), 0 0 34px rgba(255, 179, 0, 0.16); }
-.sa-glow-cyan  { text-shadow: 0 0 10px rgba(126, 205, 224, 0.4), 0 0 34px rgba(126, 205, 224, 0.14); }
 
 /* ── CRT scanlines over the glass ─────────────────────────────────── */
 .sa-scanlines {
@@ -72,20 +253,69 @@ body {
 }
 .sa-shine:hover::after { animation: sa-shine 0.9s ease; }
 
-/* ── Sections rise in as they are scrolled to ─────────────────────── */
-.sa-reveal { opacity: 0; transform: translateY(26px); }
-.sa-reveal.is-in {
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 /* ── The flight deck ──────────────────────────────────────────────
    The instruments animate by transform only, so containing paint
    keeps the whole panel cheap to composite. */
 .sa-hud { contain: paint; }
+
+/* ── The ground going past ────────────────────────────────────────────
+   Each layer translates by exactly one pattern width and starts again, so
+   the loop is seamless.
+
+   Flying sideways over a perspective grid is a shear about the horizon, not a
+   translation: a point slides by an amount proportional to how far below the
+   horizon it sits. The sign is set by which way the aircraft points — it is
+   drawn nose-right, so the world has to go left past it, and the shear is
+   negative. That single transform gives the parallax for free — the
+   vanishing point is pinned, the ground underfoot races — and it maps the
+   grid onto itself once it has swept one field, so the loop has no seam.
+
+   The stops exist because CSS interpolates the skew *angle* while the shear
+   is its tangent. Ramping one angle linearly to 83 degrees would have the
+   ground barely creep for twenty seconds and then bolt. Sampling the arctangent
+   instead keeps the ground moving at a constant rate, which is the only rate
+   that reads as flight. Compositor-only, so the whole landscape costs one
+   layer. */
+@keyframes sa-sweep {
+  0.0000% { transform: skewX(-0.0000deg); }
+  3.5714% { transform: skewX(-16.6992deg); }
+  7.1429% { transform: skewX(-30.9638deg); }
+  10.7143% { transform: skewX(-41.9872deg); }
+  14.2857% { transform: skewX(-50.1944deg); }
+  17.8571% { transform: skewX(-56.3099deg); }
+  21.4286% { transform: skewX(-60.9454deg); }
+  25.0000% { transform: skewX(-64.5367deg); }
+  28.5714% { transform: skewX(-67.3801deg); }
+  32.1429% { transform: skewX(-69.6769deg); }
+  35.7143% { transform: skewX(-71.5651deg); }
+  39.2857% { transform: skewX(-73.1416deg); }
+  42.8571% { transform: skewX(-74.4759deg); }
+  46.4286% { transform: skewX(-75.6186deg); }
+  50.0000% { transform: skewX(-76.6075deg); }
+  53.5714% { transform: skewX(-77.4712deg); }
+  57.1429% { transform: skewX(-78.2317deg); }
+  60.7143% { transform: skewX(-78.9063deg); }
+  64.2857% { transform: skewX(-79.5085deg); }
+  67.8571% { transform: skewX(-80.0494deg); }
+  71.4286% { transform: skewX(-80.5377deg); }
+  75.0000% { transform: skewX(-80.9807deg); }
+  78.5714% { transform: skewX(-81.3844deg); }
+  82.1429% { transform: skewX(-81.7537deg); }
+  85.7143% { transform: skewX(-82.0928deg); }
+  89.2857% { transform: skewX(-82.4054deg); }
+  92.8571% { transform: skewX(-82.6942deg); }
+  96.4286% { transform: skewX(-82.9621deg); }
+  100.0000% { transform: skewX(-83.2110deg); }
+}
+.sa-sweep {
+  /* The shear is measured from the horizon, so the vanishing point is the one
+     thing that does not move. */
+  transform-box: view-box;
+  animation-name: sa-sweep;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
 
 /* Airframe shake — reserved for a move big enough to earn it. */
 @keyframes sd-shake {
@@ -103,12 +333,24 @@ body {
    the view physically larger and lets the SVG crop to its own centre,
    which is where every view keeps the thing worth seeing. The exterior
    keeps a wider frame — an aircraft cropped to its middle is a tube. */
-.sd-frame { aspect-ratio: 3 / 2; }
-.sd-frame--wide { aspect-ratio: 16 / 9; }
+.sd-frame { aspect-ratio: 3 / 2; max-height: min(72vh, 720px); }
+.sd-frame--wide { aspect-ratio: 16 / 9; max-height: min(72vh, 720px); }
 
 @media (max-width: 640px) {
+  .sa-shell { width: auto; }
   .sd-frame { aspect-ratio: 5 / 4; }
   .sd-frame--wide { aspect-ratio: 4 / 3; }
+  .sa-viewport .sd-frame,
+  .sa-viewport .sd-frame--wide {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto;
+    max-height: none;
+  }
+  .sa-topbar dl { gap: 0.75rem; }
+  .sa-hero { margin-bottom: 1rem; }
+  .sa-hero h1 { max-width: 13ch; font-size: clamp(1.65rem, 8vw, 1.9rem); }
+  .sd-controls { margin-top: 0.65rem; }
 }
 
 /* Full screen: the real answer on a phone, and worth having on a laptop.
@@ -116,6 +358,7 @@ body {
 .sd-full .sd-frame,
 .sd-full .sd-frame--wide {
   aspect-ratio: auto;
+  max-height: none;
   height: 100%;
   min-height: 0;
 }
@@ -137,6 +380,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sd-shake, .sa-pulse-glow, .sa-shine::after { animation: none !important; }
-  .sa-reveal { opacity: 1; transform: none; transition: none; }
+  html { scroll-behavior: auto; }
+  .sd-shake, .sa-pulse-glow, .sa-shine::after, .sa-sweep, .sa-view-loading__mark { animation: none !important; }
 }

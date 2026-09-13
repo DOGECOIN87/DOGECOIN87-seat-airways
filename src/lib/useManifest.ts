@@ -18,7 +18,9 @@ import { EMPTY_MANIFEST, seatHolders, type Manifest } from './manifest';
 const REFRESH = 90_000;
 
 export function useManifest(address: string | null, holding: Holding | null): Manifest {
-  const [list, setList] = useState<HolderList | null>(isConfigured ? null : demoHolders());
+  // Lazily: useState evaluates its argument on every render otherwise, and
+  // this builds a whole demonstration holder list each time.
+  const [list, setList] = useState<HolderList | null>(() => (isConfigured ? null : demoHolders()));
 
   useEffect(() => {
     if (!isConfigured) return;

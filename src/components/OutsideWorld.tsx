@@ -1,4 +1,4 @@
-import { forwardRef, useMemo } from 'react';
+import { forwardRef, useMemo, type CSSProperties } from 'react';
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 
@@ -30,6 +30,17 @@ interface OutsideWorldProps {
   horizonY: number;
   /** Half-width the scene must still cover when banked hard over. */
   spread?: number;
+  /**
+   * Seconds for the ground to travel one field pattern.
+   *
+   * The landscape is not scenery, it is the only thing on the page that says
+   * the aircraft is moving — a static ground under a moving horizon reads as a
+   * photograph, however good the drawing is. Lower is faster. Views looking
+   * out of the side get the full rate; views looking forward get a much slower
+   * one, because from the front the ground should be coming *at* you and a
+   * brisk sideways slide would read as a permanent crab.
+   */
+  driftSeconds?: number;
 }
 
 function seeded(seed: number) {
@@ -51,7 +62,7 @@ function seeded(seed: number) {
 const groundY = (horizonY: number, t: number) => horizonY + 1250 * t ** 2.3;
 
 const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
-  ({ idPrefix, sky, band, horizonY, spread = 1400 }, ref) => {
+  ({ idPrefix, sky, band, horizonY, spread = 1400, driftSeconds = 19 }, ref) => {
     const p = sky.palette;
     const w = spread * 2;
     const id = (name: string) => `${idPrefix}-${name}`;
@@ -67,53 +78,97 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
     }, [horizonY, spread, w]);
 
     /**
-     * The ground, in perspective.
+     * The ground, in perspective — and moving.
      *
-     * Laid out as a grid in world space and projected, rather than scattered:
-     * horizontal scale falls off with distance exactly as vertical does, so
-     * the fields converge on the horizon instead of floating over it. Fourteen
-     * rows is enough to read as farmland from altitude without becoming a
-     * thousand paths to paint.
+     * ── Why it is built this way ─────────────────────────────────────────
+     * The ground has to do two things that pull against each other: converge
+     * on the horizon like a real landscape, and slide past forever without a
+     * seam. Tiling a strip and scrolling it gives you the second and loses the
+     * first; drawing honest perspective and translating it gives you the first
+     * and tears at the edges.
+     *
+     * Both fall out of one observation. If the fields are drawn as a true
+     * perspective grid — every field boundary aimed at the vanishing point,
+     * horizontal spacing growing in proportion to depth — then flying sideways
+     * is not a translation at all. It is a *shear about the horizon*: every
+     * point slides by an amount proportional to how far below the horizon it
+     * sits, which is zero at the vanishing point and largest underfoot. And
+     * that shear maps the grid exactly onto itself once it has swept one field
+     * width. Nothing tears, because the picture after one field is the picture
+     * before it.
+     *
+     * So the whole landscape animates on a single transform, the parallax is a
+     * consequence of the geometry rather than something tuned per layer, and
+     * the loop is exact. The fields only have to repeat their *colours* every
+     * `COLS`, which is why the sweep runs that many fields before restarting.
      */
+    const GROUND_H = 400;
+    /** Field width at the bottom edge of the drawn ground. */
+    const CELL_W = 420;
+    /** Fields per colour repeat, and so how far the sweep runs. */
+    const COLS = 8;
+
     const terrain = useMemo(() => {
       const rand = seeded(0x7e44a1);
-      const ROWS = 14;
-      const COLS = 13;
-      const cells: { d: string; fill: string; o: number }[] = [];
+      const ROWS = 16;
+      /** Fields either side of centre, including the sweep's overscan. */
+      const REACH = 15;
 
-      const px = (k: number, t: number) => k * 300 * t;
-      const rowY = (j: number) => groundY(horizonY, (j / ROWS) ** 1.15);
+      /* Depth of each row boundary, 0 at the horizon and 1 at the bottom.
+         Crowded toward the horizon, where the eye reads the convergence. */
+      const depth = (j: number) => 0.012 + (1 - 0.012) * (j / ROWS) ** 1.8;
+
+      interface Cell { d: string; fill: string; o: number }
+      const cells: Cell[] = [];
 
       for (let j = 0; j < ROWS; j++) {
-        const t0 = (j / ROWS) ** 1.15 || 0.012;
-        const t1 = ((j + 1) / ROWS) ** 1.15;
-        const y0 = rowY(j);
-        const y1 = rowY(j + 1);
-        for (let k = -COLS; k < COLS; k++) {
-          const jitter = (rand() - 0.5) * 0.34;
-          const x0a = px(k + jitter * 0.3, t0);
-          const x1a = px(k + 1 + jitter * 0.3, t0);
-          const x0b = px(k + jitter, t1);
-          const x1b = px(k + 1 + jitter, t1);
+        const u0 = depth(j);
+        const u1 = depth(j + 1);
+        const y0 = horizonY + GROUND_H * u0;
+        const y1 = horizonY + GROUND_H * u1;
+
+        /* One colour period, reused across the row. A working landscape is
+           pasture next to plough next to stubble, with the odd reservoir —
+           the variety is what makes the ground legible enough to read as
+           moving at all. */
+        const pattern = Array.from({ length: COLS }, () => {
           const roll = rand();
-          // A believable mix: mostly crop, some pasture, the odd bare field.
-          const fill = roll > 0.72 ? '#6E7A46' : roll > 0.46 ? '#4F6B41' : roll > 0.24 ? '#8A7C4E' : '#3F5A3A';
+          return {
+            fill:
+              roll > 0.94 ? '#3D6E96' // water
+                : roll > 0.72 ? '#6E7A46'
+                  : roll > 0.46 ? '#4F6B41'
+                    : roll > 0.24 ? '#8A7C4E'
+                      : '#3F5A3A',
+            o: 0.55 + rand() * 0.4,
+          };
+        });
+
+        for (let k = -REACH; k < REACH; k++) {
+          const q = pattern[((k % COLS) + COLS) % COLS];
+          // A perspective quad: its sides aim at the vanishing point, so the
+          // shear slides it along the grid instead of distorting it.
+          const xa = k * CELL_W * u0;
+          const xb = (k + 1) * CELL_W * u0;
+          const xc = (k + 1) * CELL_W * u1;
+          const xd = k * CELL_W * u1;
           cells.push({
-            d: `M${x0a} ${y0} L${x1a} ${y0} L${x1b} ${y1} L${x0b} ${y1} Z`,
-            fill,
-            o: 0.5 + rand() * 0.45,
+            d: `M${xa.toFixed(1)} ${y0.toFixed(1)} L${xb.toFixed(1)} ${y0.toFixed(1)} L${xc.toFixed(1)} ${y1.toFixed(1)} L${xd.toFixed(1)} ${y1.toFixed(1)} Z`,
+            fill: q.fill,
+            o: q.o,
           });
         }
       }
 
-      // A river, meandering down through the same projection.
-      let river = `M${px(-1.2, 0.012)} ${rowY(0)}`;
-      for (let j = 1; j <= ROWS; j++) {
-        const t = (j / ROWS) ** 1.15;
-        river += ` L${px(-1.2 + Math.sin(j * 0.8) * 1.5, t)} ${rowY(j)}`;
+      /* Hedgerows: the boundaries themselves, run right down to the bottom.
+         They are what actually announce the vanishing point. */
+      const hedges: string[] = [];
+      for (let k = -REACH; k <= REACH; k++) {
+        const u1 = 1;
+        hedges.push(`M0 ${horizonY} L${(k * CELL_W * u1).toFixed(1)} ${(horizonY + GROUND_H).toFixed(1)}`);
       }
 
-      return { cells, river };
+      return { cells, hedges };
     }, [horizonY]);
 
     /** Towns, for when the ground is only visible as light. */
@@ -131,20 +186,44 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
       });
     }, [horizonY, spread, w]);
 
-    /** Cloud puffs: overlapping circles, which is what makes them read as cumulus. */
+    /**
+     * Cumulus.
+     *
+     * Drawn as lobes, but the lobes are not the cloud — a ring of equal
+     * circles reads as a cartoon every time, because real cumulus is not
+     * symmetric and its edge is not a curve of constant radius. Three things
+     * fix it: the lobes get bigger toward the middle so the cloud has a
+     * crown and thins to wisps at the ends, the crown rises while the base
+     * stays flat (cumulus sits on the condensation level, which is a
+     * straight line across the sky), and each lobe is jittered off the grid
+     * it was placed on.
+     *
+     * The softness is in the fills rather than the geometry: every lobe is a
+     * radial gradient that reaches zero alpha at its rim, so overlapping
+     * lobes build density instead of stacking outlines.
+     */
     const clouds = useMemo(() => {
       const rand = seeded(0xc10d5);
       return Array.from({ length: 30 }, () => {
-        const scale = 0.45 + rand() * 1.5;
+        const n = 7 + Math.floor(rand() * 5);
+        const halfWidth = 96 + rand() * 96;
+        const puffs = Array.from({ length: n }, (_, i) => {
+          const t = n === 1 ? 0.5 : i / (n - 1);
+          // 0 at the middle of the cloud, 1 at either end.
+          const edge = Math.abs(t - 0.5) * 2;
+          const bulk = 1 - edge * edge;
+          return {
+            dx: (t - 0.5) * 2 * halfWidth + (rand() - 0.5) * 30,
+            // The crown piles up in the middle; the base is level.
+            dy: -bulk * (16 + rand() * 32) + (rand() - 0.5) * 9,
+            r: (26 + bulk * 58) * (0.78 + rand() * 0.44),
+          };
+        });
         return {
           x: -spread + rand() * w,
           y: (rand() - 0.5) * 150,
-          scale,
-          puffs: Array.from({ length: 5 + Math.floor(rand() * 4) }, () => ({
-            dx: (rand() - 0.5) * 260,
-            dy: (rand() - 0.5) * 42,
-            r: 34 + rand() * 76,
-          })),
+          scale: 0.5 + rand() * 1.35,
+          puffs,
         };
       });
     }, [spread, w]);
@@ -166,6 +245,25 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
       }));
     }, [horizonY, spread, w]);
 
+    /**
+     * One row's share of the drift.
+     *
+     * Every layer crosses its own pattern in the same time, so how fast a
+     * thing appears to move is decided entirely by how wide its pattern is —
+     * which is to say by how far away it is. Distance does the work; there is
+     * no per-layer speed to keep in sync.
+     */
+    /* The sweep is the same shape for every view; only where the horizon sits
+       and how fast the ground goes by change. */
+    const sweepStyle = useMemo(
+      () =>
+        ({
+          transformOrigin: `0px ${horizonY}px`,
+          animationDuration: `${driftSeconds}s`,
+        }) as CSSProperties,
+      [horizonY, driftSeconds],
+    );
+
     const sunX = sky.sunX * spread * 0.55;
     const inAtmosphere = band.band === 'atmosphere';
     const aboveClouds = band.band === 'above-clouds';
@@ -177,17 +275,22 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
     const earthR = 2800 + band.progress * 6000;
 
 
-    /** One cumulus, drawn as a cluster with a lit top and a shaded base. */
+    /** One cumulus: shaded base, body, then the crown catching the sun. */
     const Cloud = ({ c, opacity }: { c: (typeof clouds)[number]; opacity: number }) => (
-      <g transform={`translate(${c.x} 0) scale(${c.scale} ${c.scale * 0.8})`} opacity={opacity}>
-        <g fill={`url(#${id('cloudshade')})`}>
+      <g transform={`translate(${c.x} 0) scale(${c.scale} ${c.scale * 0.82})`} opacity={opacity}>
+        <g fill={`url(#${id('cloudbase')})`}>
           {c.puffs.map((q, i) => (
-            <circle key={i} cx={q.dx} cy={q.dy + 16} r={q.r} />
+            <ellipse key={i} cx={q.dx} cy={q.dy + q.r * 0.44} rx={q.r * 1.12} ry={q.r * 0.8} />
           ))}
         </g>
-        <g fill={`url(#${id('cloudlit')})`}>
+        <g fill={`url(#${id('cloudbody')})`}>
           {c.puffs.map((q, i) => (
-            <circle key={i} cx={q.dx} cy={q.dy} r={q.r} />
+            <ellipse key={i} cx={q.dx} cy={q.dy} rx={q.r * 1.08} ry={q.r * 0.92} />
+          ))}
+        </g>
+        <g fill={`url(#${id('cloudtop')})`}>
+          {c.puffs.map((q, i) => (
+            <ellipse key={i} cx={q.dx} cy={q.dy - q.r * 0.34} rx={q.r * 0.74} ry={q.r * 0.5} />
           ))}
         </g>
       </g>
@@ -196,6 +299,11 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
     return (
       <>
         <defs>
+          {/* The ground keeps its perspective shape while its contents slide
+              through it. */}
+          <clipPath id={id('wedge')}>
+            <rect x={-spread} y={horizonY} width={w} height={GROUND_H + 900} />
+          </clipPath>
           <linearGradient id={id('sky')} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={p.top} />
             <stop offset="52%" stopColor={p.mid} />
@@ -229,13 +337,34 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
             <stop offset="70%" stopColor={p.horizon} stopOpacity="0.55" />
             <stop offset="100%" stopColor={p.horizon} stopOpacity="0.85" />
           </linearGradient>
-          <linearGradient id={id('cloudlit')} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={night ? '#8A93B0' : '#FFFFFF'} />
-            <stop offset="100%" stopColor={night ? '#4A5474' : '#DCE8F6'} />
-          </linearGradient>
-          <linearGradient id={id('cloudshade')} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={night ? '#2C3450' : '#9DB0C8'} />
-            <stop offset="100%" stopColor={night ? '#161C2E' : '#7C90AC'} />
+          {/* Cloud fills reach zero alpha at the rim, so overlapping lobes
+              accumulate density rather than drawing their own outlines. */}
+          <radialGradient id={id('cloudbody')} cx="0.5" cy="0.42" r="0.56">
+            <stop offset="0%" stopColor={night ? '#7B86A4' : '#FFFFFF'} stopOpacity="0.97" />
+            <stop offset="54%" stopColor={night ? '#6A748E' : '#F5F9FF'} stopOpacity="0.85" />
+            <stop offset="82%" stopColor={night ? '#535C76' : '#DEE9F8'} stopOpacity="0.40" />
+            <stop offset="100%" stopColor={night ? '#474F66' : '#CCDAEC'} stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id={id('cloudbase')} cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0%" stopColor={night ? '#1B2236' : '#8FA5C3'} stopOpacity="0.70" />
+            <stop offset="60%" stopColor={night ? '#1B2236' : '#9BAEC7'} stopOpacity="0.36" />
+            <stop offset="100%" stopColor={night ? '#1B2236' : '#A7B8CE'} stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id={id('cloudtop')} cx="0.5" cy="0.45" r="0.5">
+            <stop offset="0%" stopColor={night ? '#A6B0CC' : '#FFFFFF'} stopOpacity="0.82" />
+            <stop offset="60%" stopColor={night ? '#A6B0CC' : '#FFFFFF'} stopOpacity="0.30" />
+            <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+          </radialGradient>
+          {/* Distance washes the ground toward the colour of the air in
+              front of it. Without this the fields at the horizon are as
+              saturated as the ones underfoot, which is the single loudest
+              tell that a landscape was drawn rather than seen. */}
+          <linearGradient id={id('groundhaze')} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={p.horizon} stopOpacity="0.88" />
+            <stop offset="6%" stopColor={p.horizon} stopOpacity="0.46" />
+            <stop offset="15%" stopColor={p.horizon} stopOpacity="0.19" />
+            <stop offset="30%" stopColor={p.horizon} stopOpacity="0.05" />
+            <stop offset="52%" stopColor={p.horizon} stopOpacity="0" />
           </linearGradient>
           <radialGradient id={id('rim')} cx="0.5" cy="0.5" r="0.5">
             <stop offset="88%" stopColor="#5AA9FF" stopOpacity="0" />
@@ -300,8 +429,13 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
               <rect x={-spread} y={horizonY} width={w} height="1300" fill={`url(#${id('ground')})`} />
 
               {night ? (
-                /* At night the ground is only towns. */
-                <g>
+                /* At night the ground is only towns — and they go past as
+                   surely as the fields do. Two copies, one pattern width
+                   apart, so the loop has somewhere to come from. */
+                <g clipPath={`url(#${id('wedge')})`}>
+                 {[0, COLS * CELL_W].map((offset) => (
+                  <g key={offset} className="sa-sweep" style={sweepStyle}>
+                   <g transform={`translate(${offset} 0)`}>
                   {cities.map((c, i) => {
                     const rand = seeded(c.seed);
                     return (
@@ -320,17 +454,35 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
                       </g>
                     );
                   })}
+                   </g>
+                  </g>
+                 ))}
                 </g>
               ) : (
-                /* By day it is fields, water and roads. */
-                <g>
-                  {terrain.cells.map((c, i) => (
-                    <path key={i} d={c.d} fill={c.fill} opacity={c.o} />
-                  ))}
-                  <path d={terrain.river} stroke="#3D6E96" strokeWidth="14" fill="none" opacity="0.55" strokeLinejoin="round" />
-                  <path d={terrain.river} stroke="#7FB4D8" strokeWidth="4" fill="none" opacity="0.4" strokeLinejoin="round" />
+                /* By day it is fields and water, going past. */
+                <g clipPath={`url(#${id('wedge')})`}>
+                  <g className="sa-sweep" style={sweepStyle}>
+                    {terrain.cells.map((c, i) => (
+                      <path key={i} d={c.d} fill={c.fill} opacity={c.o} />
+                    ))}
+                    <g stroke="#2A3D22" strokeWidth="1.6" opacity="0.32" fill="none">
+                      {terrain.hedges.map((d, i) => (
+                        <path key={i} d={d} />
+                      ))}
+                    </g>
+                  </g>
                 </g>
               )}
+
+              {/* Distance, laid over the ground: far fields sink into the
+                  colour of the air, near ones keep their contrast. */}
+              <rect
+                x={-spread}
+                y={horizonY}
+                width={w}
+                height={GROUND_H * 1.6}
+                fill={`url(#${id('groundhaze')})`}
+              />
 
               {/* Haze thickens toward the horizon, as it really does */}
               <rect x={-spread} y={horizonY - 330} width={w} height="330" fill={`url(#${id('haze')})`} />
@@ -421,7 +573,7 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
                 </g>
                 {/* Land, as ochre under the weather */}
                 <g fill="#6B7A4E" opacity="0.4">
-                  {terrain.cells.slice(0, 60).map((_cell, i) => (
+                  {Array.from({ length: 60 }, (_, i) => (
                     <ellipse key={i} cx={(i - 30) * 46} cy={horizonY + 66 + (i % 7) * 26} rx="72" ry="9" />
                   ))}
                 </g>

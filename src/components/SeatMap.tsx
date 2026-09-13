@@ -158,7 +158,7 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
       /* One knob sets the whole grid: the seat is a square and everything is
          measured off it, so the map scales from a phone to a desktop without
          a second layout. */
-      style={{ '--seat': 'clamp(30px, 7.2vw, 52px)', '--cabin-w': 'min(100%, 34rem)' } as CSSProperties}
+      style={{ '--seat': 'clamp(30px, 6.4vw, 62px)', '--cabin-w': 'min(100%, 42rem)' } as CSSProperties}
     >
       {/* ── Nose ── */}
       <svg viewBox="0 0 320 54" preserveAspectRatio="none" className="mx-auto block h-11 w-full max-w-[var(--cabin-w)]" aria-hidden>

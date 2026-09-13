@@ -83,55 +83,6 @@ export function phaseFor(change24h: number): string {
   return 'EMERGENCY DESCENT';
 }
 
-/* ── Cabin occupancy ──────────────────────────────────────────────────────
-   The prototype rolled a fresh random number for every seat on every build,
-   so the cabin reshuffled on each render and the same seat could be free one
-   second and sold the next. Occupancy is seeded instead: one number in, the
-   same cabin out, every time — and the good seats fill first, because that is
-   the whole premise. */
-
-/** Deterministic PRNG so a given seed always produces the same cabin. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** How full each zone runs. Scarcer cabin forward — bigger bags sit up front. */
-const OCCUPANCY: Record<string, number> = {
-  deck: 1,
-  first: 0.92,
-  business: 0.84,
-  exit: 0.7,
-  economy: 0.58,
-};
-
-/**
- * Which seats are already sold, for a given cabin seed.
- *
- * Returns a Set of seat ids. `alwaysFree` is honoured whatever the roll says,
- * so the page can guarantee at least one seat is claimable — 30B, by the
- * lavatory, which is the joke.
- */
-export function occupiedSeats(
-  seats: readonly { id: string; zone: string }[],
-  seed: number,
-  alwaysFree: readonly string[] = [],
-): Set<string> {
-  const rand = mulberry32(seed);
-  const free = new Set(alwaysFree);
-  const taken = new Set<string>();
-  for (const seat of seats) {
-    const rate = OCCUPANCY[seat.zone] ?? 0.6;
-    if (!free.has(seat.id) && rand() < rate) taken.add(seat.id);
-  }
-  return taken;
-}
-
 /* ── Altitude bands ───────────────────────────────────────────────────────
    The higher the token's price, the higher the aircraft — and past a point,
    the aircraft stops being in weather at all. Market cap is read straight as
@@ -221,9 +172,3 @@ export const formatVerticalSpeed = (n: number) => {
   const hundreds = Math.round(n / 100);
   return `${hundreds >= 0 ? '+' : '−'}${Math.abs(hundreds).toLocaleString('en-US')}`;
 };
-
-/** Compass point for a heading in degrees. */
-export function headingLabel(deg: number): string {
-  const points = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  return points[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
-}

@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FlightDeck from './components/FlightDeck';
-import CabinView3D from './components/CabinView3D';
-import ExteriorView from './components/ExteriorView';
 import CargoHold from './components/CargoHold';
 import CheckIn from './components/CheckIn';
 import Mark from './components/Mark';
@@ -48,6 +46,12 @@ import {
   type Banner,
   type BannerSet,
 } from './lib/banners';
+
+// The renderer and Three.js are the heaviest parts of the experience. Keeping
+// them behind the view boundary lets the controls and live flight data become
+// interactive immediately, rather than making the whole page wait on WebGL.
+const CabinView3D = lazy(() => import('./components/CabinView3D'));
+const ExteriorView = lazy(() => import('./components/ExteriorView'));
 
 /**
  * SEAT AIRWAYS — the cabin.
@@ -110,6 +114,19 @@ function representativeSeat(zone: ZoneKey, position: SeatPosition): CabinSeat {
   const inZone = ALL_SEATS.filter((s) => s.zone === zone);
   return inZone.find((s) => s.position === position) ?? inZone[0];
 }
+
+const SceneLoading = ({ exterior = false }: { exterior?: boolean }) => (
+  <div
+    className={`sa-view-loading sd-frame ${exterior ? 'sd-frame--wide' : ''}`}
+    role="status"
+    aria-live="polite"
+  >
+    <div className="sa-view-loading__mark" aria-hidden />
+    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-seat-cyan">
+      Preparing {exterior ? 'exterior' : 'cabin'} view
+    </p>
+  </div>
+);
 
 export default function App() {
 
@@ -302,7 +319,7 @@ export default function App() {
 
 
   return (
-    <div className="relative min-h-[calc(100vh-var(--navbar-height,56px))] text-white">
+    <div className="sa-app relative min-h-screen text-white">
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div
           className="absolute inset-0"
@@ -311,52 +328,53 @@ export default function App() {
               'radial-gradient(1200px 800px at 50% -10%, #1B2231 0%, transparent 62%), linear-gradient(180deg, #0B0E14 0%, #070910 100%)',
           }}
         />
-        <div className="sa-scanlines absolute inset-0 opacity-[0.09]" />
+        <div className="sa-scanlines absolute inset-0 opacity-[0.035]" />
       </div>
 
-      <section className="mx-auto max-w-6xl px-5 pb-24 pt-12 sm:px-6">
-        {/* ── Masthead ──────────────────────────────────────────────────
-            A gate sign, not a landing page. An airline's own vernacular is a
-            brand bar over a strip of flight data, left-aligned and set in
-            figures you can read across a concourse — so the page opens on the
-            live numbers rather than on a headline about them. */}
-        <header>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border border-white/10 bg-seat-navy px-4 py-3 sm:px-5">
-            <Mark size={38} background="none" title="SEAT AIRWAYS" />
-            <h1 className="font-heading text-2xl leading-none text-white sm:text-[28px]">
-              Seat Airways
-            </h1>
-            <p className="ml-auto font-mono text-[11px] uppercase tracking-[0.22em] text-white/60">
+      {/* ── Gate sign ──────────────────────────────────────────────────
+          An airline's vernacular is a brand bar over a strip of flight data,
+          set in figures you can read across a concourse. It stays at the top
+          of the screen rather than scrolling away, because the numbers are the
+          thing that is live — you should be able to see the altitude move
+          while you are reading the seat map. */}
+      <header className="sa-topbar sticky top-0 z-40 border-b border-white/10 bg-[#0A0F16]/88 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[92rem] flex-wrap items-center gap-x-6 gap-y-2 px-5 py-2.5 sm:px-8">
+          <div className="flex shrink-0 items-center gap-3">
+            <Mark size={30} background="none" title="SEAT AIRWAYS" />
+            <span className="whitespace-nowrap font-heading text-lg leading-none text-white">Seat Airways</span>
+            <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-white/40 sm:inline">
               FL350 · Nonstop
-            </p>
+            </span>
           </div>
 
-          <dl className="grid grid-cols-2 border-x border-b border-white/10 bg-seat-panel sm:grid-cols-4">
+          <dl className="sd-chrome ml-auto flex w-full min-w-0 items-center justify-between gap-x-7 overflow-x-auto sm:w-auto sm:max-w-[70%] sm:justify-start">
             {[
               { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, tone: 'text-seat-amber' },
               { k: 'Market cap', v: formatCap(tick.marketCap), tone: 'text-white' },
               { k: '24h', v: formatChange(tick.change24h), tone: tick.change24h >= 0 ? 'text-seat-cyan' : 'text-red-300' },
-              { k: 'Seated', v: `${manifest.entries.length} / ${MANIFEST_SIZE}`, tone: 'text-white' },
-            ].map((f, i) => (
-              <div
-                key={f.k}
-                className={`px-4 py-3 sm:px-5 ${i > 0 ? 'border-l border-white/[0.07]' : ''} ${i > 1 ? 'border-t border-white/[0.07] sm:border-t-0' : ''} ${i === 2 ? 'border-l-0 sm:border-l' : ''}`}
-              >
-                <dt className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-blue-100/40">{f.k}</dt>
-                <dd className={`mt-1 font-mono text-lg leading-none sm:text-xl ${f.tone}`}>{f.v}</dd>
+              { k: 'Seated', v: `${manifest.entries.length}/${MANIFEST_SIZE}`, tone: 'text-white' },
+            ].map((f) => (
+              <div key={f.k} className="shrink-0">
+                <dt className="text-[8.5px] font-semibold uppercase tracking-[0.2em] text-blue-100/40">{f.k}</dt>
+                <dd className={`font-mono text-[15px] leading-tight ${f.tone}`}>{f.v}</dd>
               </div>
             ))}
           </dl>
+        </div>
+      </header>
 
-          <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-blue-100/70">
-            Your bag is your seat. Bigger bag, better seat. Seats are finite and only the top{' '}
-            <span className="font-mono text-white">{MANIFEST_SIZE}</span> holders get one — so a bigger bag
-            takes yours, you'll be reseated, and everyone will hear about it.
+      <section className="sa-shell mx-auto max-w-[92rem] px-5 pb-24 pt-7 sm:px-8 sm:pt-9">
+        <div className="sa-hero mb-5 flex flex-col justify-between gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end">
+          <div>
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-seat-cyan/80">Live flight simulator · FL350</p>
+            <h1 className="mt-1.5 font-heading text-3xl leading-none text-white sm:text-4xl">One plane. Everyone&apos;s in it.</h1>
+          </div>
+          <p className="max-w-md text-sm leading-relaxed text-blue-100/55 sm:text-right">
+            Market movement becomes altitude and attitude. Walk the cabin, then orbit the aircraft outside.
           </p>
-        </header>
-
+        </div>
         {/* ── The view ── */}
-        <div className={`mt-10 ${lamps.shaking ? 'sd-shake' : ''}`}>
+        <div className={lamps.shaking ? 'sa-viewport sd-shake' : 'sa-viewport'}>
           <ViewFrame
             label={
               camera === 'exterior'
@@ -371,7 +389,7 @@ export default function App() {
             zoomOutHint="Zoom out of the aircraft"
             actions={
               camera === 'seat' ? (
-                <div className="sd-chrome flex shrink-0 items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible" role="group" aria-label="Turn your head">
+                <div className="flex shrink-0 items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible" role="group" aria-label="Turn your head">
                   {FACINGS.map((f) => {
                     const on = facing === f.key;
                     return (
@@ -405,32 +423,36 @@ export default function App() {
             {camera === 'hold' ? (
               <CargoHold feed={feed} band={band} belowCutoff={belowCutoff} />
             ) : camera === 'exterior' ? (
-              <ExteriorView
-                feed={feed}
-                sky={sky}
-                band={band}
-                taken={taken}
-                claimed={claimedSeat}
-                viewing={viewSeat}
-              />
+              <Suspense fallback={<SceneLoading exterior />}>
+                <ExteriorView
+                  feed={feed}
+                  sky={sky}
+                  band={band}
+                  taken={taken}
+                  claimed={claimedSeat}
+                  viewing={viewSeat}
+                />
+              </Suspense>
             ) : camera === 'deck' ? (
               <FlightDeck feed={feed} lamps={lamps} sky={sky} band={band} />
             ) : (
-              <CabinView3D
-                feed={feed}
-                sky={sky}
-                band={band}
-                seat={viewSeat}
-                zone={viewZoneDef}
-                facing={facing}
-                taken={taken}
-              />
+              <Suspense fallback={<SceneLoading />}>
+                <CabinView3D
+                  feed={feed}
+                  sky={sky}
+                  band={band}
+                  seat={viewSeat}
+                  zone={viewZoneDef}
+                  facing={facing}
+                  taken={taken}
+                />
+              </Suspense>
             )}
           </ViewFrame>
         </div>
 
         {/* ── Walk the aircraft ── */}
-        <div className="mt-5 flex flex-col gap-3 border border-white/10 bg-[#141821]/70 px-4 py-4 backdrop-blur-sm sm:flex-row sm:items-center">
+        <div className="sa-flight-nav mt-4 flex flex-col gap-3 border border-white/10 bg-[#141821]/70 px-4 py-4 backdrop-blur-sm sm:flex-row sm:items-center">
           <div className="sd-chrome -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
             <span className="mr-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-blue-100/40">Walk the aircraft</span>
             <button
@@ -439,7 +461,7 @@ export default function App() {
               aria-pressed={camera === 'exterior'}
               className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
                 camera === 'exterior'
-                  ? 'border-seat-amber/70 bg-seat-amber/15 text-white'
+                  ? 'border-seat-cyan/70 bg-seat-cyan/15 text-white'
                   : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
               }`}
             >
@@ -453,11 +475,11 @@ export default function App() {
                   type="button"
                   onClick={() => walkTo(z.key)}
                   aria-pressed={on}
-                  className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
-                    on
-                      ? 'border-seat-amber/70 bg-seat-amber/15 text-white'
-                      : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
-                  }`}
+                    className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
+                      on
+                        ? 'border-seat-cyan/70 bg-seat-cyan/15 text-white'
+                        : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
+                    }`}
                 >
                   {z.name}
                 </button>
@@ -469,7 +491,7 @@ export default function App() {
               aria-pressed={camera === 'hold'}
               className={`shrink-0 whitespace-nowrap border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
                 camera === 'hold'
-                  ? 'border-seat-amber/70 bg-seat-amber/15 text-white'
+                  ? 'border-seat-cyan/70 bg-seat-cyan/15 text-white'
                   : 'border-white/12 bg-white/[0.03] text-blue-100/60 hover:border-white/25 hover:text-white'
               }`}
             >
@@ -503,37 +525,39 @@ export default function App() {
         </div>
 
         {/* ── Where the flight is ── */}
-        <dl className="mt-4 grid grid-cols-2 gap-px border border-white/10 bg-white/10 sm:grid-cols-4">
-          {[
-            { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, s: formatCap(tick.marketCap) },
-            { k: '24h', v: formatChange(tick.change24h), s: tick.change24h >= 0 ? 'Climbing' : 'Descending' },
-            { k: 'Outside', v: sky.label, s: sky.live ? 'Live weather' : 'Modelled weather' },
-            { k: 'Band', v: band.label, s: band.next ?? 'Nowhere higher to go' },
-          ].map((cell) => (
-            <div key={cell.k} className="bg-[#141821]/80 px-4 py-3.5">
-              <dt className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100/40">{cell.k}</dt>
-              <dd className="mt-1 text-base leading-snug text-white sm:text-lg">{cell.v}</dd>
-              <dd className="mt-0.5 text-[11px] leading-snug text-blue-100/45">{cell.s}</dd>
-            </div>
-          ))}
-        </dl>
+        <section className="sa-flight-state mt-4" aria-label="Flight state">
+          <dl className="sa-flight-summary grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4">
+            {[
+              { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, s: formatCap(tick.marketCap) },
+              { k: '24h', v: formatChange(tick.change24h), s: tick.change24h >= 0 ? 'Climbing' : 'Descending' },
+              { k: 'Outside', v: sky.label, s: sky.live ? 'Live weather' : 'Modelled weather' },
+              { k: 'Band', v: band.label, s: band.next ?? 'Nowhere higher to go' },
+            ].map((cell) => (
+              <div key={cell.k} className="bg-[#141821]/80 px-4 py-3.5">
+                <dt className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100/40">{cell.k}</dt>
+                <dd className="mt-1 text-base leading-snug text-white sm:text-lg">{cell.v}</dd>
+                <dd className="mt-0.5 text-[11px] leading-snug text-blue-100/45">{cell.s}</dd>
+              </div>
+            ))}
+          </dl>
 
-        {/* Climb meter toward the next band */}
-        <div className="mt-px border border-white/10 bg-[#141821]/80 px-4 py-3">
-          <div className="flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-[0.16em] text-blue-100/40">
-            <span>{band.label}</span>
-            <span>{band.next ?? 'The moon'}</span>
+          {/* Climb meter toward the next band */}
+          <div className="sa-progress bg-[#141821]/80 px-4 py-3">
+            <div className="flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-[0.16em] text-blue-100/40">
+              <span>{band.label}</span>
+              <span>{band.next ?? 'The moon'}</span>
+            </div>
+            <div className="mt-2 h-1.5 w-full bg-white/[0.07]">
+              <div
+                className="sa-climb-fill h-full bg-gradient-to-r from-seat-cyan to-seat-amber transition-[width] duration-500"
+                style={{ width: `${Math.max(1.5, band.toNext * 100)}%` }}
+              />
+            </div>
           </div>
-          <div className="mt-2 h-1.5 w-full bg-white/[0.07]">
-            <div
-              className="h-full bg-gradient-to-r from-seat-cyan to-seat-amber transition-[width] duration-500"
-              style={{ width: `${Math.max(1.5, band.toNext * 100)}%` }}
-            />
-          </div>
-        </div>
+        </section>
 
         {/* ── Flight sim ── */}
-        <div className="mt-4 flex flex-col gap-3 border border-white/10 bg-[#141821]/70 px-4 py-4 backdrop-blur-sm">
+        <div className="sa-sim-panel mt-4 flex flex-col gap-3 border border-white/10 bg-[#141821]/70 px-4 py-4 backdrop-blur-sm">
           <div className="sd-chrome -mx-1 flex items-center gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
             <span className="mr-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-blue-100/40">Flight sim</span>
             {MODES.map((m) => {
@@ -577,12 +601,12 @@ export default function App() {
           )}
         </div>
 
-        <div className="mt-4">
+        <div className="sa-annunciator-strip">
           <Annunciators lamps={lamps} />
         </div>
 
         {/* ── Cabin + pass ── */}
-        <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-14">
+        <div id="cabin" className="sa-cabin-grid mt-16 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start lg:gap-12 scroll-mt-24">
           <div>
             <header className="border-b border-white/10 pb-4">
               <h2 className="font-heading text-3xl text-white sm:text-4xl">Cabin</h2>
@@ -608,7 +632,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-8 lg:sticky lg:top-24">
             <div>
               <header className="border-b border-white/10 pb-4">
                 <h2 className="font-heading text-3xl text-white sm:text-4xl">Your pass</h2>

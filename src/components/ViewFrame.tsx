@@ -62,23 +62,29 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
         return;
       }
       const s = clamp(nextScale, MIN, MAX);
-      setScale((prev) => {
-        if (!box || clientX === undefined || clientY === undefined) {
-          setPan((p) => clampPan(p, s));
-          return s;
-        }
+      // Both updates are computed from the scale we already have rather than
+      // from inside the scale updater: a state updater has to be pure, and
+      // nesting one setState inside another means StrictMode runs the pan
+      // correction twice in development and once in production.
+      const prev = scale;
+      if (!box || clientX === undefined || clientY === undefined) {
+        setPan((p) => clampPan(p, s));
+      } else {
         const rect = box.getBoundingClientRect();
         const ox = clientX - rect.left - rect.width / 2;
         const oy = clientY - rect.top - rect.height / 2;
         setPan((p) => clampPan({ x: ox - ((ox - p.x) * s) / prev, y: oy - ((oy - p.y) * s) / prev }, s));
-        return s;
-      });
+      }
+      setScale(s);
     },
     [clampPan, scale, onZoomOutBeyond],
   );
 
   const onWheel = (e: ReactWheelEvent<HTMLDivElement>) => {
-    if (!e.ctrlKey && Math.abs(e.deltaY) < 2) return;
+    // Preserve ordinary page scrolling. Pinch/ctrl-wheel is an intentional
+    // camera gesture; every other wheel movement should get the viewer to the
+    // next section instead of trapping them in the scene.
+    if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     zoomAbout(scale * (e.deltaY < 0 ? 1.14 : 1 / 1.14), e.clientX, e.clientY);
   };
@@ -139,7 +145,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
     const box = boxRef.current;
     if (!box) return;
     const block = (e: WheelEvent) => {
-      if (e.deltaY) e.preventDefault();
+      if ((e.ctrlKey || e.metaKey) && e.deltaY) e.preventDefault();
     };
     box.addEventListener('wheel', block, { passive: false });
     return () => box.removeEventListener('wheel', block);
@@ -164,7 +170,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
   const zoomed = scale > 1.001;
 
   return (
-    <div className={full ? 'sd-full fixed inset-0 z-[60] flex flex-col gap-2 bg-[#05070F] p-3' : 'relative'}>
+    <div className={full ? 'sd-full fixed inset-0 z-[60] flex flex-col gap-2 bg-[#05070F] p-3' : 'sd-viewframe relative'}>
       <div
         ref={boxRef}
         tabIndex={0}
@@ -176,7 +182,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
         onPointerUp={endPointer}
         onPointerCancel={endPointer}
         onKeyDown={onKeyDown}
-        className={`relative overflow-hidden border border-white/12 bg-[#05070F] ${full ? 'min-h-0 flex-1' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
+        className={`sd-glass relative overflow-hidden border border-white/12 bg-[#05070F] ${full ? 'min-h-0 flex-1' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seat-cyan ${
           zoomed ? 'cursor-grab active:cursor-grabbing' : ''
         }`}
         style={{ touchAction: 'none' }}
@@ -191,15 +197,15 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
           {children}
         </div>
 
-        {/* Where you are, bottom left of the glass */}
-        <p className="pointer-events-none absolute bottom-3 left-3 border border-white/12 bg-[#05070F]/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-seat-cyan backdrop-blur-sm">
+        {/* Keep frame context away from the view's own bottom telemetry. */}
+        <p className="pointer-events-none absolute right-3 top-3 border border-white/12 bg-[#05070F]/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-seat-cyan backdrop-blur-sm">
           {label}
         </p>
       </div>
 
       {/* Chrome. On a narrow screen this scrolls sideways rather than
           stacking four rows deep and pushing the view off the top. */}
-      <div className="sd-chrome mt-3 flex items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+      <div className="sd-chrome sd-controls mt-3 flex items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
         <div className="flex shrink-0 items-center gap-1.5" role="group" aria-label="Zoom">
           <button
             type="button"
