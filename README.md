@@ -195,8 +195,11 @@ React render is involved in the instruments at all. The stateful parts — lamps
 the radio log — re-render at a human cadence instead.
 
 Everything is vector SVG, so it stays sharp at 4× zoom and adds nothing to the
-bundle. `prefers-reduced-motion` settles every view on its first reading and
-holds it: no loop, no shake, no motion.
+bundle. `prefers-reduced-motion` drops the rAF loop entirely: values snap rather than
+ease, nothing drifts on its own, and the scene is repainted on a slow,
+deliberate cadence instead of at sixty. The preference asks for no *animation*,
+not for no *information* — an instrument frozen on the reading it happened to
+open with is not accessible, it is wrong.
 
 ### Accessibility
 

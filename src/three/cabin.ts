@@ -163,6 +163,38 @@ function wallTexture(): THREE.CanvasTexture {
   return finish(g, 1, 1);
 }
 
+/**
+ * Hair, as relief.
+ *
+ * Strands running the way the hair falls, at two scales: a few coarse locks
+ * that catch the light, and a great many fine ones that break it up. Bump
+ * only — hair's colour is the instance's, so this carries none of its own.
+ */
+function strandTexture(): THREE.CanvasTexture {
+  const s = 512;
+  const g = ctx(s, s);
+  g.fillStyle = '#808080';
+  g.fillRect(0, 0, s, s);
+  const strand = (n: number, width: number, alpha: number, wobble: number) => {
+    for (let i = 0; i < n; i++) {
+      const x = Math.random() * s;
+      const bright = Math.random() > 0.5;
+      g.strokeStyle = bright ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
+      g.lineWidth = width;
+      g.beginPath();
+      g.moveTo(x, -10);
+      // v runs from crown to nape on the shell, so a strand runs down it.
+      for (let y = -10; y < s + 10; y += 26) {
+        g.lineTo(x + Math.sin(y / 40 + i) * wobble, y);
+      }
+      g.stroke();
+    }
+  };
+  strand(70, 5.5, 0.16, 9);
+  strand(420, 1.6, 0.22, 5);
+  return finish(g, 3, 2);
+}
+
 /** Seat fabric: a flecked weave, the way airline cloth hides wear. */
 function fabricTexture(): THREE.CanvasTexture {
   const s = 128;
@@ -430,6 +462,7 @@ const CLOTH = 0x36445c;
 const CLOTH_DARK = 0x27324a;
 const COVER = 0xc9cfd8;
 const TRIM = 0x6d7482;
+const BEZEL = 0x2c333f;
 
 /**
  * One seat, seen from behind by whoever is in the row aft of it — which is
@@ -461,21 +494,32 @@ function seatGeometry(): THREE.BufferGeometry {
   const head = roundedBox(0.34, 0.2, 0.12, 0.05);
   head.rotateX(0.12); head.translate(0, 1.06, 0.215);
   p.push({ g: head, c: CLOTH_DARK });
-  const cover = roundedBox(0.3, 0.13, 0.135, 0.03);
-  cover.rotateX(0.12); cover.translate(0, 1.09, 0.212);
+  const cover = roundedBox(0.3, 0.125, 0.135, 0.03);
+  cover.rotateX(0.12); cover.translate(0, 1.095, 0.211);
   p.push({ g: cover, c: COVER });
 
-  // Tray table, stowed: a lighter panel let into the back.
-  const tray = roundedBox(0.35, 0.26, 0.02, 0.02);
-  tray.rotateX(0.12); tray.translate(0, 0.83, 0.245);
+  /* The screen bezel, high on the back where a seat-back screen actually is —
+     which is to say at the eye height of whoever is behind it.
+
+     This used to be a single pale slab the size of the whole seat back, doing
+     duty as a tray table, and it made every seat read as a grey rectangle
+     with a logo on it. A bezel's job is to disappear around what it frames,
+     so it is dark and only a little larger than the screen. */
+  const bezel = roundedBox(0.295, 0.27, 0.018, 0.02);
+  bezel.rotateX(0.12); bezel.translate(0, 0.895, 0.245);
+  p.push({ g: bezel, c: BEZEL });
+
+  // The tray table itself, stowed: a thin panel and its latch, below.
+  const tray = roundedBox(0.33, 0.07, 0.022, 0.012);
+  tray.rotateX(0.12); tray.translate(0, 0.723, 0.246);
   p.push({ g: tray, c: TRIM });
-  const latch = new THREE.BoxGeometry(0.05, 0.016, 0.02);
-  latch.rotateX(0.12); latch.translate(0, 0.955, 0.25);
+  const latch = new THREE.BoxGeometry(0.05, 0.014, 0.02);
+  latch.rotateX(0.12); latch.translate(0, 0.694, 0.252);
   p.push({ g: latch, c: 0x2b2f36 });
 
   // Literature pocket below it, its mouth open toward you.
-  const pocket = roundedBox(0.37, 0.19, 0.035, 0.02);
-  pocket.rotateX(0.12); pocket.translate(0, 0.62, 0.24);
+  const pocket = roundedBox(0.37, 0.16, 0.035, 0.02);
+  pocket.rotateX(0.12); pocket.translate(0, 0.6, 0.24);
   p.push({ g: pocket, c: CLOTH_DARK });
 
   // Armrests.
@@ -501,11 +545,24 @@ export interface CabinHandles {
   setOccupancy: (taken: ReadonlySet<string>) => void;
   /** Leave the viewer's own seat empty — they are in it. */
   setViewer: (id: string) => void;
+  /**
+   * The adverts on the row ahead, by seat id.
+   *
+   * Only that row: those six screens are the whole of what a seated passenger
+   * can read, and giving thirty rows their own texture would cost 180 of them
+   * to show six.
+   */
+  setAdverts: (bySeat: Readonly<Record<string, string>>) => void;
   dispose: () => void;
 }
 
 const SKIN = [0xc99a72, 0x8d5f3f, 0xe3b894, 0x6b4529, 0xa8724c, 0xd9a87e, 0x5a3a22];
-const HAIR = [0x2b2118, 0x4a3524, 0x0f0c0a, 0x6b5238, 0x8a7a6a, 0x3a2418];
+/* Hair reads as hair only if it is plainly not skin. The old set ran through
+   mid-browns a shade or two off the skin tones it sat on, so from a seat
+   behind — which is the only angle that matters — every passenger was one
+   smooth tan ovoid. Real hair is far darker than the face under it, or
+   unmistakably grey or fair; nothing in between. */
+const HAIR = [0x17110d, 0x241a13, 0x3d2a1b, 0x0c0a09, 0x9a9086, 0xc9a96f, 0x1e1a18, 0x5a3a20];
 const CLOTHES = [0x2e3540, 0x6b2f2f, 0x2f4a3a, 0x40404a, 0x7a6a4a, 0x24303f, 0x53365a];
 
 export function createCabin(): CabinHandles {
@@ -571,9 +628,12 @@ export function createCabin(): CabinHandles {
     new THREE.CylinderGeometry(CEIL_R, CEIL_R, cabinLength, 48, 1, true, half, 2 * (Math.PI - half)),
     new THREE.MeshStandardMaterial({
       color: 0xece7dc, side: THREE.BackSide, roughness: 0.95, metalness: 0,
-      /* The ceiling is the cabin's light fitting, not a surface near one, so
-         most of what it shows is its own. */
-      emissive: 0xe6dcc6, emissiveIntensity: 0.42,
+      /* Enough of its own light that the crown never resolves to black, and
+         no more: drive this up far enough to light the cabin by itself and
+         the ceiling stops being a surface and becomes a flat field, which
+         takes the depth out of the whole tube with it. The cove lamps do the
+         lighting; this only supplies the bounce a rasteriser cannot. */
+      emissive: 0xe0d6c0, emissiveIntensity: 0.2,
     }),
   );
   ceiling.rotation.x = Math.PI / 2;
@@ -769,21 +829,25 @@ export function createCabin(): CabinHandles {
     strip.rotation.z = x > 0 ? -0.2 : 0.2;
     group.add(strip);
   }
-  for (let z = -3; z < cabinLength - 2; z += 2.4) {
+  /* Spacing matters as much as intensity. Lamps close enough together to
+     overlap give a flat field; spaced a little wider than their own reach,
+     they give the cabin its rhythm of bright bays and dimmer joints, which is
+     what a fuselage actually looks like down its length. */
+  for (let z = -3; z < cabinLength - 2; z += 2.9) {
     // The cove itself: up across the ceiling, down over the bin doors.
     for (const x of [-0.88, 0.88]) {
-      const cove = new THREE.PointLight(0xffe3bb, 3.4, 4.4, 2);
+      const cove = new THREE.PointLight(0xffe3bb, 4.2, 4.2, 2);
       cove.position.set(x, CABIN.binTopY + 0.03, z);
       group.add(cove);
     }
     // Under the bins, where nothing above can reach.
-    for (const x of [-0.95, 0.95]) {
-      const wash = new THREE.PointLight(0xffe6c4, 3.2, 3.8, 2);
-      wash.position.set(x, CABIN.binBottomY - 0.06, z);
+    for (const x of [-0.98, 0.98]) {
+      const wash = new THREE.PointLight(0xffe6c4, 2.6, 3.2, 2);
+      wash.position.set(x, CABIN.binBottomY - 0.08, z);
       group.add(wash);
     }
     // A little down the aisle, so the cabin recedes into light and not murk.
-    const aisle = new THREE.PointLight(0xffdcb0, 2.4, 4.6, 2);
+    const aisle = new THREE.PointLight(0xffdcb0, 2.2, 4.2, 2);
     aisle.position.set(0, CABIN.binBottomY + 0.12, z);
     group.add(aisle);
   }
@@ -844,7 +908,7 @@ export function createCabin(): CabinHandles {
      and the only branding a passenger sees for the whole flight. */
   const stitched = stitchedMark(2048, 1024, '#c6ccd6', MARK_NAVY);
   kill.push(stitched.map, stitched.height, stitched.rough);
-  const coverGeo = new THREE.PlaneGeometry(0.28, 0.14);
+  const coverGeo = new THREE.PlaneGeometry(0.275, 0.115);
   const covers = new THREE.InstancedMesh(
     coverGeo,
     new THREE.MeshStandardMaterial({
@@ -862,7 +926,9 @@ export function createCabin(): CabinHandles {
     for (const x of CABIN.seatX) {
       /* The headrest is raked 0.12 rad, so its back face is too, and a panel
          on it has to share that rake or it intersects the foam. */
-      dummy.position.set(x, CABIN.floorY + 1.0555, rowZ(row) + 0.2845);
+      /* On the headrest, not below it. It used to sit low enough to overlap
+         the screen beneath it — and, being nearer the camera, to hide it. */
+      dummy.position.set(x, CABIN.floorY + 1.093, rowZ(row) + 0.2825);
       dummy.rotation.set(0.12, 0, 0);
       dummy.updateMatrix();
       covers.setMatrixAt(ci++, dummy.matrix);
@@ -904,23 +970,38 @@ export function createCabin(): CabinHandles {
   const skull = eggify(new THREE.SphereGeometry(HEAD_R, 22, 16), HEAD_R);
   const neck = new THREE.CylinderGeometry(0.05, 0.062, 0.12, 14, 1, true);
   neck.translate(0, -0.1, 0.006);
-  const headGeo = mergeParts([{ g: skull.clone(), c: 0xffffff }, { g: neck, c: 0xffffff }]);
-
+  /* Hair with actual bulk. At five per cent over the skull it was a coat of
+     paint — technically present, and thirty rows of it still read as a tray
+     of eggs. Hair is centimetres thick and it is most of what you see of
+     somebody from behind, so it is built that way: a fifth over the skull at
+     the back and crown, tapering into a hairline at the brow, and sunk back
+     inside the head under the ears so it does not hang in the air. */
   const hairGeo = skull.clone();
-  hairGeo.scale(1.055, 1.045, 1.055);
+  hairGeo.scale(1.2, 1.16, 1.2);
   {
     const p = hairGeo.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      // Sink the face and the underside back inside the skull, so what is
-      // left is hair and the rest is head.
-      const front = Math.max(0, -z) / HEAD_R;
-      const under = Math.max(0, -y) / (HEAD_R * 1.2);
-      const k = 1 - 0.14 * Math.min(1, front * 1.25 + under * 1.5);
+      const front = Math.max(0, -z) / (HEAD_R * 1.2);
+      const under = Math.max(0, -y) / (HEAD_R * 1.4);
+      // 0 at the crown and the back; 1 at the face and under the jaw.
+      const cut = Math.min(1, front * front * 1.15 + under * 1.45);
+      const k = 1 - 0.24 * cut;
       p.setXYZ(i, x * k, y * k, z * k);
     }
     hairGeo.computeVertexNormals();
   }
+
+  /* Ears. Two flattened spheres, and the single cheapest thing that stops a
+     head reading as an egg. */
+  const earParts: Part[] = [{ g: skull.clone(), c: 0xffffff }, { g: neck, c: 0xffffff }];
+  for (const side of [-1, 1]) {
+    const ear = new THREE.SphereGeometry(0.026, 10, 8);
+    ear.scale(0.42, 1.25, 0.92);
+    ear.translate(side * HEAD_R * 0.93, -0.004, 0.004);
+    earParts.push({ g: ear, c: 0xffffff });
+  }
+  const headGeo = mergeParts(earParts);
   skull.dispose();
 
   /* A torso with shoulders. Mostly hidden behind the seat in front, but it is
@@ -929,11 +1010,18 @@ export function createCabin(): CabinHandles {
   shoulders.translate(0, 0.02, 0);
   const bodyGeo = shoulders;
 
-  const mk = (g: THREE.BufferGeometry, rough: number) =>
-    new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: rough }), seatCount);
-  const heads = mk(headGeo, 0.62);
-  const hairs = mk(hairGeo, 0.96);
-  const bodies = mk(bodyGeo, 0.9);
+  const mk = (g: THREE.BufferGeometry, m: THREE.Material) =>
+    new THREE.InstancedMesh(g, m, seatCount);
+  const heads = mk(headGeo, new THREE.MeshStandardMaterial({ roughness: 0.62 }));
+  /* Strand relief. A smooth shell of any colour is a swim cap; what makes
+     hair read as hair at this distance is that it breaks the highlight into
+     lines running the way the hair falls. */
+  const strands = strandTexture();
+  kill.push(strands);
+  const hairs = mk(hairGeo, new THREE.MeshStandardMaterial({
+    roughness: 0.88, metalness: 0.04, bumpMap: strands, bumpScale: 2.4,
+  }));
+  const bodies = mk(bodyGeo, new THREE.MeshStandardMaterial({ roughness: 0.9 }));
   heads.count = hairs.count = bodies.count = 0;
   group.add(heads); group.add(hairs); group.add(bodies);
 
@@ -997,6 +1085,92 @@ export function createCabin(): CabinHandles {
     }
   };
 
+  /* ── Seat-back screens ──────────────────────────────────────────────────
+     The premise of the whole page is that every seat is a billboard, and
+     until now the only place you could see that was the map. This is the
+     other place — and the one that matters, because it is what a passenger
+     actually looks at for the length of a flight.
+
+     Six planes, one per seat in the row ahead, each with its own material so
+     each can carry its own holder's image. They move with the viewer rather
+     than existing thirty times over: what is behind you is behind you. */
+  const SCREEN = 0.25;
+  const screenGeo = new THREE.PlaneGeometry(SCREEN, SCREEN);
+  kill.push(screenGeo);
+  /* An unsold screen is not blank — it is the airline's, showing the mark,
+     the way an IFE screen sits on a holding card before departure. */
+  const idleScreen = markTexture('#0c1626', '#8ea8c8', 0.3);
+  kill.push(idleScreen);
+  const screens = CABIN.seatX.map((x) => {
+    const mesh = new THREE.Mesh(
+      screenGeo,
+      new THREE.MeshStandardMaterial({
+        map: idleScreen,
+        roughness: 0.24,
+        metalness: 0.05,
+        // Screens emit. Without this they read as printed cards in a cabin
+        // whose own lighting is warm and low.
+        emissive: 0xffffff,
+        emissiveMap: idleScreen,
+        emissiveIntensity: 0.55,
+      }),
+    );
+    mesh.position.x = x;
+    mesh.rotation.x = 0.12;
+    mesh.visible = false;
+    group.add(mesh);
+    return mesh;
+  });
+  /* Textures for images this cabin has loaded, so walking the aircraft does
+     not re-decode the same advert every time a row comes back into view. */
+  const screenCache = new Map<string, THREE.Texture>();
+  const loader = new THREE.TextureLoader();
+  let adverts: Readonly<Record<string, string>> = {};
+
+  const paintScreens = () => {
+    const row = Number(viewer.replace(/\D/g, ''));
+    const ahead = Number.isFinite(row) ? row - 1 : 0;
+    const on = ahead >= 1;
+    screens.forEach((mesh, i) => {
+      mesh.visible = on;
+      if (!on) return;
+      mesh.position.set(CABIN.seatX[i], CABIN.floorY + 0.895, rowZ(ahead) + 0.2585);
+      const id = `${ahead}${letters[i]}`;
+      const src = adverts[id];
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (!src) {
+        if (mat.map !== idleScreen) {
+          mat.map = mat.emissiveMap = idleScreen;
+          mat.emissiveIntensity = 0.55;
+          mat.needsUpdate = true;
+        }
+        return;
+      }
+      const cached = screenCache.get(src);
+      if (cached) {
+        if (mat.map !== cached) {
+          mat.map = mat.emissiveMap = cached;
+          mat.emissiveIntensity = 0.42;
+          mat.needsUpdate = true;
+        }
+        return;
+      }
+      loader.load(src, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 8;
+        screenCache.set(src, tex);
+        mat.map = mat.emissiveMap = tex;
+        mat.emissiveIntensity = 0.42;
+        mat.needsUpdate = true;
+      });
+    });
+  };
+
+  const setAdverts = (bySeat: Readonly<Record<string, string>>) => {
+    adverts = bySeat;
+    paintScreens();
+  };
+
   const setOccupancy = (taken: ReadonlySet<string>) => { sold = taken; rebuild(); };
   const setViewer = (id: string) => {
     if (id === viewer) return;
@@ -1007,9 +1181,12 @@ export function createCabin(): CabinHandles {
     const letter = id.replace(/\d/g, '').toUpperCase();
     const side = 'ABC'.includes(letter) ? -1 : 'DEF'.includes(letter) ? 1 : null;
     placeShades(row, side as 1 | -1 | null);
+    paintScreens();
   };
 
   const dispose = () => {
+    screenCache.forEach((t) => t.dispose());
+    screenCache.clear();
     kill.forEach((x) => x.dispose());
     group.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -1020,5 +1197,5 @@ export function createCabin(): CabinHandles {
     });
   };
 
-  return { group, setOccupancy, setViewer, dispose };
+  return { group, setOccupancy, setViewer, setAdverts, dispose };
 }

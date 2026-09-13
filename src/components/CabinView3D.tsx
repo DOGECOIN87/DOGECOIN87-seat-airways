@@ -29,9 +29,11 @@ interface CabinView3DProps {
   zone: CabinZone;
   facing: Facing;
   taken: ReadonlySet<string>;
+  /** Seat id to the image its holder is running, for the seat-back screens. */
+  adverts: Readonly<Record<string, string>>;
 }
 
-const CabinView3D = ({ feed, sky, band, seat, zone, facing, taken }: CabinView3DProps) => {
+const CabinView3D = ({ feed, sky, band, seat, zone, facing, taken, adverts }: CabinView3DProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const world = useRef<WorldHandles | null>(null);
   const pose = useRef<ViewPose>({ seatIndex: 0, row: 1, yaw: 0, id: '1A' });
@@ -71,6 +73,10 @@ const CabinView3D = ({ feed, sky, band, seat, zone, facing, taken }: CabinView3D
   useEffect(() => {
     world.current?.setOccupancy(taken);
   }, [taken]);
+
+  useEffect(() => {
+    world.current?.setAdverts(adverts);
+  }, [adverts]);
 
   /* Where the seat is, and which way the head is turned. */
   useEffect(() => {

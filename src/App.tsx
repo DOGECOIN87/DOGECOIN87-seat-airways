@@ -195,13 +195,20 @@ export default function App() {
      way unsold inventory does on a real aircraft. A holder's own upload, and
      the published set, both beat them. */
   const house = useMemo(
-    () => houseAdverts(manifest.entries.slice(0, 16).map((e) => e.seat.id)),
+    () => houseAdverts(manifest.entries.map((e) => e.seat.id)),
     [manifest.entries],
   );
   const banners = useMemo(
     () => ({ ...house, ...local, ...published }),
     [house, local, published],
   );
+  /* Just the images, keyed by seat, for the screens in the cabin: the 3D view
+     has no business knowing what a Banner is. */
+  const advertImages = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const [seat, banner] of Object.entries(banners)) out[seat] = banner.image;
+    return out;
+  }, [banners]);
   const claimed = berth.seat?.id ?? null;
   const claimedSeat = berth.seat;
   const claimedZone = useMemo(
@@ -472,7 +479,16 @@ export default function App() {
                 <FlightDeck feed={feed} lamps={lamps} sky={sky} band={band} />
               ) : (
                 <Suspense fallback={<SceneLoading />}>
-                  <CabinView3D feed={feed} sky={sky} band={band} seat={viewSeat} zone={viewZoneDef} facing={facing} taken={taken} />
+                  <CabinView3D
+                    feed={feed}
+                    sky={sky}
+                    band={band}
+                    seat={viewSeat}
+                    zone={viewZoneDef}
+                    facing={facing}
+                    taken={taken}
+                    adverts={advertImages}
+                  />
                 </Suspense>
               )}
             </ViewFrame>

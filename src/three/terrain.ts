@@ -163,42 +163,43 @@ export function farmlandTexture(size = 2048): THREE.CanvasTexture {
 /**
  * The lunar surface.
  *
- * Two maps, not one. A colour map alone gives a floor with craters painted on
- * it: whatever the sun does, every crater stays lit from the same direction
- * the painter chose, and the ground reads as lino. What makes regolith read as
- * regolith is relief under a low sun — a rim that catches the light on one
- * side and throws a shadow across its own floor on the other — so the shape of
- * every crater goes into a height map and the scene's own sunlight does the
- * shading. Move the sun and the shadows move with it.
+ * Craters with their light baked in, which is the one decision that makes or
+ * breaks a lunar plain.
  *
- * The craters themselves follow the size distribution the real surface has:
- * cubed uniform, which is a great many small ones, a few large, and the
- * occasional basin. Each is a bowl with a raised rim and an ejecta apron, the
- * youngest carrying rays — and they are laid down oldest first, so later
- * impacts cut into earlier ones the way the record actually accumulates.
+ * The tempting alternative is a height map and a bump shader, so the scene's
+ * own sun casts the shadows. It does not survive contact with the geometry:
+ * the ground here is one plate seen almost edge on, so a texel near the
+ * horizon covers a whole screen pixel's worth of ground and the derivative
+ * the bump shader differentiates swings from one pixel to the next. What
+ * comes out is not relief, it is static — the surface rendered as charcoal
+ * noise from every altitude worth being at.
+ *
+ * So the light is painted: one direction for the whole texture, upper-left,
+ * matching where the scene's low sun is put. Every crater gets a lit outer
+ * rim on that side, a shadowed inner wall under it, a lit far wall opposite,
+ * and an ejecta apron. That is what a lunar photograph looks like, and it
+ * holds at any angle and any distance.
+ *
+ * Craters follow the size distribution the real surface has — cubed uniform,
+ * so a great many small, a few large, the occasional basin — and are laid
+ * down oldest first, so later impacts cut into earlier ones.
  */
-export interface Surface {
-  /** Albedo. */
-  map: THREE.CanvasTexture;
-  /** Height, for a bump map. */
-  bump: THREE.CanvasTexture;
-  dispose(): void;
-}
 
-export function moonSurface(size = 2048): Surface {
-  const albedo = document.createElement('canvas');
-  const height = document.createElement('canvas');
-  albedo.width = albedo.height = height.width = height.height = size;
-  const a = albedo.getContext('2d') as CanvasRenderingContext2D;
-  const h = height.getContext('2d') as CanvasRenderingContext2D;
+/** Where the light comes from, in texture space. Up and to the left. */
+const MOON_LX = -0.62;
+const MOON_LY = -0.78;
 
-  /* Highland regolith, and a flat mid-grey datum for the relief. */
-  a.fillStyle = '#8e8880';
+export function moonTexture(size = 2048): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const a = c.getContext('2d') as CanvasRenderingContext2D;
+  const TAU = Math.PI * 2;
+
+  // Highland regolith.
+  a.fillStyle = '#9d968c';
   a.fillRect(0, 0, size, size);
-  h.fillStyle = '#808080';
-  h.fillRect(0, 0, size, size);
 
-  /* Anything within its own radius of an edge is drawn again on the far side,
+  /* Anything within its own reach of an edge is drawn again on the far side,
      so the tile joins itself and the plain does not end in a seam. */
   const wrapped = (x: number, y: number, r: number, draw: (x: number, y: number) => void) => {
     draw(x, y);
@@ -210,94 +211,95 @@ export function moonSurface(size = 2048): Surface {
   };
 
   /* ── Mare ──────────────────────────────────────────────────────────────
-     The dark plains are flood basalt: lower than the highlands they drowned,
-     smoother, and far darker. Their outlines are lobed rather than round,
-     because lava went where the ground let it. */
+     Flood basalt: darker and smoother than the highlands it drowned, with a
+     lobed outline, because lava went where the ground let it. */
   for (let i = 0; i < 5; i++) {
     const cx = noise2(i, 1, 41) * size;
     const cy = noise2(i, 2, 43) * size;
-    const r = size * (0.11 + noise2(i, 3, 47) * 0.15);
-    const lobes = (g: CanvasRenderingContext2D, x: number, y: number) => {
-      g.beginPath();
-      const steps = 40;
+    const r = size * (0.1 + noise2(i, 3, 47) * 0.14);
+    const lobes = (x: number, y: number) => {
+      a.beginPath();
+      const steps = 44;
       for (let k = 0; k <= steps; k++) {
-        const t = (k / steps) * Math.PI * 2;
+        const t = (k / steps) * TAU;
         const j = 0.72 + noise2(k, i, 71) * 0.42 + noise2(k * 2, i, 83) * 0.16;
         const px = x + Math.cos(t) * r * j;
         const py = y + Math.sin(t) * r * j;
-        if (k === 0) g.moveTo(px, py);
-        else g.lineTo(px, py);
+        if (k === 0) a.moveTo(px, py); else a.lineTo(px, py);
       }
-      g.closePath();
-      g.fill();
+      a.closePath();
+      a.fill();
     };
-    a.fillStyle = 'rgba(56,54,52,0.92)';
+    a.fillStyle = 'rgba(62,59,56,0.9)';
     a.filter = `blur(${size * 0.004}px)`;
-    wrapped(cx, cy, r * 1.4, (x, y) => lobes(a, x, y));
+    wrapped(cx, cy, r * 1.4, lobes);
     a.filter = 'none';
-    // A basin sits below the datum: the whole plain is a low place.
-    h.fillStyle = 'rgba(96,96,96,0.85)';
-    h.filter = `blur(${size * 0.01}px)`;
-    wrapped(cx, cy, r * 1.4, (x, y) => lobes(h, x, y));
-    h.filter = 'none';
   }
 
   /* ── Craters ─────────────────────────────────────────────────────────── */
-  const CRATERS = 620;
-  for (let i = 0; i < CRATERS; i++) {
+  for (let i = 0; i < 700; i++) {
     const cx = noise2(i, 5, 53) * size;
     const cy = noise2(i, 7, 59) * size;
-    // Cubed: hundreds of small, a handful of big.
-    const r = size * (0.002 + noise2(i, 11, 61) ** 3 * 0.075);
+    const r = size * (0.0022 + noise2(i, 11, 61) ** 3 * 0.07);
     const fresh = noise2(i, 13, 67);
-    const reach = r * 2.6;
+    const reach = r * 2.4;
 
-    // Relief: a bowl, a rim crest, and an apron falling back to the datum.
-    const relief = (x: number, y: number) => {
-      const rim = h.createRadialGradient(x, y, 0, x, y, r * 1.28);
-      rim.addColorStop(0.00, 'rgba(58,58,58,0.95)');   // floor, well below
-      rim.addColorStop(0.62, 'rgba(66,66,66,0.92)');
-      rim.addColorStop(0.78, 'rgba(200,200,200,0.85)'); // crest, above
-      rim.addColorStop(1.00, 'rgba(128,128,128,0)');    // apron, back to datum
-      h.fillStyle = rim;
-      h.beginPath(); h.arc(x, y, r * 1.28, 0, Math.PI * 2); h.fill();
-    };
-    wrapped(cx, cy, r * 1.3, relief);
-
-    // Albedo: fresh ejecta is brighter than what it lands on, and the floor
-    // of an old crater is darker than the plain around it.
     const paint = (x: number, y: number) => {
-      const ej = a.createRadialGradient(x, y, r * 0.7, x, y, reach);
-      ej.addColorStop(0, `rgba(196,190,180,${0.1 + fresh * 0.24})`);
-      ej.addColorStop(1, 'rgba(196,190,180,0)');
+      // Ejecta, brightest on the youngest.
+      const ej = a.createRadialGradient(x, y, r * 0.9, x, y, reach);
+      ej.addColorStop(0, `rgba(206,200,190,${0.08 + fresh * 0.22})`);
+      ej.addColorStop(1, 'rgba(206,200,190,0)');
       a.fillStyle = ej;
-      a.beginPath(); a.arc(x, y, reach, 0, Math.PI * 2); a.fill();
+      a.beginPath(); a.arc(x, y, reach, 0, TAU); a.fill();
 
-      const floor = a.createRadialGradient(x, y, 0, x, y, r);
-      floor.addColorStop(0, 'rgba(74,71,67,0.5)');
-      floor.addColorStop(0.8, 'rgba(74,71,67,0.34)');
-      floor.addColorStop(1, 'rgba(74,71,67,0)');
-      a.fillStyle = floor;
-      a.beginPath(); a.arc(x, y, r, 0, Math.PI * 2); a.fill();
+      // The bowl: shadow under the rim the light falls on, lit wall opposite.
+      a.save();
+      a.beginPath(); a.arc(x, y, r, 0, TAU); a.clip();
+      const bowl = a.createLinearGradient(
+        x + MOON_LX * r, y + MOON_LY * r,
+        x - MOON_LX * r, y - MOON_LY * r,
+      );
+      bowl.addColorStop(0.00, 'rgba(14,13,12,0.72)');
+      bowl.addColorStop(0.45, 'rgba(96,91,85,0.26)');
+      bowl.addColorStop(1.00, 'rgba(248,244,236,0.34)');
+      a.fillStyle = bowl;
+      a.fillRect(x - r, y - r, r * 2, r * 2);
+      a.restore();
+
+      // The rim crest, catching the light on the near side.
+      a.save();
+      a.beginPath();
+      a.arc(x, y, r * 1.16, 0, TAU);
+      a.arc(x, y, r * 0.93, 0, TAU, true);
+      a.clip('evenodd');
+      const rim = a.createLinearGradient(
+        x + MOON_LX * r, y + MOON_LY * r,
+        x - MOON_LX * r, y - MOON_LY * r,
+      );
+      rim.addColorStop(0.00, 'rgba(255,252,244,0.42)');
+      rim.addColorStop(0.5, 'rgba(190,184,175,0.06)');
+      rim.addColorStop(1.00, 'rgba(24,22,20,0.34)');
+      a.fillStyle = rim;
+      a.fillRect(x - r * 1.2, y - r * 1.2, r * 2.4, r * 2.4);
+      a.restore();
     };
     wrapped(cx, cy, reach, paint);
 
     /* Rays. Only the youngest large craters have them, and they are the one
        feature you can pick out of a lunar photograph from any distance. */
-    if (fresh > 0.88 && r > size * 0.012) {
+    if (fresh > 0.86 && r > size * 0.014) {
       const rays = 9 + Math.floor(noise2(i, 17, 73) * 7);
       for (let k = 0; k < rays; k++) {
-        const t = noise2(i * 31 + k, 19, 79) * Math.PI * 2;
+        const t = noise2(i * 31 + k, 19, 79) * TAU;
         const len = r * (4 + noise2(i + k, 23, 89) * 9);
-        const spread = r * 0.16;
         const draw = (x: number, y: number) => {
           const gx = x + Math.cos(t) * len;
           const gy = y + Math.sin(t) * len;
           const ray = a.createLinearGradient(x, y, gx, gy);
-          ray.addColorStop(0, 'rgba(208,203,194,0.34)');
-          ray.addColorStop(1, 'rgba(208,203,194,0)');
+          ray.addColorStop(0, 'rgba(214,209,200,0.3)');
+          ray.addColorStop(1, 'rgba(214,209,200,0)');
           a.strokeStyle = ray;
-          a.lineWidth = spread;
+          a.lineWidth = r * 0.17;
           a.lineCap = 'round';
           a.beginPath(); a.moveTo(x, y); a.lineTo(gx, gy); a.stroke();
         };
@@ -306,38 +308,27 @@ export function moonSurface(size = 2048): Surface {
     }
   }
 
-  /* ── Micro-relief ──────────────────────────────────────────────────────
-     Four billion years of micrometeorites. Without it the ground between the
-     craters is glass, and at low sun that is the giveaway. */
-  const grain = h.createImageData(size, size);
-  const px = grain.data;
-  for (let i = 0; i < size * size; i++) {
-    const x = i % size;
-    const y = (i / size) | 0;
-    const n = (noise2(x, y, 131) + noise2(x >> 2, y >> 2, 137) + noise2(x >> 4, y >> 4, 139)) / 3;
-    const v = 128 + (n - 0.5) * 70;
-    px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = v;
-    px[i * 4 + 3] = 70;
+  /* Undulation between the craters — soft, and low frequency, because a
+     regolith plain is dust over rubble and not a lattice. */
+  for (let i = 0; i < 900; i++) {
+    const x = noise2(i, 29, 101) * size;
+    const y = noise2(i, 31, 103) * size;
+    const r = size * (0.004 + noise2(i, 37, 107) ** 2 * 0.03);
+    const up = noise2(i, 41, 109) > 0.5;
+    const g = a.createRadialGradient(
+      x + MOON_LX * r * 0.4, y + MOON_LY * r * 0.4, 0, x, y, r,
+    );
+    g.addColorStop(0, up ? 'rgba(255,250,242,0.11)' : 'rgba(20,19,18,0.12)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    a.fillStyle = g;
+    a.beginPath(); a.arc(x, y, r, 0, TAU); a.fill();
   }
-  const grainCanvas = document.createElement('canvas');
-  grainCanvas.width = grainCanvas.height = size;
-  (grainCanvas.getContext('2d') as CanvasRenderingContext2D).putImageData(grain, 0, 0);
-  h.globalAlpha = 0.55;
-  h.drawImage(grainCanvas, 0, 0);
-  h.globalAlpha = 1;
-  a.globalAlpha = 0.12;
-  a.drawImage(grainCanvas, 0, 0);
-  a.globalAlpha = 1;
 
-  const map = new THREE.CanvasTexture(albedo);
-  map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  map.anisotropy = 16;
-  map.colorSpace = THREE.SRGBColorSpace;
-  const bump = new THREE.CanvasTexture(height);
-  bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
-  bump.anisotropy = 16;
-
-  return { map, bump, dispose() { map.dispose(); bump.dispose(); } };
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 16;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 /**

@@ -73,6 +73,13 @@ const CLIMB_RATE = 0.02;
 const FLOOR = 4_000;
 /** Altitude ceiling. Past the moon there is nowhere left to go. */
 const CEILING = 80_000_000;
+/**
+ * How hard the aircraft holds a station set by `jumpTo`, per tick.
+ *
+ * Enough to cancel a sustained tape inside a second or two, gentle enough
+ * that the altimeter still breathes rather than freezing on a number.
+ */
+const STATION_PULL = 0.09;
 
 /** Where each preset parks the 24h change, and how rough the air is there. */
 const PRESETS: Record<FlightMode, { target: number; noise: number }> = {
@@ -100,6 +107,18 @@ export function createSimulatedFeed(start: FlightTick = INITIAL_TICK): FlightFee
   let target = start.change24h;
   let marketCap = start.marketCap;
   let holders = start.holders;
+  /* Where `jumpTo` last put the aircraft, if anywhere.
+  
+     Altitude integrates the 24h change, which means it never sits still — and
+     that made the altitude buttons a lie. Ask for space, and a couple of
+     seconds of a red tape walked the cap back down through the cloud deck
+     before you had finished looking at it; what the button actually delivered
+     was a glimpse. So a jump sets a station, and the climb rate is bent
+     toward holding it: the tape still moves, the aircraft still wanders a few
+     per cent either way, but it stays in the band you asked to see. Flying it
+     by hand — any mode button — is a request to leave, and clears the
+     station. */
+  let station: number | null = null;
 
   const listeners = new Set<(tick: FlightTick) => void>();
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -119,6 +138,13 @@ export function createSimulatedFeed(start: FlightTick = INITIAL_TICK): FlightFee
     change += (target - change) * 0.13;
 
     marketCap = clamp(marketCap * (1 + (change / 100) * CLIMB_RATE), FLOOR, CEILING);
+
+    if (station !== null) {
+      /* Station keeping, in log space, because the ladder is logarithmic: a
+         pull of the same strength should feel the same at $1M and at $50M. */
+      const drift = Math.log(marketCap / station);
+      marketCap = station * Math.exp(drift * (1 - STATION_PULL));
+    }
 
     // Souls trickle aboard on green days and quietly deplane on red ones.
     holders = Math.max(1, holders + (change > 0 ? Math.random() * 1.6 : -Math.random() * 1.1));
@@ -142,10 +168,12 @@ export function createSimulatedFeed(start: FlightTick = INITIAL_TICK): FlightFee
     },
     setMode(next) {
       mode = next;
+      station = null;
       if (next !== 'live') target = PRESETS[next].target;
     },
     jumpTo(cap) {
       marketCap = clamp(cap, FLOOR, CEILING);
+      station = marketCap;
       // Arrive level rather than still climbing at whatever got you here.
       mode = 'cruise';
       target = PRESETS.cruise.target;

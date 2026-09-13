@@ -78,13 +78,25 @@ export function useAttitude(feed: FlightFeed, apply: ApplyAttitude): void {
     };
 
     if (reduced) {
-      // Settle on the first reading and hold it: no loop, no motion.
-      const id = setTimeout(() => {
+      /* No loop and no easing — but the view still has to be true.
+      
+         Holding the very first reading for the life of the page was not
+         reduced motion, it was a frozen instrument: the altitude buttons moved
+         the aeroplane and the window never showed it, so a visitor who asks
+         for less motion was shown farmland captioned "space" and a market cap
+         from the moment the page loaded. What the preference asks for is no
+         *animation*, not no *information*. So values snap rather than ease,
+         nothing drifts on its own, and the picture is redrawn at a slow,
+         deliberate cadence — a readout that updates, not a scene in motion. */
+      const paint = () => {
         Object.assign(shown, target, { bank: 0 });
         applyRef.current(shown, latest);
-      }, 80);
+      };
+      const id = setTimeout(paint, 80);
+      const tick = setInterval(paint, 900);
       return () => {
         clearTimeout(id);
+        clearInterval(tick);
         unsubscribe();
       };
     }

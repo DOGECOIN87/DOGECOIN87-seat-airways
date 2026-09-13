@@ -1,10 +1,10 @@
-node_modules
-dist
-dist-ssr
+!.env.example
 *.local
+*.log
 .DS_Store
 .env
 .env.*
-!.env.example
-*.log
 .vite
+dist
+dist-ssr
+node_modules

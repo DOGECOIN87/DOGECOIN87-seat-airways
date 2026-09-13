@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { cloudTexture, earthTexture, farmlandTexture, moonSurface, radialTexture } from './terrain';
+import { cloudTexture, earthTexture, farmlandTexture, moonTexture, radialTexture } from './terrain';
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
@@ -60,6 +60,8 @@ export interface WorldHandles {
   render: (a: Attitude, sky: SkyState, band: BandState, pose: ViewPose) => void;
   resize: (w: number, h: number) => void;
   setOccupancy: (taken: ReadonlySet<string>) => void;
+  /** The adverts showing on the row ahead, by seat id. */
+  setAdverts: (bySeat: Readonly<Record<string, string>>) => void;
   /** Metres of ground covered since the view opened. */
   travelled: () => number;
   dispose: () => void;
@@ -137,8 +139,14 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     .replace('uniform float mieDirectionalG;', 'uniform float mieDirectionalG;\n\t\tuniform float skyFade;')
     .replace(
       'gl_FragColor = vec4( texColor, 1.0 );',
-      `float limb = 1.0 - smoothstep( 0.0, 0.17, direction.y );
-			gl_FragColor = vec4( texColor * ( skyFade + ( 1.0 - skyFade ) * limb * 0.5 ), 1.0 );`,
+      `// A fifth power, not a fraction. This sky runs to hundreds of units in
+			// linear light near the sun, so three per cent of it still tone-maps
+			// to white — which is exactly how a "dimmed" sky stayed a bright
+			// void through two attempts at this. At the fifth power the dome is
+			// genuinely gone by the time the band is entered, and the blue that
+			// survives up there comes from the limb's own atmosphere shell,
+			// seen edge on, which is where it comes from in a photograph.
+			gl_FragColor = vec4( texColor * pow( skyFade, 5.0 ), 1.0 );`,
     );
   sky.material.needsUpdate = true;
 
@@ -174,6 +182,13 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 
      A third of them are pulled toward one great circle, because the Milky Way
      is the first thing anybody looks for and its absence is conspicuous. */
+  /* The field's own radius, and the point size that goes with it. Both are
+     scaled each frame so the field always sits beyond whatever the horizon is
+     and inside whatever the far plane is — in space the limb's horizon is a
+     quarter of a million metres away, and a star field parked closer than
+     that draws in front of the planet. */
+  const STAR_R = 120000;
+  const STAR_SIZE = 300;
   const starGeo = new THREE.BufferGeometry();
   const starCount = 4200;
   const starPos = new Float32Array(starCount * 3);
@@ -188,8 +203,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       const along = tmpStar.dot(galactic);
       tmpStar.addScaledVector(galactic, -along * (0.82 + Math.random() * 0.16)).normalize();
     }
-    tmpStar.multiplyScalar(120000);
-    starPos.set([tmpStar.x, Math.abs(tmpStar.y) * 0.9, tmpStar.z], i * 3);
+    /* A whole sphere, not a hemisphere. Below the horizon the ground — or, in
+       space, the limb — is opaque and occludes them anyway, and between the
+       curved horizon and eye level there is real sky that a hemisphere left
+       as a starless wedge. */
+    tmpStar.multiplyScalar(STAR_R);
+    starPos.set([tmpStar.x, tmpStar.y, tmpStar.z], i * 3);
 
     // Magnitude: cubed, so most sit near the threshold of visibility and the
     // few bright ones actually stand out against them.
@@ -202,7 +221,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
   starGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
   const starMat = new THREE.PointsMaterial({
-    size: 300,
+    size: STAR_SIZE,
     sizeAttenuation: true,
     transparent: true,
     opacity: 0,
@@ -211,6 +230,8 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     // rather than flatly occluding one another.
     blending: THREE.AdditiveBlending,
     depthWrite: false,
+    // Nothing between here and a star to scatter anything.
+    fog: false,
   });
   const stars = new THREE.Points(starGeo, starMat);
   scene.add(stars);
@@ -282,10 +303,13 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 
   /* ── Ground ── */
   const farmland = farmlandTexture();
-  const moon = moonSurface();
+  const moon = moonTexture();
   farmland.repeat.set(22, 22);
-  moon.map.repeat.set(24, 24);
-  moon.bump.repeat.set(24, 24);
+  /* Bigger tiles than the farmland's. A crater is a landform, not a field:
+     at five-kilometre tiles the largest one in the texture was a few hundred
+     metres across and the plain read as flat grey from any altitude worth
+     being at. */
+  moon.repeat.set(9, 9);
   const groundMat = new THREE.MeshStandardMaterial({ map: farmland, roughness: 1, metalness: 0 });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(GROUND, GROUND), groundMat);
   ground.rotation.x = -Math.PI / 2;
@@ -306,21 +330,28 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      itself is the thing the climb buys you. The shell around it is the
      atmosphere seen edge on: back faces, additive, so it lights the rim the
      way the real one does without costing a shader. */
-  const planetTex = earthTexture(2048);
+  /* The same ground the lower bands fly over, seen from further up — which is
+     both the honest answer and the legible one. A whole-Earth map at this
+     scale put a single continent and one cloud across the entire visible cap:
+     the camera sees a few hundred kilometres of a sphere thousands across, so
+     planetary features arrive magnified into flat bands of colour. Farmland
+     tiled to roughly a hundred kilometres gives what you actually see from
+     the edge of space — texture, not geography. */
+  const planetTex = farmlandTexture();
   planetTex.wrapS = planetTex.wrapT = THREE.RepeatWrapping;
-  planetTex.repeat.set(3, 1.5);
+  planetTex.repeat.set(240, 120);
   const limb = new THREE.Mesh(
     new THREE.SphereGeometry(1, 96, 64),
-    new THREE.MeshStandardMaterial({ map: planetTex, roughness: 0.95, metalness: 0 }),
+    new THREE.MeshStandardMaterial({ map: planetTex, roughness: 0.98, metalness: 0 }),
   );
   limb.visible = false;
   scene.add(limb);
   const limbAir = new THREE.Mesh(
     new THREE.SphereGeometry(1, 64, 48),
     new THREE.MeshBasicMaterial({
-      color: 0x74b4ff,
+      color: 0x5aa2ff,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.45,
       side: THREE.BackSide,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -411,7 +442,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
        where it lights the thing you came up here to look at: high over the
        limb in space, low over the moon, where a grazing sun is what gives
        regolith its relief. */
-    const elevation = onMoon ? 17 : inSpace ? 46 : skyState.elevation;
+    const elevation = onMoon ? 23 : inSpace ? 46 : skyState.elevation;
     const phi = THREE.MathUtils.degToRad(90 - elevation);
     const theta = THREE.MathUtils.degToRad(skyState.sunX * 80);
     sunPos.setFromSphericalCoords(1, phi, theta);
@@ -420,7 +451,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     /* The disc itself. It reddens and weakens as it goes down rather than
        simply switching off, which is the half of golden hour a plain
        intensity ramp misses. */
-    sun.intensity = onMoon || inSpace ? 3.4 : Math.max(0.04, Math.sin(THREE.MathUtils.degToRad(Math.max(elevation, -6))) * 3.2);
+    sun.intensity = onMoon ? 4.6 : inSpace ? 3.4 : Math.max(0.04, Math.sin(THREE.MathUtils.degToRad(Math.max(elevation, -6))) * 3.2);
     if (!onMoon && !inSpace) sun.color.setStyle(skyState.palette.disc).lerp(WHITE, 0.3);
     else sun.color.setHex(0xffffff);
 
@@ -435,17 +466,30 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     skyU.turbidity.value = overcast ? 14 : rain ? 10 : lerp(3.2, 1.6, high);
     skyU.rayleigh.value = overcast ? 0.6 : lerp(2.4, 3.1, high);
     skyU.mieCoefficient.value = (overcast ? 0.03 : 0.005) * lerp(1, 0.45, high);
-    /* $10M is *defined* as the sky going black, so most of it has to go the
-       moment the band is entered — the announcement and the window have to
-       agree. What is left drains on the climb to the moon: the zenith first,
-       the blue band on the limb last. */
-    const airless = inSpace ? 0.55 + 0.45 * THREE.MathUtils.smoothstep(band.progress, 0, 0.6) : 0;
+    /* How much of the sky is left.
+    
+       $10M is *defined* as the sky going black, so by the time the band is
+       entered almost all of it is gone — the announcement and the window have
+       to agree, and a band called "space" that opens on navy does not keep
+       that bargain. The last of it drains on the climb to the moon.
+       
+       The band above starts the job, so the threshold is a step down a slope
+       rather than a cliff: the top of the cloud band is already a deep blue
+       that has stopped being daylight. */
+    const airless = inSpace
+      ? 0.58 + 0.42 * THREE.MathUtils.smoothstep(band.progress, 0, 0.55)
+      : band.band === 'above-clouds'
+        ? 0.38 * THREE.MathUtils.smoothstep(band.progress, 0.45, 1)
+        : 0;
     skyU.skyFade.value = 1 - airless;
+    // Ground and cabin lighting follow the sky: an aeroplane in vacuum is not
+    // lit by a dome that is no longer there.
     sky.visible = !onMoon;
 
     /* Above the atmosphere the sky is simply gone, and the stars arrive. */
     const starOpacity = onMoon ? 1 : inSpace ? Math.min(1, 0.2 + airless * 1.1) : Math.max(0, skyState.palette.stars - 0.35);
     starMat.opacity = starOpacity;
+    stars.position.copy(aircraft.position);
     renderer.setClearColor(0x000000, 1);
 
     /* The sun becomes an object once there is no air left to scatter it. The
@@ -473,18 +517,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     /* Ground: farmland below, regolith at the moon, and haze that thickens
        with distance so the horizon dissolves rather than ending. Above the
        atmosphere the plate gives way to the limb, which is a sphere. */
-    if (onMoon && groundMat.map !== moon.map) {
-      groundMat.map = moon.map;
-      // Relief, so a grazing sun casts the crater shadows rather than the
-      // texture pretending to have them already.
-      groundMat.bumpMap = moon.bump;
-      groundMat.bumpScale = 3.2;
-      groundMat.color.setHex(0xffffff);
+    if (onMoon && groundMat.map !== moon) {
+      groundMat.map = moon;
       groundMat.needsUpdate = true;
     }
     if (!onMoon && groundMat.map !== farmland) {
       groundMat.map = farmland;
-      groundMat.bumpMap = null;
       groundMat.needsUpdate = true;
     }
     ground.visible = !inSpace;
@@ -496,7 +534,14 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       const r = lerp(LIMB_R.low, LIMB_R.high, THREE.MathUtils.smoothstep(band.progress, 0, 0.85));
       limb.scale.setScalar(r);
       limb.position.y = -r;
-      limbAir.scale.setScalar(r * 1.014);
+      /* The shell is the atmosphere seen edge on, and it only reads that way
+         from outside it. Scaled as a fraction of the planet it swallowed the
+         camera whole — 2% of four thousand kilometres is ninety, and the
+         aircraft is at sixteen — and an additive shell seen from inside is not
+         a glowing rim, it is a blue wash over the entire sky, which is what
+         the space band looked like. So its top is pinned below the aircraft:
+         the air you have climbed out of, not the air you are in. */
+      limbAir.scale.setScalar(r + height * 0.55);
       limbAir.position.y = -r;
       /* Turn it under the aircraft rather than sliding a texture: on a sphere
          that is what travelling actually is, and it keeps the poles out of
@@ -506,15 +551,25 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
          map converges exactly where you are looking hardest. */
       limb.rotation.y = -shift.x / r;
       limb.rotation.x = Math.PI / 2 + shift.z / r;
-      /* The limb's own airglow thins with the rest of it. */
-      (limbAir.material as THREE.MeshBasicMaterial).opacity = 0.16 + airless * 0.26;
+      /* With the dome gone, this shell is the only blue left in the sky, so
+         it carries the whole band on the horizon. */
+      (limbAir.material as THREE.MeshBasicMaterial).opacity = 0.3 + airless * 0.34;
       // The far side of a 4,200 km sphere is past any sane far plane; the
       // near cap and its horizon are not, so the frustum follows the radius.
       const far = Math.max(200000, Math.sqrt((r + height) * (r + height) - r * r) * 1.35);
       if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
-    } else if (camera.far !== 200000) {
-      camera.far = 200000;
-      camera.updateProjectionMatrix();
+      // Push the stars past the limb, and grow the points to match so they
+      // stay the same size on screen.
+      const k = (far * 0.82) / STAR_R;
+      stars.scale.setScalar(k);
+      starMat.size = STAR_SIZE * k;
+    } else {
+      stars.scale.setScalar(1);
+      starMat.size = STAR_SIZE;
+      if (camera.far !== 200000) {
+        camera.far = 200000;
+        camera.updateProjectionMatrix();
+      }
     }
 
     skyColour.setStyle(skyState.palette.horizon);
@@ -542,11 +597,14 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     if (onMoon) {
       // Vacuum. No sky, so no skylight: only the sun and what the regolith
       // bounces, which is the whole reason lunar shadows read as black.
-      ambient.intensity = 0.05;
-      ambient.color.setHex(0x9aa4b4);
-      ambient.groundColor.setHex(0x3b3833);
+      /* Vacuum: no sky, so the only fill is what the regolith bounces back at
+         itself. Enough to keep a shadowed slope legible, not enough to stop
+         lunar shadows reading as the hard-edged black they are. */
+      ambient.intensity = 0.14;
+      ambient.color.setHex(0x8e96a4);
+      ambient.groundColor.setHex(0x6b6660);
     } else if (inSpace) {
-      ambient.intensity = lerp(0.4, 0.12, airless);
+      ambient.intensity = lerp(0.44, 0.2, airless);
       ambient.color.setHex(0x8fb6e8);
       ambient.groundColor.setHex(0x2c3a4e);
     } else {
@@ -754,5 +812,5 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     renderer.dispose();
   };
 
-  return { render, resize, setOccupancy, travelled, dispose };
+  return { render, resize, setOccupancy, setAdverts: cabin.setAdverts, travelled, dispose };
 }
