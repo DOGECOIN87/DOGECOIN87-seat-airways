@@ -32,6 +32,10 @@ jobs:
 
       - run: npm ci
 
+      # The publish path reaches a wallet signature, so a failure there costs
+      # somebody a signing prompt for an upload that was never going to land.
+      - run: npm test
+
       # ── Configuration ──────────────────────────────────────────────────
       # These are repository *variables*, not secrets, and that is not an
       # oversight. Vite inlines every VITE_-prefixed value into the bundle it

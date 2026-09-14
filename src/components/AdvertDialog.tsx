@@ -27,9 +27,16 @@ interface AdvertDialogProps {
 }
 
 const AdvertDialog = ({ seat, current, onSave, onClear, onClose, shared }: AdvertDialogProps) => {
-  const [image, setImage] = useState(current?.image ?? '');
-  const [alt, setAlt] = useState(current?.alt ?? '');
-  const [href, setHref] = useState(current?.href ?? '');
+  /* A house advert is the airline's own creative standing in until somebody
+     buys the space. It is not the holder's artwork, so it does not seed this
+     form: pre-filling it meant that opening the dialog and pressing publish
+     tried to publish the house advert, which is both meaningless and — since
+     the house ads are SVG and the server refuses SVG — impossible. It is
+     still shown below as what is on the seat right now. */
+  const own = current && !current.house ? current : null;
+  const [image, setImage] = useState(own?.image ?? '');
+  const [alt, setAlt] = useState(own?.alt ?? '');
+  const [href, setHref] = useState(own?.href ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const first = useRef<HTMLButtonElement>(null);
@@ -45,6 +52,11 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose, shared }: Adver
     if (!file) return;
     setBusy(true);
     setError(null);
+    /* Clear any previous artwork before decoding rather than after. If this
+       file fails, the form must not still be holding the last one — a
+       failed choice that leaves a stale image in place is how you end up
+       publishing something you did not pick. */
+    setImage('');
     try {
       setImage(await toSquare(file));
     } catch (e) {
@@ -99,10 +111,10 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose, shared }: Adver
         <div className="flex gap-4">
           <div
             className="ui-well grid h-24 w-24 flex-none place-items-center overflow-hidden"
-            aria-hidden={!image}
+            aria-hidden={!image && !current?.image}
           >
-            {image
-              ? <img src={image} alt="" className="h-full w-full object-cover" />
+            {image || current?.image
+              ? <img src={image || current?.image} alt="" className="h-full w-full object-cover" />
               : <span className="text-[10px] uppercase tracking-[0.14em] text-ui-faint">1:1</span>}
           </div>
 

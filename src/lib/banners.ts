@@ -68,6 +68,8 @@ export const BANNER_SIZE = 384;
 const QUALITY = 0.82;
 /** Refuse anything that would bloat storage even after re-encoding. */
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+/** How long to wait for a browser to decode a chosen file before giving up. */
+const DECODE_TIMEOUT_MS = 20_000;
 
 function readLocal(): Record<string, Banner> {
   try {
@@ -109,35 +111,70 @@ export function safeHref(href: string | undefined): string | undefined {
  * squashed into shape by CSS: a cropped advert looks deliberate, a stretched
  * one looks broken.
  */
-export function toSquare(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) return reject(new Error('That file is not an image.'));
-    if (file.size > MAX_UPLOAD_BYTES) return reject(new Error('That image is over 8 MB.'));
+export async function toSquare(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) throw new Error('That file is not an image.');
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error('That image is over 8 MB.');
 
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const side = Math.min(img.naturalWidth, img.naturalHeight);
-      if (!side) return reject(new Error('That image has no pixels.'));
-      const c = document.createElement('canvas');
-      c.width = c.height = Math.min(BANNER_SIZE, side);
-      const g = c.getContext('2d');
-      if (!g) return reject(new Error('This browser cannot process images.'));
-      g.imageSmoothingQuality = 'high';
-      g.drawImage(
-        img,
-        (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side,
-        0, 0, c.width, c.height,
-      );
-      resolve(c.toDataURL('image/jpeg', QUALITY));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('That image could not be read.'));
-    };
-    img.src = url;
-  });
+  const source = await decode(file);
+  const width = 'naturalWidth' in source ? source.naturalWidth : source.width;
+  const height = 'naturalHeight' in source ? source.naturalHeight : source.height;
+  const side = Math.min(width, height);
+  if (!side) throw new Error('That image has no pixels.');
+
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.min(BANNER_SIZE, side);
+  const g = c.getContext('2d');
+  if (!g) throw new Error('This browser cannot process images.');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(source, (width - side) / 2, (height - side) / 2, side, side, 0, 0, c.width, c.height);
+  if ('close' in source) source.close();
+
+  const url = c.toDataURL('image/jpeg', QUALITY);
+  /* A canvas that could not be read back returns the string for a blank one.
+     Publishing that would put an empty square on the seat and report success. */
+  if (url.length < 64) throw new Error('That image could not be processed. Try a smaller one.');
+  return url;
+}
+
+/**
+ * File to something drawable.
+ *
+ * Two paths, and the order matters on a phone. `createImageBitmap` decodes
+ * off the main thread and lets the browser release the full-size bitmap as
+ * soon as it is drawn, which is the difference between working and not on a
+ * 12-megapixel photo inside a wallet's in-app browser. Where it is missing,
+ * or where it refuses a format it does not recognise, the `<img>` path still
+ * works.
+ *
+ * Both are raced against a timer. An `<img>` given a file it cannot decode
+ * can fire neither `load` nor `error` — the promise then never settles, the
+ * dialog sits on "Working…" forever, and there is nothing to tell the person
+ * because as far as the page is concerned it is still going.
+ */
+function decode(file: File): Promise<HTMLImageElement | ImageBitmap> {
+  const guard = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('That image took too long to read. Try a smaller one.')), DECODE_TIMEOUT_MS),
+  );
+
+  const viaBitmap = async (): Promise<HTMLImageElement | ImageBitmap> => {
+    if (typeof createImageBitmap !== 'function') return viaElement();
+    try {
+      return await createImageBitmap(file);
+    } catch {
+      return viaElement();
+    }
+  };
+
+  const viaElement = () =>
+    new Promise<HTMLImageElement>((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That image could not be read.')); };
+      img.src = url;
+    });
+
+  return Promise.race([viaBitmap(), guard]);
 }
 
 export interface BannerStore {
@@ -190,13 +227,62 @@ export const hasPublishedWall = Boolean(REMOTE || API);
    caught the signature chooses the picture. With it, a signature authorises
    exactly one image and nothing else. */
 
-/** The bytes behind a `data:` URL, which is what `toSquare` produces. */
-function dataUrlBytes(dataUrl: string): Uint8Array {
-  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
-  const binary = atob(base64);
+/**
+ * The bytes behind a `data:` URL.
+ *
+ * This used to assume base64, because `toSquare` produces base64 and that was
+ * the only thing anyone meant to publish. But the house adverts are
+ * `data:image/svg+xml,` followed by *percent-encoded* markup, and the dialog
+ * opens with whatever is already on the seat — so pressing publish without
+ * choosing a file handed this function an SVG data URL and `atob` threw
+ * "The string to be decoded is not correctly encoded" into the middle of the
+ * page. Both encodings are legal in a data URL; the `;base64` marker is what
+ * distinguishes them, so read it rather than guessing.
+ */
+export function dataUrlBytes(dataUrl: string): Uint8Array {
+  const comma = dataUrl.indexOf(',');
+  if (!dataUrl.startsWith('data:') || comma < 0) {
+    throw new Error('That image is not one this page can publish. Choose a file.');
+  }
+
+  const payload = dataUrl.slice(comma + 1);
+
+  if (!/;base64/i.test(dataUrl.slice(0, comma))) {
+    return new TextEncoder().encode(decodeURIComponent(payload));
+  }
+
+  let binary: string;
+  try {
+    binary = atob(payload);
+  } catch {
+    /* A malformed data URL is not something to explain in the browser's
+       words. `atob`'s DOMException names a function nobody clicked. */
+    throw new Error('That image could not be read. Try choosing it again.');
+  }
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
   return out;
+}
+
+/**
+ * What the server will actually accept, checked before the wallet is asked.
+ *
+ * The Worker sniffs magic bytes and refuses anything that is not JPEG or PNG
+ * — SVG most of all, since it carries script. Finding that out from a 415
+ * means the holder has already approved a signature for an upload that was
+ * never going to land. Better to know one step earlier, in words that say
+ * what to do about it.
+ */
+function refusalReason(dataUrl: string): string | null {
+  if (!dataUrl) return 'Choose an image first.';
+  if (!dataUrl.startsWith('data:')) return 'Choose an image first.';
+  if (/^data:image\/svg\+xml/i.test(dataUrl)) {
+    return 'SVG cannot be published. Choose a JPEG or PNG.';
+  }
+  if (!/;base64/i.test(dataUrl.slice(0, dataUrl.indexOf(',')))) {
+    return 'That image is not one this page can publish. Choose a file.';
+  }
+  return null;
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -240,6 +326,9 @@ export async function publishBanner(opts: {
   sign: (message: string) => Promise<string>;
 }): Promise<PublishResult> {
   if (!API) throw new Error('This deployment has no advert server configured.');
+
+  const refusal = refusalReason(opts.image);
+  if (refusal) throw new Error(refusal);
 
   const bytes = dataUrlBytes(opts.image);
   const hash = await sha256Hex(bytes);
