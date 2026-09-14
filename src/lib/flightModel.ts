@@ -143,7 +143,9 @@ export function bandFor(marketCap: number): BandState {
 /** Market cap as money, at the scale it happens to be. */
 export function formatCap(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 1 : 2)}M`;
-  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
+  // One decimal under $100K, where rounding to the thousand moves the figure
+  // by up to 10%: $4,798 is $4.8K, not $5K.
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1)}K`;
   return `$${Math.round(n)}`;
 }
 
