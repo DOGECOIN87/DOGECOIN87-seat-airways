@@ -107,3 +107,46 @@ export function decodeDataUrl(value: string): Uint8Array | null {
     return null;
   }
 }
+
+/* ── Reading a stored record back ───────────────────────────────────────── */
+
+export interface StoredBanner {
+  key: string;
+  alt: string;
+  href?: string;
+  updated: string;
+}
+
+/**
+ * One `banner:` record, or null if it is not one.
+ *
+ * The wall is every record read back in a single request, so this function
+ * decides whether one bad record costs one advert or all of them. It used to
+ * be `KV.get(name, 'json')` inside a `Promise.all`: a single value that was
+ * not JSON threw, the throw escaped the route, and Cloudflare answered every
+ * visitor with error 1101. The page treats a failed wall as an empty one, so
+ * the symptom was every advert on the aircraft vanishing at once — and
+ * publishing, which wrote perfectly good records, looking as if it had not
+ * saved.
+ *
+ * So nothing here throws. Not JSON, not an object, no key pointing where the
+ * artwork lives: skipped, and the rest of the wall stands.
+ */
+export function readStoredBanner(raw: string | null): StoredBanner | null {
+  if (!raw) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.key !== 'string' || !v.key.startsWith('banners/')) return null;
+  return {
+    key: v.key,
+    alt: typeof v.alt === 'string' ? v.alt : '',
+    ...(typeof v.href === 'string' ? { href: v.href } : {}),
+    updated: typeof v.updated === 'string' ? v.updated : '',
+  };
+}

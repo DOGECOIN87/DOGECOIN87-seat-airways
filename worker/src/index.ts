@@ -19,7 +19,10 @@
  * wallet it names? Everything below is in service of answering it.
  */
 
-import { challenge, decodeDataUrl, imageType, sha256Hex, verifySignature, MAX_AGE_MS, MAX_IMAGE_BYTES, COOLDOWN_SECONDS } from './verify';
+import {
+  challenge, decodeDataUrl, imageType, readStoredBanner, sha256Hex, verifySignature,
+  MAX_AGE_MS, MAX_IMAGE_BYTES, COOLDOWN_SECONDS, type StoredBanner,
+} from './verify';
 
 export interface Env {
   BANNERS: KVNamespace;
@@ -49,13 +52,6 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
 }
 
-/** Stored shape. `key` locates the bytes; `image` is rebuilt on read. */
-interface StoredBanner {
-  key: string;
-  alt: string;
-  href?: string;
-  updated: string;
-}
 
 /** Where the artwork lives, and how to address it. */
 const usingR2 = (env: Env) => Boolean(env.IMAGES && env.PUBLIC_IMAGE_BASE);
@@ -191,7 +187,10 @@ export default {
       const out: Record<string, { image: string; alt: string; href?: string }> = {};
       await Promise.all(
         list.keys.map(async ({ name }) => {
-          const stored = await env.BANNERS.get<StoredBanner>(name, 'json');
+          // Read as text and parsed here, not with 'json': one malformed
+          // record must cost one advert, not the whole wall. See
+          // readStoredBanner for the outage this replaced.
+          const stored = readStoredBanner(await env.BANNERS.get(name).catch(() => null));
           if (!stored) return;
           out[name.slice('banner:'.length)] = {
             image: imageUrl(env, request, stored.key, stored.updated),
