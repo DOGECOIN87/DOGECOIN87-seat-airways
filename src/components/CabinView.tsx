@@ -327,7 +327,7 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
               <rect x={screen.x - 12} y={screen.y - 12} width={screen.w + 24} height={screen.h + 24} fill="#0B0C0F" stroke="#6E685C" strokeWidth="2.2" />
               <rect x={screen.x} y={screen.y} width={screen.w} height={screen.h} fill="url(#cv-screen)" />
               <text x={screenCx} y={screen.y + 30} fontSize="13" textAnchor="middle" fill={CYAN} letterSpacing="2.4" fontFamily={MONO}>
-                SEAT AIRWAYS · FL350
+                SEAT AIRLINES · FL350
               </text>
               <text ref={screenAlt} x={screenCx} y={screen.y + 76} fontSize="26" textAnchor="middle" fill="#FFFFFF" fontWeight="700" fontFamily={MONO} />
               {/* Moving map */}

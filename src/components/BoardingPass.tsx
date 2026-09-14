@@ -71,7 +71,7 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
           <div className="flex items-center gap-2.5">
             <Mark size={22} background="none" color="#0087EA" className="flex-none" />
             <p className="font-heading text-lg tracking-tight text-ui-ink">
-              SEAT <span className="text-ui-deep">AIRWAYS</span>
+              SEAT <span className="text-ui-deep">AIRLINES</span>
             </p>
             <span className="ml-auto text-[10px] uppercase tracking-[0.18em] text-ui-faint">Boarding pass</span>
           </div>

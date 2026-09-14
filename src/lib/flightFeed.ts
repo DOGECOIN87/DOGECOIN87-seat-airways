@@ -1,7 +1,7 @@
 /**
  * The flight feed — the one input the whole cabin reacts to.
  *
- * SEAT AIRWAYS reads three numbers and derives everything else from them:
+ * SEAT AIRLINES reads three numbers and derives everything else from them:
  * market cap becomes altitude, 24h change becomes pitch, holders become souls
  * on board. Nothing downstream knows where those numbers came from, which is
  * the point: this module is the only place that has to change when the feed

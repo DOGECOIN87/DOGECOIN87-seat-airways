@@ -367,7 +367,7 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
           ) : (
             <p className="sa-map__note">
               Point at any seat to see who holds it and what they are running. Every held square is its
-              holder&apos;s to fill — the ones showing Seat Airways creative are the placements still open.
+              holder&apos;s to fill — the ones showing Seat Airlines creative are the placements still open.
             </p>
           )}
         </div>

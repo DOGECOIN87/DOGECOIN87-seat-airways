@@ -1,5 +1,5 @@
 /**
- * The SEAT AIRWAYS mark: a seat, seen from the side, inside a ring.
+ * The SEAT AIRLINES mark: a seat, seen from the side, inside a ring.
  *
  * The supplied artwork, as a single evenodd path — so it stays sharp at any
  * size, tints to whatever it sits on, needs no network request, and can be

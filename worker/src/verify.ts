@@ -55,7 +55,7 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
 /** The exact text the client signs. Must match `challenge()` in the app. */
 export function challenge(owner: string, imageHash: string, issued: string): string {
   return [
-    'SEAT AIRWAYS',
+    'SEAT AIRLINES',
     'Publish this advert on my seat.',
     '',
     `wallet: ${owner}`,

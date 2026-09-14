@@ -56,7 +56,7 @@ export interface Banner {
 
 export type BannerSet = Readonly<Record<string, Banner>>;
 
-const KEY = 'seat-airways.banners.v1';
+const KEY = 'seat-airlines.banners.v1';
 const REMOTE = import.meta.env.VITE_BANNERS_URL as string | undefined;
 const API = (import.meta.env.VITE_BANNERS_API as string | undefined)?.replace(/\/$/, '');
 
@@ -211,7 +211,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
  */
 export function challenge(owner: string, imageHash: string, issued: string): string {
   return [
-    'SEAT AIRWAYS',
+    'SEAT AIRLINES',
     'Publish this advert on my seat.',
     '',
     `wallet: ${owner}`,
@@ -307,7 +307,7 @@ export async function fetchOwnerBanners(): Promise<Record<string, Banner>> {
 
    Every airline in the world has this exact problem and every one of them
    solves it the same way: inventory nobody has bought yet carries the
-   airline's own campaigns. So these are Seat Airways' — eight layouts drawn
+   airline's own campaigns. So these are Seat Airlines' — eight layouts drawn
    from the same palette, mark and typography as the rest of the page, sized
    and weighted to be legible at the thirty pixels a seat tile actually gets.
    They are drawn rather than fetched, so they cost no request and cannot be
@@ -367,14 +367,14 @@ const HOUSE_ADS: HouseAd[] = [
       `<rect width="200" height="200" fill="${HOUSE_INK.navy}"/>` +
       `<rect x="0" y="0" width="200" height="6" fill="${HOUSE_INK.amber}"/>` +
       stack(['YOUR', 'BAG IS', 'YOUR', 'SEAT'], { x: 18, y: 62, size: 32, fill: HOUSE_INK.bone }) +
-      micro('SEAT AIRWAYS', 18, 182, HOUSE_INK.cyan),
+      micro('SEAT AIRLINES', 18, 182, HOUSE_INK.cyan),
   },
   {
-    line: 'Seat Airways — FL350, nonstop',
+    line: 'Seat Airlines — FL350, nonstop',
     svg:
       `<rect width="200" height="200" fill="${HOUSE_INK.bone}"/>` +
       houseMark(58, 26, 84, HOUSE_INK.navy) +
-      stack(['SEAT', 'AIRWAYS'], { x: 100, y: 148, size: 26, fill: HOUSE_INK.navy, anchor: 'middle' }) +
+      stack(['SEAT', 'AIRLINES'], { x: 100, y: 148, size: 26, fill: HOUSE_INK.navy, anchor: 'middle' }) +
       micro('FL350 · NONSTOP', 100, 182, HOUSE_INK.cloth, 9, 'middle'),
   },
   {
@@ -466,7 +466,7 @@ export function houseAdverts(seats: readonly string[]): Record<string, Banner> {
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">${ad.svg}</svg>`;
     out[seat] = {
       image: `data:image/svg+xml,${encodeURIComponent(svg)}`,
-      alt: `Seat Airways house advert: ${ad.line}. This seat's holder can replace it.`,
+      alt: `Seat Airlines house advert: ${ad.line}. This seat's holder can replace it.`,
       house: true,
     };
   });

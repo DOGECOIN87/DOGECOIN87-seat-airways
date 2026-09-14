@@ -1,4 +1,4 @@
-# SEAT AIRWAYS
+# SEAT AIRLINES
 
 **One plane. Everyone's in it.**
 
@@ -109,7 +109,7 @@ Seats are drawn at a size that follows their class — the flight deck largest,
 first next, the rest at par — because rank 1 and rank 40 are not the same
 placement and a map that draws them identically argues that they are.
 
-Held seats with nothing on them yet carry Seat Airways' own campaigns, the way
+Held seats with nothing on them yet carry Seat Airlines' own campaigns, the way
 unsold inventory does on a real aircraft (`houseAdverts` in
 `src/lib/banners.ts`). They are drawn rather than fetched, so they cost no
 request, and each says in its alt text that the seat's holder is who replaces

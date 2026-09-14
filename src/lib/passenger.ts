@@ -7,7 +7,7 @@
  * holds for the session and nothing breaks.
  */
 
-const KEY = 'seat_airways_passenger';
+const KEY = 'seat_airlines_passenger';
 
 const FIRST = [
   'Aisle', 'Overhead', 'Tray', 'Galley', 'Jetway', 'Terminal', 'Tarmac', 'Winglet',

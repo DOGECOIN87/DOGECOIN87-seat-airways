@@ -31,7 +31,7 @@ the manifest entirely and it comes down on its own, with nothing to clean up.
 The client asks the holder's wallet to sign a short, readable challenge:
 
 ```
-SEAT AIRWAYS
+SEAT AIRLINES
 Publish this advert on my seat.
 
 wallet: 7xKX…9fQr
@@ -68,7 +68,7 @@ npm install
 
 # One KV namespace for the records, one R2 bucket for the artwork.
 npx wrangler kv namespace create BANNERS
-npx wrangler r2 bucket create seat-airways-banners
+npx wrangler r2 bucket create seat-airlines-banners
 ```
 
 Put the KV id from that first command into `wrangler.toml`, then give the R2
@@ -92,7 +92,7 @@ npx wrangler deploy
 Finally point the frontend at it:
 
 ```
-VITE_BANNERS_API=https://seat-airways-banners.<your-subdomain>.workers.dev
+VITE_BANNERS_API=https://seat-airlines-banners.<your-subdomain>.workers.dev
 ```
 
 ## Hosting it somewhere else

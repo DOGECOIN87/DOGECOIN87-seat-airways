@@ -1,4 +1,4 @@
-name = "seat-airways-banners"
+name = "seat-airlines-banners"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 
@@ -10,7 +10,7 @@ id = "REPLACE_WITH_KV_NAMESPACE_ID"
 # The artwork itself.
 [[r2_buckets]]
 binding = "IMAGES"
-bucket_name = "seat-airways-banners"
+bucket_name = "seat-airlines-banners"
 
 [vars]
 # Where the images are served from — an R2 public bucket URL, or a custom

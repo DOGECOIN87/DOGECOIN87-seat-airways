@@ -106,7 +106,7 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
     <div
       className="sd-view sd-frame sd-frame--wide relative w-full cursor-grab overflow-hidden active:cursor-grabbing"
       role="img"
-      aria-label={`SEAT AIRWAYS flight FL350 from outside, ${band.label.toLowerCase()}. Each lit window is a row with passengers in it${
+      aria-label={`SEAT AIRLINES flight FL350 from outside, ${band.label.toLowerCase()}. Each lit window is a row with passengers in it${
         claimed ? `, and seat ${claimed.id} is yours` : ''
       }. Drag to walk around the aircraft.`}
       onPointerDown={onDown}

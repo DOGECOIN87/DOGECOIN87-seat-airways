@@ -493,7 +493,7 @@ function finMarkTexture(fill: string): THREE.CanvasTexture {
   return tex;
 }
 
-/** `SEAT AIRWAYS`, on transparent, for the forward fuselage. */
+/** `SEAT AIRLINES`, on transparent, for the forward fuselage. */
 function titleTexture(fill: string): THREE.CanvasTexture {
   const w = 1024, h = 192;
   const c = document.createElement('canvas');
@@ -504,13 +504,28 @@ function titleTexture(fill: string): THREE.CanvasTexture {
     g.fillStyle = fill;
     g.textBaseline = 'middle';
     g.textAlign = 'left';
-    g.font = '800 128px Archivo, "Helvetica Neue", Arial, sans-serif';
     // Titles are letterspaced on every aircraft that carries them; canvas has
     // no tracking, so the string is set a glyph at a time.
-    const text = 'SEAT AIRWAYS';
+    const text = 'SEAT AIRLINES';
     const track = 7;
-    let width = 0;
-    for (const ch of text) width += g.measureText(ch).width + track;
+
+    /* Fit the name to the canvas rather than trusting it to fit.
+       The texture is stretched onto a decal of fixed proportions, so the
+       canvas cannot simply grow with a longer name — it has to be the type
+       that gives way. Measured at the nominal size and scaled down only if
+       it would run off the end, which leaves a short name untouched. */
+    const nominal = 128;
+    const measure = (size: number) => {
+      g.font = `800 ${size}px Montserrat, "Helvetica Neue", Arial, sans-serif`;
+      let total = 0;
+      for (const ch of text) total += g.measureText(ch).width + track;
+      return total;
+    };
+    const usable = w * 0.94;
+    const full = measure(nominal);
+    const size = full > usable ? Math.floor(nominal * (usable / full)) : nominal;
+    const width = measure(size);
+
     let x = (w - width) / 2;
     for (const ch of text) {
       g.fillText(ch, x, h / 2 + 4);

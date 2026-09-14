@@ -58,7 +58,7 @@ const CabinView3D = lazy(() => import('./components/CabinView3D'));
 const ExteriorView = lazy(() => import('./components/ExteriorView'));
 
 /**
- * SEAT AIRWAYS — the cabin.
+ * SEAT AIRLINES — the cabin.
  *
  * One number flies the whole page. The 24h change sets the aircraft's attitude
  * and the market cap is its altitude: $1M puts you on top of the cloud deck,
@@ -403,8 +403,8 @@ export default function App() {
       <header className="sa-topbar sticky top-0 z-40">
         <div className="mx-auto flex max-w-[94rem] flex-wrap items-center gap-x-7 gap-y-2 px-5 py-2.5 sm:px-8">
           <a href="#top" className="flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-blue">
-            <Mark size={30} background="none" color="#0087EA" title="SEAT AIRWAYS" />
-            <span className="whitespace-nowrap font-heading text-lg leading-none text-ui-ink">Seat Airways</span>
+            <Mark size={30} background="none" color="#0087EA" title="SEAT AIRLINES" />
+            <span className="whitespace-nowrap font-heading text-lg leading-none text-ui-ink">Seat Airlines</span>
             <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-ui-faint sm:inline">
               FL350 · Nonstop
             </span>
@@ -825,7 +825,7 @@ export default function App() {
           </p>
 
           <div className="sa-footer__bar">
-            <span>Seat Airways · FL350 · Nonstop</span>
+            <span>Seat Airlines · FL350 · Nonstop</span>
             <span>Your bag is your seat</span>
           </div>
         </div>

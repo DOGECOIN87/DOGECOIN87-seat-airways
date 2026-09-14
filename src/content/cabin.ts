@@ -1,5 +1,5 @@
 /**
- * SEAT AIRWAYS — cabin layout and copy.
+ * SEAT AIRLINES — cabin layout and copy.
  *
  * The premise: your bag is your seat. Bigger bag, better seat. Seats are
  * finite, so a bigger bag can take yours — you get reseated, and the whole
