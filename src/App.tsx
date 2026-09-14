@@ -3,6 +3,7 @@ import FlightDeck from './components/FlightDeck';
 import CargoHold from './components/CargoHold';
 import CheckIn from './components/CheckIn';
 import Mark from './components/Mark';
+import ContractBar from './components/ContractBar';
 import BoardingLadder from './components/BoardingLadder';
 import ViewFrame from './components/ViewFrame';
 import Annunciators from './components/Annunciators';
@@ -21,12 +22,9 @@ import {
   type SeatPosition,
   type ZoneKey,
 } from './content/cabin';
-import { createSimulatedFeed, INITIAL_TICK, type FlightMode } from './lib/flightFeed';
-import { createLiveFeed, hasLiveMarket } from './lib/marketFeed';
+import { INITIAL_TICK } from './lib/flightFeed';
+import { createLiveFeed } from './lib/marketFeed';
 import {
-  BAND_CLOUDS,
-  BAND_MOON,
-  BAND_SPACE,
   bandFor,
   formatCap,
   formatChange,
@@ -60,7 +58,7 @@ const ExteriorView = lazy(() => import('./components/ExteriorView'));
 /**
  * SEAT AIRLINES — the cabin.
  *
- * One number flies the whole page. The 24h change sets the aircraft's attitude
+ * One number flies the whole page. The 5m change sets the aircraft's attitude
  * and the market cap is its altitude: $1M puts you on top of the cloud deck,
  * $10M turns the sky black, $50M is the moon. The sky itself is real — the
  * visitor's own time of day, and the weather where they are.
@@ -69,22 +67,6 @@ const ExteriorView = lazy(() => import('./components/ExteriorView'));
  * window, middle and aisle seats see genuinely different things, because that
  * is the ladder the whole premise rests on.
  */
-
-const MODES: { key: FlightMode; label: string }[] = [
-  { key: 'live', label: 'Live market' },
-  { key: 'climb', label: 'Climb' },
-  { key: 'cruise', label: 'Cruise' },
-  { key: 'turbulence', label: 'Turbulence' },
-  { key: 'dive', label: 'Dive' },
-];
-
-/** Altitudes worth visiting without waiting out the climb. */
-const ALTITUDES: { label: string; cap: number }[] = [
-  { label: 'In the weather', cap: 163_000 },
-  { label: 'Above the clouds', cap: BAND_CLOUDS * 1.6 },
-  { label: 'Space', cap: BAND_SPACE * 1.6 },
-  { label: 'The moon', cap: BAND_MOON * 1.1 },
-];
 
 const POSITIONS: { key: SeatPosition; label: string }[] = [
   { key: 'window', label: 'Window' },
@@ -145,18 +127,14 @@ const SceneLoading = ({ exterior = false }: { exterior?: boolean }) => (
 
 export default function App() {
 
-  /* Point the deployment at a token and it reads the market; leave it
-     unconfigured and it flies the simulator. The page states which one it is
-     on rather than dressing a simulation up as a live reading. */
-  const feed = useMemo(
-    () => (hasLiveMarket ? createLiveFeed(INITIAL_TICK) : createSimulatedFeed()),
-    [],
-  );
+  /* One feed, reading the market. There is no simulator behind it and no
+     flight-sim input in front of it: an aircraft that can be flown by hand is
+     not reporting anything. */
+  const feed = useMemo(() => createLiveFeed(INITIAL_TICK), []);
   const { tick, lamps } = useFlightState(feed);
   const sky = useSky();
   const band = useMemo(() => bandFor(tick.marketCap), [tick.marketCap]);
 
-  const [mode, setMode] = useState<FlightMode>('live');
   /* The page opens outside, on the whole aeroplane. It is the one frame that
      explains the premise without a caption — one plane, everyone in it — and
      every other camera is a step inward from it. */
@@ -173,22 +151,20 @@ export default function App() {
   const [loadingHolding, setLoadingHolding] = useState(false);
   /* Demo only: a stand-in holding, so the ladder can be seen working with no
      wallet installed. Cleared the moment a real one connects. */
-  const [preview, setPreview] = useState<Holding | null>(null);
   const [log, setLog] = useState<readonly LogEntry[]>([]);
 
-  const effectiveHolding = preview ?? holding;
-  const seatKey = wallet.address ?? (preview ? 'SAMPLE-HOLDER' : null);
+  const seatKey = wallet.address;
 
   /* Who is aboard. Seats go to the top holders and then run out, so the empty
      rows aft are the game: they are the seats nobody has out-held anyone for. */
-  const manifest = useManifest(seatKey, effectiveHolding);
+  const manifest = useManifest(seatKey, holding);
   const taken = manifest.seats;
   /* Holders who did not make the cut. */
   const belowCutoff = Math.max(0, tick.holders - manifest.entries.length);
 
   const berth = useMemo(
-    () => berthFromManifest(manifest, seatKey, effectiveHolding?.balance ?? 0),
-    [manifest, seatKey, effectiveHolding?.balance],
+    () => berthFromManifest(manifest, seatKey, holding?.balance ?? 0),
+    [manifest, seatKey, holding?.balance],
   );
 
   /* ── The wall ─────────────────────────────────────────────────────────
@@ -250,9 +226,7 @@ export default function App() {
   );
   const passenger = wallet.address
     ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
-    : preview
-      ? 'Sample holder'
-      : 'Standby';
+    : 'Standby';
 
   const viewSeat = useMemo(() => representativeSeat(viewZone, viewPosition), [viewZone, viewPosition]);
   const viewZoneDef = CABIN_ZONES.find((z) => z.key === viewZone) ?? CABIN_ZONES[0];
@@ -303,7 +277,6 @@ export default function App() {
       setHolding(null);
       return;
     }
-    setPreview(null);
     let cancelled = false;
     const read = async () => {
       setLoadingHolding(true);
@@ -323,7 +296,7 @@ export default function App() {
   /* Being seated is an event: the PA says so, and the camera walks you there. */
   const lastSeat = useRef<string | null>(null);
   useEffect(() => {
-    const boarded = Boolean(wallet.address) || Boolean(preview);
+    const boarded = Boolean(wallet.address);
     if (berth.hold && boarded && lastSeat.current !== 'HOLD') {
       lastSeat.current = 'HOLD';
       setCamera('hold');
@@ -345,15 +318,7 @@ export default function App() {
         : `Passenger reseated to ${id}. ${berth.rung}.`,
       'pa',
     );
-  }, [berth.seat?.id, berth.hold, berth.rung, wallet.address, preview, boardedAt, tick.marketCap, say]);
-
-  const flyMode = (next: FlightMode) => {
-    setMode(next);
-    feed.setMode(next);
-    if (next === 'dive') say(CALLOUTS.dive, 'alert');
-    if (next === 'climb') say(CALLOUTS.climb, 'pa');
-    if (next === 'turbulence') say(CALLOUTS.turbulence, 'pa');
-  };
+  }, [berth.seat?.id, berth.hold, berth.rung, wallet.address, boardedAt, tick.marketCap, say]);
 
   const walkTo = (zone: ZoneKey) => {
     setViewZone(zone);
@@ -394,6 +359,8 @@ export default function App() {
 
       <a href="#wall" className="sa-skip">Skip to the seat map</a>
 
+      <ContractBar />
+
       {/* ── Gate sign ──────────────────────────────────────────────────
           An airline's vernacular is a brand bar over a strip of flight data,
           set in figures you can read across a concourse. It stays at the top
@@ -406,7 +373,7 @@ export default function App() {
             <Mark size={30} background="none" color="#0087EA" title="SEAT AIRLINES" />
             <span className="whitespace-nowrap font-heading text-lg leading-none text-ui-ink">Seat Airlines</span>
             <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-ui-faint sm:inline">
-              FL350 · Nonstop
+              SA350 · Nonstop
             </span>
           </a>
 
@@ -416,7 +383,7 @@ export default function App() {
               { k: 'Market cap', v: formatCap(tick.marketCap), tone: 'text-ui-ink' },
               /* Direction is the one thing on the page a single accent cannot
                  carry, so it keeps a sign as well as a colour. */
-              { k: '24h', v: formatChange(tick.change24h), tone: tick.change24h >= 0 ? 'text-ui-deep' : 'text-ui-soft' },
+              { k: '5m', v: formatChange(tick.change5m), tone: tick.change5m >= 0 ? 'text-ui-deep' : 'text-ui-soft' },
               { k: 'Seated', v: `${manifest.entries.length}/${MANIFEST_SIZE}`, tone: 'text-ui-ink' },
             ].map((f) => (
               <div key={f.k} className="sa-topbar__fig shrink-0">
@@ -440,7 +407,7 @@ export default function App() {
             <span className="sa-eyebrow__no">01</span> The aeroplane
             <span className="sa-eyebrow__live">
               <span className="sa-live" aria-hidden />
-              Live · FL350 · {band.label}
+              Live · SA350 · {band.label}
             </span>
           </p>
           <div className="mt-4 grid gap-x-14 gap-y-6 lg:grid-cols-[minmax(0,1.618fr)_minmax(0,1fr)] lg:items-end">
@@ -451,7 +418,7 @@ export default function App() {
             </h1>
             <div className="lg:pb-3">
               <p className="sa-lead">
-                A flight simulator flown by one number. Market cap is altitude and the 24-hour change is
+                A flight simulator flown by one number. Market cap is altitude and the 5-minute change is
                 attitude, so the aeroplane you are looking at is the chart. Inside it, thirty rows of seats go
                 to the top holders in order — and every one of them is a billboard.
               </p>
@@ -532,9 +499,9 @@ export default function App() {
           </div>
 
           {/* ── The instrument deck ──────────────────────────────────────
-              Walk, state, lamps and sim are four readings of one aircraft, so
-              they are one panel under the window divided by hairlines, rather
-              than four cards floating a few pixels apart. */}
+              Walk, state and lamps are three readings of one aircraft, so they
+              are one panel under the window divided by hairlines, rather than
+              three cards floating a few pixels apart. */}
           <div className="sa-deck mt-3">
           {/* ── Walk the aircraft ── */}
           <div className="sa-deck__strip sa-deck__strip--cyan flex-col sm:flex-row sm:items-center">
@@ -582,7 +549,7 @@ export default function App() {
             <dl className="sa-flight-summary grid grid-cols-2 sm:grid-cols-4">
               {[
                 { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, s: formatCap(tick.marketCap) },
-                { k: '24h', v: formatChange(tick.change24h), s: tick.change24h >= 0 ? 'Climbing' : 'Descending' },
+                { k: '5m', v: formatChange(tick.change5m), s: tick.change5m >= 0 ? 'Climbing' : 'Descending' },
                 { k: 'Outside', v: sky.label, s: sky.live ? 'Live weather' : 'Modelled weather' },
                 { k: 'Band', v: band.label, s: band.next ?? 'Nowhere higher to go' },
               ].map((cell) => (
@@ -610,35 +577,6 @@ export default function App() {
 
             <Annunciators lamps={lamps} />
           </section>
-
-          {/* ── Flight sim ── */}
-          <div className="sa-deck__strip sa-deck__strip--amber flex-col">
-            <div className="sd-chrome -mx-1 flex items-center gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-              <span className="sa-strip-label">Flight sim</span>
-              {MODES.map((m) => (
-                <button key={m.key} type="button" onClick={() => flyMode(m.key)} aria-pressed={mode === m.key} className={chip(mode === m.key, 'amber')}>
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            {feed.jumpTo && (
-              <div className="sd-chrome -mx-1 flex items-center gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-                <span className="sa-strip-label">Market cap</span>
-                {ALTITUDES.map((alt) => (
-                  <button
-                    key={alt.label}
-                    type="button"
-                    onClick={() => { feed.jumpTo?.(alt.cap); setMode('cruise'); }}
-                    className={chip(false)}
-                  >
-                    {alt.label}
-                    <span className="ml-2 tabular-nums opacity-60">{formatCap(alt.cap)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           </div>
         </section>
 
@@ -724,25 +662,10 @@ export default function App() {
               line. */}
           <div className="mt-9 grid gap-6 lg:grid-cols-[minmax(0,1.382fr)_minmax(0,1fr)]">
             <div className="flex flex-col gap-6">
-              <CheckIn
-                wallet={wallet}
-                holding={effectiveHolding}
-                berth={berth}
-                live={holdingsSource.live}
-                loading={loadingHolding}
-                previewing={Boolean(preview)}
-                onPreview={(share) => {
-                  const supply = 1_000_000_000;
-                  setPreview({ balance: share * supply, supply, share, live: false });
-                }}
-                onClearPreview={() => {
-                  setPreview(null);
-                  lastSeat.current = null;
-                }}
-              />
+              <CheckIn wallet={wallet} holding={holding} berth={berth} loading={loadingHolding} />
               <BoardingLadder
                 berth={berth}
-                holding={effectiveHolding}
+                holding={holding}
                 address={seatKey}
                 manifestSize={manifest.entries.length}
               />
@@ -795,7 +718,7 @@ export default function App() {
               <p className="sa-footer__h">What flies it</p>
               <dl className="sa-footer__list">
                 <div><dt>Market cap</dt><dd>Altitude</dd></div>
-                <div><dt>24h change</dt><dd>Pitch, and its rate is bank</dd></div>
+                <div><dt>5m change</dt><dd>Pitch, and its rate is bank</dd></div>
                 <div><dt>Holders</dt><dd>Souls on board</dd></div>
                 <div><dt>Your bag</dt><dd>Your seat</dd></div>
               </dl>
@@ -807,25 +730,20 @@ export default function App() {
                 <div><dt>Altitude</dt><dd className="font-mono">{formatFeet(tick.marketCap)} ft</dd></div>
                 <div><dt>Band</dt><dd>{band.label}</dd></div>
                 <div><dt>Outside</dt><dd>{sky.live ? 'Live weather' : 'Modelled sky'}</dd></div>
-                {/* A live feed has no flight-sim input to offer, so the
-                    presence of jumpTo is the honest tell for which one this
-                    deployment is pointed at. */}
-                <div><dt>Market feed</dt><dd>{feed.jumpTo ? 'Simulated' : 'Live'}</dd></div>
+                <div><dt>Souls on board</dt><dd className="font-mono">{tick.holders || '—'}</dd></div>
               </dl>
             </div>
           </div>
 
           <p className="sa-close__note">
-            The horizon, the tapes, the lamps and the log all read one input — the 24-hour price change — and
+            The horizon, the tapes, the lamps and the log all read one input — the 5-minute price change — and
             the altitude is the market cap: $1M puts you above the clouds, $10M in space, $50M at the moon. The
             sky is real: your own time of day, and the weather where you are.{' '}
-            {feed.jumpTo
-              ? 'The market feed on this deployment is simulated, and every figure it produces is labelled as such.'
-              : 'The market feed is live, and the seat ladder is read from the chain.'}
+            The market feed is live, and the seat ladder is read from the chain.
           </p>
 
           <div className="sa-footer__bar">
-            <span>Seat Airlines · FL350 · Nonstop</span>
+            <span>Seat Airlines · SA350 · Nonstop</span>
             <span>Your bag is your seat</span>
           </div>
         </div>

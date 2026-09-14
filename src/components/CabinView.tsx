@@ -120,8 +120,8 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
     if (screenAlt.current) screenAlt.current.textContent = `${formatFeet(a.alt)} FT`;
     if (screenSpd.current) screenSpd.current.textContent = `${Math.round(a.speed)} KT`;
     if (tick && screenChg.current) {
-      screenChg.current.textContent = formatChange(tick.change24h);
-      screenChg.current.setAttribute('fill', tick.change24h >= 0 ? GREEN : RED);
+      screenChg.current.textContent = formatChange(tick.change5m);
+      screenChg.current.setAttribute('fill', tick.change5m >= 0 ? GREEN : RED);
     }
   });
 
@@ -327,7 +327,7 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
               <rect x={screen.x - 12} y={screen.y - 12} width={screen.w + 24} height={screen.h + 24} fill="#0B0C0F" stroke="#6E685C" strokeWidth="2.2" />
               <rect x={screen.x} y={screen.y} width={screen.w} height={screen.h} fill="url(#cv-screen)" />
               <text x={screenCx} y={screen.y + 30} fontSize="13" textAnchor="middle" fill={CYAN} letterSpacing="2.4" fontFamily={MONO}>
-                SEAT AIRLINES · FL350
+                SEAT AIRLINES · SA350
               </text>
               <text ref={screenAlt} x={screenCx} y={screen.y + 76} fontSize="26" textAnchor="middle" fill="#FFFFFF" fontWeight="700" fontFamily={MONO} />
               {/* Moving map */}

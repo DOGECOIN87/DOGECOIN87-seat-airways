@@ -1,5 +1,5 @@
 /**
- * The sky outside FL350 — real time of day, real weather.
+ * The sky outside SA350 — real time of day, real weather.
  *
  * Two inputs, both live and both independent of the market:
  *

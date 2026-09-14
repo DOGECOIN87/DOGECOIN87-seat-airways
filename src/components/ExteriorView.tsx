@@ -82,8 +82,8 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
     if (tick) {
       if (capRead.current) capRead.current.textContent = formatCap(tick.marketCap);
       if (chgRead.current) {
-        chgRead.current.textContent = formatChange(tick.change24h);
-        chgRead.current.style.color = tick.change24h >= 0 ? '#5BE86B' : '#FF5B4E';
+        chgRead.current.textContent = formatChange(tick.change5m);
+        chgRead.current.style.color = tick.change5m >= 0 ? '#5BE86B' : '#FF5B4E';
       }
     }
   });
@@ -106,7 +106,7 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
     <div
       className="sd-view sd-frame sd-frame--wide relative w-full cursor-grab overflow-hidden active:cursor-grabbing"
       role="img"
-      aria-label={`SEAT AIRLINES flight FL350 from outside, ${band.label.toLowerCase()}. Each lit window is a row with passengers in it${
+      aria-label={`SEAT AIRLINES flight SA350 from outside, ${band.label.toLowerCase()}. Each lit window is a row with passengers in it${
         claimed ? `, and seat ${claimed.id} is yours` : ''
       }. Drag to walk around the aircraft.`}
       onPointerDown={onDown}
@@ -166,7 +166,7 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
             </p>
           </div>
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">24h</p>
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">5m</p>
             <p className="mt-0.5 font-mono text-sm leading-none sm:text-base">
               <span ref={chgRead} />
             </p>

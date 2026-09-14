@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { demoHolders, isConfigured, readHolders, type HolderList } from './holdings';
+import { isConfigured, readHolders, type HolderList } from './holdings';
 import type { Holding } from './holdings';
 import { EMPTY_MANIFEST, seatHolders, type Manifest } from './manifest';
 
@@ -20,7 +20,10 @@ const REFRESH = 90_000;
 export function useManifest(address: string | null, holding: Holding | null): Manifest {
   // Lazily: useState evaluates its argument on every render otherwise, and
   // this builds a whole demonstration holder list each time.
-  const [list, setList] = useState<HolderList | null>(() => (isConfigured ? null : demoHolders()));
+  /* No invented holders. Until the chain answers, the cabin is empty — which
+     is the truth, and reads as an aircraft waiting to board rather than as a
+     full one that turns out to be nobody. */
+  const [list, setList] = useState<HolderList | null>(null);
 
   useEffect(() => {
     if (!isConfigured) return;
@@ -46,6 +49,6 @@ export function useManifest(address: string | null, holding: Holding | null): Ma
       if (at >= 0) holders[at] = mine;
       else holders.push(mine);
     }
-    return seatHolders(holders, list.supply, list.live && (holding?.live ?? true));
-  }, [list, address, holding?.balance, holding?.live]);
+    return seatHolders(holders, list.supply, list.live);
+  }, [list, address, holding?.balance]);
 }

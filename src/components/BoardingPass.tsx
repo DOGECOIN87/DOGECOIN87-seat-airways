@@ -78,7 +78,7 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
 
           <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
             <Field label="Passenger" value={passenger} />
-            <Field label="Flight" value="FL350" />
+            <Field label="Flight" value="SA350" />
             <Field label="Seat" value={seat ?? '—'} big />
             <Field label="Class" value={zone?.className ?? 'STANDBY'} />
             <Field label="Boarding group" value={zone?.group ?? '—'} />

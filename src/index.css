@@ -1465,3 +1465,64 @@ html {
   background: var(--g-accent);
   box-shadow: 0 0 6px rgba(0, 160, 230, 0.5);
 }
+
+/* ── The contract address ─────────────────────────────────────────────
+   Above everything, including the gate sign, because it is the first
+   thing somebody arriving from a link is looking for. Drawn as a recess
+   in the panel rather than a raised strip: it is a plate with a number
+   stamped into it, not a control. */
+.sa-ca {
+  position: relative;
+  z-index: 50;
+  background: linear-gradient(180deg, #D4D5DA, #DBDCE1);
+  box-shadow: inset 0 -2px 4px rgba(158, 162, 176, 0.3), 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.sa-ca__inner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 94rem;
+  margin-inline: auto;
+  padding: 0.45rem 1.25rem;
+}
+@media (min-width: 640px) { .sa-ca__inner { padding-inline: 2rem; } }
+.sa-ca__label {
+  flex: none;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  color: var(--ui-faint);
+}
+/* The address itself. It wins the row's space, and only gives way at the
+   ends — never in the middle, where a fade would hide the characters
+   somebody is checking against a block explorer. */
+.sa-ca__value {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--ui-ink);
+  scrollbar-width: none;
+}
+.sa-ca__value::-webkit-scrollbar { display: none; }
+@media (min-width: 900px) { .sa-ca__value { font-size: 0.78rem; } }
+.sa-ca__copy {
+  flex: none;
+  border-radius: 999px;
+  padding: 0.28rem 0.8rem;
+  background: var(--face);
+  box-shadow: var(--e-sm);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent-deep);
+  transition: box-shadow 0.15s ease, color 0.15s ease;
+}
+.sa-ca__copy:hover { box-shadow: var(--e); }
+.sa-ca__copy:active { box-shadow: var(--e-press); }
+.sa-ca__copy:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }

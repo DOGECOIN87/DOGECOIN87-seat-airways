@@ -21,28 +21,13 @@ interface CheckInProps {
   wallet: WalletState;
   holding: Holding | null;
   berth: Berth;
-  /** False when the deployment has not been pointed at a real token yet. */
-  live: boolean;
   loading: boolean;
-  /** Demo only: board as a holder of a given size, with no wallet at all. */
-  onPreview?: (share: number) => void;
-  previewing?: boolean;
-  onClearPreview?: () => void;
 }
 
-/* Bag sizes that land on four different rungs, for demonstrating the ladder
-   without a wallet. Shares sit clear of the cutoffs so the result is obvious. */
-const SAMPLE_HOLDERS: { label: string; share: number }[] = [
-  { label: 'Flight deck', share: 0.014 },
-  { label: 'Business', share: 0.0031 },
-  { label: 'Economy', share: 0.00012 },
-  { label: 'Cargo hold', share: 0 },
-];
-
-const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing, onClearPreview }: CheckInProps) => {
+const CheckIn = ({ wallet, holding, berth, loading }: CheckInProps) => {
   const { address, walletName, connecting, error, unavailable, connect, disconnect } = wallet;
 
-  if (!address && !previewing) {
+  if (!address) {
     return (
       <section className="ui-card ui-card--accent" aria-label="Check in">
         <div className="px-5 py-5">
@@ -73,26 +58,6 @@ const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing,
               No wallet extension detected. Phantom, Solflare and Backpack all work.
             </p>
           )}
-          {!live && (
-            <div className="mt-5 ui-rule pt-4">
-              <p className="text-[11px] leading-relaxed text-ui-faint">
-                Demonstration mode — this deployment isn&apos;t pointed at a token yet. No wallet? Board as
-                a sample holder and watch the ladder decide:
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {SAMPLE_HOLDERS.map((h) => (
-                  <button
-                    key={h.label}
-                    type="button"
-                    onClick={() => onPreview?.(h.share)}
-                    className="border border-transparent bg-transparent px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ui-soft transition-colors hover:text-ui-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-blue"
-                  >
-                    {h.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </section>
     );
@@ -107,20 +72,20 @@ const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing,
           style={{ borderRadius: '9999px', boxShadow: '0 0 10px #FFB300' }}
         />
         <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-ui-soft">
-          {previewing ? 'Sample holder' : `Checked in${walletName ? ` · ${walletName}` : ''}`}
+          {`Checked in${walletName ? ` · ${walletName}` : ''}`}
         </p>
         <button
           type="button"
-          onClick={previewing ? onClearPreview : disconnect}
+          onClick={disconnect}
           className="ml-auto text-[10px] uppercase tracking-[0.16em] text-ui-faint underline-offset-4 transition-colors hover:text-ui-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-blue"
         >
-          {previewing ? 'Back to check-in' : 'Sign out'}
+          Sign out
         </button>
       </header>
 
       <dl className="grid grid-cols-2 gap-px bg-transparent">
         {[
-          { k: 'Passenger', v: address ? short(address) : 'Sample holder' },
+          { k: 'Passenger', v: short(address) },
           { k: 'Cabin', v: berth.hold ? 'CARGO HOLD' : berth.rung },
           { k: 'Holding', v: holding ? formatTokens(holding.balance) : loading ? '—' : 'unread' },
           { k: 'Share of supply', v: holding ? formatShare(holding.share) : loading ? '—' : 'unread' },
@@ -132,13 +97,6 @@ const CheckIn = ({ wallet, holding, berth, live, loading, onPreview, previewing,
         ))}
       </dl>
 
-      {!live && (
-        <p className="ui-rule px-5 py-3 text-[11px] leading-relaxed text-ui-faint">
-          {previewing
-            ? 'A sample holder, to show the ladder working. Not a real balance.'
-            : 'Demonstration figures — not your real balance.'}
-        </p>
-      )}
     </section>
   );
 };

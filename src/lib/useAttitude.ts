@@ -47,12 +47,12 @@ export function useAttitude(feed: FlightFeed, apply: ApplyAttitude): void {
     const unsubscribe = feed.subscribe((tick) => {
       const now = performance.now();
       const dt = Math.max(0.05, (now - lastAt) / 1000);
-      target.pitch = pitchFor(tick.change24h);
-      target.bank = lastChange === null ? 0 : bankFor((tick.change24h - lastChange) / dt);
-      target.speed = airspeedFor(tick.change24h);
+      target.pitch = pitchFor(tick.change5m);
+      target.bank = lastChange === null ? 0 : bankFor((tick.change5m - lastChange) / dt);
+      target.speed = airspeedFor(tick.change5m);
       target.alt = tick.marketCap;
-      target.vs = verticalSpeedFor(tick.change24h, tick.marketCap);
-      lastChange = tick.change24h;
+      target.vs = verticalSpeedFor(tick.change5m, tick.marketCap);
+      lastChange = tick.change5m;
       lastAt = now;
       latest = tick;
     });

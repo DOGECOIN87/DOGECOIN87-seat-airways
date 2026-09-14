@@ -16,16 +16,16 @@ export const MAX_BANK = 11;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /**
- * Attitude from the 24h change.
+ * Attitude from the 5m change.
  *
  * Logarithmic so a quiet ±2% day still visibly moves the nose while a +140%
  * one saturates instead of standing the aircraft on its tail. The curve is
  * symmetric: red and green of the same size pitch by the same amount.
  */
-export function pitchFor(change24h: number): number {
-  const magnitude = Math.abs(change24h);
+export function pitchFor(change5m: number): number {
+  const magnitude = Math.abs(change5m);
   const degrees = 17 * Math.log10(1 + magnitude / 9);
-  return Math.sign(change24h) * clamp(degrees, 0, MAX_PITCH);
+  return Math.sign(change5m) * clamp(degrees, 0, MAX_PITCH);
 }
 
 /**
@@ -40,13 +40,13 @@ export function bankFor(delta: number): number {
 }
 
 /** Indicated airspeed, knots. Conviction in either direction is speed. */
-export function airspeedFor(change24h: number): number {
-  return 212 + Math.min(Math.abs(change24h), 140) * 3.4;
+export function airspeedFor(change5m: number): number {
+  return 212 + Math.min(Math.abs(change5m), 140) * 3.4;
 }
 
 /** Vertical speed, feet per minute — the altimeter's derivative, signed. */
-export function verticalSpeedFor(change24h: number, marketCap: number): number {
-  return (change24h / 100) * marketCap * 0.42;
+export function verticalSpeedFor(change5m: number, marketCap: number): number {
+  return (change5m / 100) * marketCap * 0.42;
 }
 
 /** The overhead annunciator panel. */
@@ -64,22 +64,22 @@ export interface Annunciators {
 }
 
 export function annunciatorsFor(tick: FlightTick): Annunciators {
-  const pitch = pitchFor(tick.change24h);
+  const pitch = pitchFor(tick.change5m);
   return {
-    seatbelt: Math.abs(tick.change24h) > 12,
-    service: tick.change24h > 8,
+    seatbelt: Math.abs(tick.change5m) > 12,
+    service: tick.change5m > 8,
     oxygen: pitch < -17,
     brace: pitch < -23,
-    shaking: Math.abs(tick.change24h) > 25,
+    shaking: Math.abs(tick.change5m) > 25,
   };
 }
 
 /** Phase-of-flight label for the HUD's mode line. */
-export function phaseFor(change24h: number): string {
-  if (change24h > 40) return 'MAX CLIMB';
-  if (change24h > 8) return 'CLIMB';
-  if (change24h > -6) return 'CRUISE';
-  if (change24h > -22) return 'DESCENT';
+export function phaseFor(change5m: number): string {
+  if (change5m > 40) return 'MAX CLIMB';
+  if (change5m > 8) return 'CLIMB';
+  if (change5m > -6) return 'CRUISE';
+  if (change5m > -22) return 'DESCENT';
   return 'EMERGENCY DESCENT';
 }
 

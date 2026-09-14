@@ -1,13 +1,13 @@
 /**
  * The live market feed.
  *
- * Implements the same `FlightFeed` contract the simulator does, so nothing
- * downstream — the horizon, the tapes, the annunciators, the seat ladder, the
- * radio log — knows or cares which one it is talking to.
+ * The only implementation of `FlightFeed`. Everything downstream — the
+ * horizon, the tapes, the annunciators, the seat ladder, the radio log —
+ * reads it without knowing where the numbers came from.
  *
  * ── Why the parser looks like this ────────────────────────────────────────
  * It reads fields by *name*, anywhere in the response, rather than by a fixed
- * path like `data[mint].stats24h.priceChange`.
+ * path like `data[mint].stats5m.priceChange`.
  *
  * That is deliberate, and it is not defensive coding for its own sake.
  * Jupiter serves this data from several endpoints that have each moved
@@ -24,7 +24,7 @@
  * worse than one that holds its last known altitude.
  */
 
-import type { FlightFeed, FlightMode, FlightTick } from './flightFeed';
+import type { FlightFeed, FlightTick } from './flightFeed';
 
 const MINT = import.meta.env.VITE_TOKEN_MINT as string | undefined;
 const MARKET_URL = import.meta.env.VITE_MARKET_URL as string | undefined;
@@ -40,7 +40,7 @@ const POLL_MS = 20_000;
  * Jupiter's free public endpoint, which needs no key and sends CORS headers.
  * `tokens/v2/search` is used rather than the price endpoints because it is
  * the one that carries all three numbers the cabin reads — market cap, the
- * 24-hour move, and the holder count — in a single request.
+ * five-minute move, and the holder count — in a single request.
  */
 export function defaultMarketUrl(mint: string): string {
   return `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(mint)}`;
@@ -78,29 +78,70 @@ function findNumber(root: Json, keys: readonly string[]): number | null {
   return null;
 }
 
+/** Find the first object stored under any of `keys`, at any depth. */
+function findObject(root: Json, keys: readonly string[]): Json | null {
+  const queue: Json[] = [root];
+  let guard = 0;
+  while (queue.length && guard++ < 5000) {
+    const node = queue.shift();
+    if (Array.isArray(node)) {
+      queue.push(...node);
+      continue;
+    }
+    if (!node || typeof node !== 'object') continue;
+    const obj = node as Record<string, unknown>;
+    for (const key of keys) {
+      const v = obj[key];
+      if (v && typeof v === 'object' && !Array.isArray(v)) return v;
+    }
+    queue.push(...Object.values(obj));
+  }
+  return null;
+}
+
+/**
+ * The five-minute move.
+ *
+ * This one cannot be looked up by name the way market cap can, and the
+ * difference is worth being careful about. Jupiter reports each window as its
+ * own object — `stats5m`, `stats1h`, `stats6h`, `stats24h` — and every one of
+ * them has a field called `priceChange`. Searching for that name at any depth
+ * would return whichever window happened to be traversed first, which is to
+ * say: an arbitrary one, silently, and differently as the response shape
+ * moves.
+ *
+ * So the window is found first and the number is read from inside it.
+ *
+ * If the five-minute window is missing there is deliberately no fall back to
+ * a longer one. The page says five minutes on the tape, in the annunciators
+ * and in the footer; flying it on a 24-hour number while claiming otherwise
+ * is worse than holding the previous reading.
+ */
+function readChange(body: Json): number | null {
+  const window = findObject(body, ['stats5m', 'stats_5m', 'm5', '5m']);
+  if (window) {
+    const inside = findNumber(window, ['priceChange', 'price_change', 'change', 'priceChangePercentage']);
+    if (inside !== null) return inside;
+  }
+  // Flatter shapes name the window in the field itself.
+  return findNumber(body, ['priceChange5m', 'price_change_5m', 'change5m', 'm5']);
+}
+
 /** What the cabin needs, pulled out of whatever shape arrived. */
 export function readTick(body: Json, previous: FlightTick): FlightTick {
   const marketCap = findNumber(body, ['mcap', 'marketCap', 'market_cap', 'fdv']);
-  const change = findNumber(body, [
-    'priceChange24h', 'priceChange', 'price_change_24h', 'h24', 'change24h',
-  ]);
+  const change = readChange(body);
   const holders = findNumber(body, ['holderCount', 'holder_count', 'holders']);
 
   return {
     // A market cap of zero is a parse failure, not a valuation.
     marketCap: marketCap && marketCap > 0 ? marketCap : previous.marketCap,
-    change24h: change === null ? previous.change24h : change,
+    change5m: change === null ? previous.change5m : change,
     holders: holders && holders > 0 ? Math.round(holders) : previous.holders,
   };
 }
 
-/**
- * A feed that reads the market.
- *
- * `setMode` is a no-op and `jumpTo` is absent: a real aircraft does not take
- * flight-sim input, and the controls that drive those hide themselves when
- * the feed does not offer them.
- */
+/** A feed that reads the market. */
 export function createLiveFeed(start: FlightTick): FlightFeed {
   const url = MARKET_URL ?? (MINT ? defaultMarketUrl(MINT) : null);
   let latest: FlightTick = start;
@@ -134,10 +175,6 @@ export function createLiveFeed(start: FlightTick): FlightFeed {
         stopped = true;
         if (timer) clearTimeout(timer);
       };
-    },
-    setMode() {},
-    get mode(): FlightMode {
-      return 'live';
     },
   };
 }

@@ -14,7 +14,7 @@ import { paintTape, useAttitude } from '../lib/useAttitude';
  * Overhead panel above, windshield ahead, glare shield and mode control panel
  * beneath it, the captain's PFD and navigation display on the main panel, and
  * the throttle quadrant on the pedestal. Every instrument is reading the same
- * number: the 24h change sets the pitch, its derivative sets the bank, market
+ * number: the 5m change sets the pitch, its derivative sets the bank, market
  * cap is the altitude, and the annunciators light off the attitude that
  * results.
  *
@@ -173,10 +173,10 @@ const FlightDeck = ({ feed, lamps, sky, band }: FlightDeckProps) => {
     if (mcpAlt.current) mcpAlt.current.textContent = formatFeet(a.alt);  // the MCP window is wide enough for all of it
     if (tick) {
       if (chgRead.current) {
-        chgRead.current.textContent = formatChange(tick.change24h);
-        chgRead.current.setAttribute('fill', tick.change24h >= 0 ? '#5BE86B' : RED);
+        chgRead.current.textContent = formatChange(tick.change5m);
+        chgRead.current.setAttribute('fill', tick.change5m >= 0 ? '#5BE86B' : RED);
       }
-      if (phaseRead.current) phaseRead.current.textContent = phaseFor(tick.change24h);
+      if (phaseRead.current) phaseRead.current.textContent = phaseFor(tick.change5m);
       if (paxRead.current) paxRead.current.textContent = tick.holders.toLocaleString('en-US');
     }
   });
@@ -189,7 +189,7 @@ const FlightDeck = ({ feed, lamps, sky, band }: FlightDeckProps) => {
       className="sd-view sd-frame sa-hud relative w-full overflow-hidden border border-white/12 bg-[#05070F]"
       
       role="img"
-      aria-label="The flight deck of FL350: overhead panel, windshield, and the captain's primary flight and navigation displays. Every reading is driven by the token's 24-hour change, and the values are published as text below."
+      aria-label="The flight deck of SA350: overhead panel, windshield, and the captain's primary flight and navigation displays. Every reading is driven by the token's 5-minute change, and the values are published as text below."
     >
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className="h-full w-full" aria-hidden>
         <defs>
@@ -481,11 +481,11 @@ const FlightDeck = ({ feed, lamps, sky, band }: FlightDeckProps) => {
           </g>
         </g>
         <g fontFamily={MONO}>
-          <text x={ND.x + 10} y={ND.y + 20} fontSize="9" fill={PANEL_DIM} letterSpacing="1.2">24H</text>
+          <text x={ND.x + 10} y={ND.y + 20} fontSize="9" fill={PANEL_DIM} letterSpacing="1.2">5M</text>
           <text ref={chgRead} x={ND.x + 10} y={ND.y + 42} fontSize="20" fill={CYAN} fontWeight="700" />
           <text x={ND.x + ND.w - 10} y={ND.y + 20} fontSize="9" textAnchor="end" fill={PANEL_DIM} letterSpacing="1.2">SOULS</text>
           <text ref={paxRead} x={ND.x + ND.w - 10} y={ND.y + 40} fontSize="16" textAnchor="end" fill="#E8EDF5" fontWeight="700" />
-          <text x={ND.x + 10} y={ND.y + ND.h - 10} fontSize="9" fill={PANEL_DIM} letterSpacing="1.2">FL350 · NONSTOP</text>
+          <text x={ND.x + 10} y={ND.y + ND.h - 10} fontSize="9" fill={PANEL_DIM} letterSpacing="1.2">SA350 · NONSTOP</text>
         </g>
 
         {/* Outboard standby instruments */}

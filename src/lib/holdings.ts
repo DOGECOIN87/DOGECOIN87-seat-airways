@@ -12,8 +12,8 @@
  *   VITE_TOKEN_MINT=<the SPL mint address>
  *
  * A public RPC will rate-limit a busy page; use your own endpoint. Without
- * them the page runs in demo mode, which is stated on screen rather than
- * dressed up as a real balance.
+ * them nothing is read and nothing is invented: the cabin is simply empty
+ * until the chain answers.
  */
 
 export interface Holding {
@@ -23,8 +23,6 @@ export interface Holding {
   supply: number;
   /** balance / supply, 0–1. */
   share: number;
-  /** False when the numbers are demonstration figures, not chain state. */
-  live: boolean;
 }
 
 export interface HoldingsSource {
@@ -86,33 +84,13 @@ export function createRpcHoldings(): HoldingsSource {
   };
 }
 
-/**
- * Demonstration holdings, for a deployment that has not been pointed at a
- * token yet.
- *
- * Derived from the address so a given wallet always gets the same bag, and
- * deliberately spread across the whole ladder so the mechanic can be seen
- * working. Everything that shows these numbers also says they are not real.
- */
-export function createDemoHoldings(): HoldingsSource {
-  return {
-    live: false,
-    async read(owner) {
-      let h = 2166136261;
-      for (let i = 0; i < owner.length; i++) {
-        h ^= owner.charCodeAt(i);
-        h = Math.imul(h, 16777619);
-      }
-      const roll = ((h ^ (h >>> 15)) >>> 0) / 4294967296;
-      const supply = 1_000_000_000;
-      // Log-spaced, so most wallets land in economy and a few reach the front.
-      const share = 10 ** (-4.2 + roll * 3.0) / 1;
-      return { balance: share * supply, supply, share, live: false };
-    },
-  };
-}
 
-export const holdingsSource: HoldingsSource = isConfigured ? createRpcHoldings() : createDemoHoldings();
+/* One source. Unconfigured, `read` simply returns null and the caller keeps
+   whatever it had, which is nothing — an honest blank rather than a number
+   somebody might believe. */
+export const holdingsSource: HoldingsSource = isConfigured
+  ? createRpcHoldings()
+  : { live: false, async read() { return null; } };
 
 /* ────────────────────────────────────────────────────────────────────────
    The holder list
@@ -187,30 +165,3 @@ export async function readHolders(): Promise<HolderList | null> {
   return { holders, supply, live: true };
 }
 
-/**
- * A demonstration manifest.
- *
- * Balances on a power law, because that is the shape every token's holder
- * list actually has: a few whales, a long tail, and the interesting fight
- * happening around the cut. Seeded, so the aircraft does not reshuffle
- * itself between renders.
- */
-export function demoHolders(seed = 20260101): HolderList {
-  let h = seed >>> 0;
-  const rand = () => {
-    h ^= h << 13; h >>>= 0;
-    h ^= h >> 17;
-    h ^= h << 5; h >>>= 0;
-    return h / 4294967296;
-  };
-  const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  const supply = 1_000_000_000;
-  const holders: Holder[] = [];
-  for (let i = 0; i < MANIFEST_SIZE + 24; i++) {
-    let a = '';
-    for (let j = 0; j < 44; j++) a += B58[Math.floor(rand() * B58.length)];
-    // Zipf-ish: rank 1 holds low single-digit percent, the tail holds dust.
-    holders.push({ address: a, balance: (supply * 0.045) / Math.pow(i + 1, 1.35) * (0.75 + rand() * 0.5) });
-  }
-  return { holders, supply, live: false };
-}

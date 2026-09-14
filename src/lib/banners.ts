@@ -370,12 +370,12 @@ const HOUSE_ADS: HouseAd[] = [
       micro('SEAT AIRLINES', 18, 182, HOUSE_INK.cyan),
   },
   {
-    line: 'Seat Airlines — FL350, nonstop',
+    line: 'Seat Airlines — SA350, nonstop',
     svg:
       `<rect width="200" height="200" fill="${HOUSE_INK.bone}"/>` +
       houseMark(58, 26, 84, HOUSE_INK.navy) +
       stack(['SEAT', 'AIRLINES'], { x: 100, y: 148, size: 26, fill: HOUSE_INK.navy, anchor: 'middle' }) +
-      micro('FL350 · NONSTOP', 100, 182, HOUSE_INK.cloth, 9, 'middle'),
+      micro('SA350 · NONSTOP', 100, 182, HOUSE_INK.cloth, 9, 'middle'),
   },
   {
     line: 'This square is for sale — out-hold whoever is in it',
