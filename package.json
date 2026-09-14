@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "esbuild src/lib/banners.ts --bundle --outfile=dist-test/banners.js --format=esm --platform=node --define:import.meta.env={} && node test/banners.test.mjs",
+    "test": "esbuild src/lib/banners.ts --bundle --outfile=dist-test/banners.js --format=esm --platform=node --define:import.meta.env='{\"VITE_BANNERS_API\":\"https://adverts.test\"}' && node test/banners.test.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
