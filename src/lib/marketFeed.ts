@@ -30,20 +30,38 @@ const MINT = import.meta.env.VITE_TOKEN_MINT as string | undefined;
 const MARKET_URL = import.meta.env.VITE_MARKET_URL as string | undefined;
 
 /**
- * How often to ask. Jupiter's public tier is generous but not unlimited, and
- * the aircraft's attitude is smoothed over seconds anyway — polling faster
- * buys nothing a viewer can see.
+ * How often to ask.
+ *
+ * Jupiter's keyless tier allows 0.5 requests per second — one every two
+ * seconds. Twenty seconds is 0.05 RPS, a tenth of the budget, which leaves
+ * room for the thing that actually matters here: this runs in each visitor's
+ * browser, so the limit is spent per IP rather than per deployment. A single
+ * visitor is nowhere near it; a dozen behind one office NAT would need to be
+ * on the page simultaneously to get close, and the failure mode if they are
+ * is a held reading rather than a broken one.
+ *
+ * It is also plenty for a five-minute window. Polling faster would resample
+ * the same figure and buy nothing a viewer could see.
  */
 const POLL_MS = 20_000;
 
+/** Where to go after a 429, before trying again. */
+const BACKOFF_MS = 90_000;
+
 /**
- * Jupiter's free public endpoint, which needs no key and sends CORS headers.
- * `tokens/v2/search` is used rather than the price endpoints because it is
- * the one that carries all three numbers the cabin reads — market cap, the
- * five-minute move, and the holder count — in a single request.
+ * Jupiter's keyless endpoint: no registration, no key, and it sends CORS
+ * headers, so the browser can call it directly.
+ *
+ * `tokens/v2/search` rather than one of the price endpoints because it is the
+ * one that carries all three numbers the cabin reads — market cap, the
+ * five-minute move, and the holder count — in a single request. At 0.5 RPS
+ * that matters: three separate calls would be three times the budget for the
+ * same tick.
+ *
+ * Override with VITE_MARKET_URL to point at a keyed plan or your own indexer.
  */
 export function defaultMarketUrl(mint: string): string {
-  return `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(mint)}`;
+  return `https://api.jup.ag/tokens/v2/search?query=${encodeURIComponent(mint)}`;
 }
 
 /** True when this deployment has been pointed at a real token. */
@@ -153,18 +171,24 @@ export function createLiveFeed(start: FlightTick): FlightFeed {
       let timer: ReturnType<typeof setTimeout> | undefined;
 
       const poll = async () => {
+        let wait = POLL_MS;
         try {
           const res = await fetch(url, { headers: { accept: 'application/json' } });
           if (res.ok) {
             latest = readTick(await res.json(), latest);
             if (!stopped) listener(latest);
+          } else if (res.status === 429) {
+            /* Being rate-limited is not a reason to ask more often. Backing
+               off is the only response that can actually clear it — retrying
+               on schedule just keeps the window full. */
+            wait = BACKOFF_MS;
           }
         } catch {
-          /* Offline, rate-limited, or blocked. Hold the last reading: the
-             aircraft keeps flying on what it knew, which is what a real
-             instrument does when its source goes quiet. */
+          /* Offline or blocked. Hold the last reading: the aircraft keeps
+             flying on what it knew, which is what a real instrument does
+             when its source goes quiet. */
         }
-        if (!stopped) timer = setTimeout(poll, POLL_MS);
+        if (!stopped) timer = setTimeout(poll, wait);
       };
 
       // Report what we have immediately, then go and ask.

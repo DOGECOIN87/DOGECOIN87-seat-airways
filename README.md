@@ -186,9 +186,17 @@ holders the token has.
 
 ### The market feed
 
-`src/lib/marketFeed.ts` reads Jupiter's free public API, which needs no key
-and sends CORS headers. One request carries all three numbers the cabin reads:
-market cap, the 24-hour move, and the holder count.
+`src/lib/marketFeed.ts` reads Jupiter's keyless API — no registration, no key,
+and it sends CORS headers, so the browser calls it directly. One request
+carries all three numbers the cabin reads: market cap, the five-minute move,
+and the holder count.
+
+The keyless tier allows **0.5 requests per second**. The page polls every 20
+seconds, a tenth of that, and on a 429 it backs off to 90 rather than retrying
+on schedule — retrying on schedule just keeps the window full. The limit is
+spent per IP, and this runs in each visitor's browser, so a single visitor is
+nowhere near it. Set `VITE_MARKET_URL` to point at a keyed plan or your own
+indexer if you outgrow it.
 
 Its parser looks up fields by **name, at any depth**, rather than by a fixed
 path. That is deliberate. Jupiter serves this data from several endpoints that
