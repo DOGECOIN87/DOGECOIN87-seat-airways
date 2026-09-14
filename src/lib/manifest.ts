@@ -18,7 +18,7 @@ import { ALL_SEATS, CABIN_ZONES, type CabinSeat } from '../content/cabin';
 /** How many holders are seated. Everyone below this is standby. */
 export const MANIFEST_SIZE = Math.max(
   2,
-  Math.min(ALL_SEATS.length, Number(import.meta.env.VITE_MANIFEST_SIZE ?? 40)),
+  Math.min(ALL_SEATS.length, Number(import.meta.env.VITE_MANIFEST_SIZE || 40)),
 );
 
 /**

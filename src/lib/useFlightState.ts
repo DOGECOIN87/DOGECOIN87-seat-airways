@@ -26,26 +26,45 @@ export function useFlightState(feed: FlightFeed): FlightState {
     lamps: annunciatorsFor(INITIAL_TICK),
   }));
   const lastRender = useRef(0);
+  const shownLamps = useRef<Annunciators>(state.lamps);
 
   useEffect(() => {
-    return feed.subscribe((tick) => {
+    /* Throttled, never dropped. A tick that arrives inside the interval is
+       held and rendered when the interval ends. Dropping it instead lost the
+       first real reading whenever the market answered within half a second of
+       the placeholder, which it usually does, and the page then showed the
+       placeholder until the next poll twenty seconds later. */
+    let pending: ReturnType<typeof setTimeout> | undefined;
+
+    const commit = (tick: FlightTick, lamps: Annunciators) => {
+      pending = undefined;
+      lastRender.current = performance.now();
+      shownLamps.current = lamps;
+      setState({ tick, lamps });
+    };
+
+    const unsubscribe = feed.subscribe((tick) => {
       const lamps = annunciatorsFor(tick);
-      const now = performance.now();
+      const shown = shownLamps.current;
+      if (pending) clearTimeout(pending);
 
-      setState((prev) => {
-        // A lamp changing is news — render immediately, whatever the clock says.
-        const lampChanged =
-          prev.lamps.seatbelt !== lamps.seatbelt ||
-          prev.lamps.service !== lamps.service ||
-          prev.lamps.oxygen !== lamps.oxygen ||
-          prev.lamps.brace !== lamps.brace ||
-          prev.lamps.shaking !== lamps.shaking;
+      // A lamp changing is news — render immediately, whatever the clock says.
+      const lampChanged =
+        shown.seatbelt !== lamps.seatbelt ||
+        shown.service !== lamps.service ||
+        shown.oxygen !== lamps.oxygen ||
+        shown.brace !== lamps.brace ||
+        shown.shaking !== lamps.shaking;
 
-        if (!lampChanged && now - lastRender.current < RENDER_INTERVAL) return prev;
-        lastRender.current = now;
-        return { tick, lamps };
-      });
+      const wait = RENDER_INTERVAL - (performance.now() - lastRender.current);
+      if (lampChanged || wait <= 0) commit(tick, lamps);
+      else pending = setTimeout(() => commit(tick, lamps), wait);
     });
+
+    return () => {
+      if (pending) clearTimeout(pending);
+      unsubscribe();
+    };
   }, [feed]);
 
   return state;

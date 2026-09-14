@@ -27,7 +27,12 @@
 import type { FlightFeed, FlightTick } from './flightFeed';
 import { TOKEN_MINT } from './token';
 
-const MARKET_URL = import.meta.env.VITE_MARKET_URL as string | undefined;
+/* `|| undefined`, not `??`. The deploy workflow passes every VITE_ variable
+   whether or not it is set, and an unset repository variable arrives as an
+   empty string, not as nothing. `'' ?? fallback` is `''`, so the Jupiter URL
+   was never chosen, and the minifier, correctly seeing that, deleted it from
+   the bundle outright. The instruments sat on INITIAL_TICK in production. */
+const MARKET_URL = (import.meta.env.VITE_MARKET_URL as string | undefined)?.trim() || undefined;
 
 /**
  * How often to ask.
