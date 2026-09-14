@@ -201,6 +201,127 @@ function panelGeometry(p: Panel): THREE.BufferGeometry {
   return g;
 }
 
+/* ── Reading a point off a lifting surface ────────────────────────────────
+   The aerofoil above is a table of chord stations, so anything that has to
+   sit *on* a wing — a hinge line, a flap track, a panel seam — can be placed
+   by interpolating the same table rather than by guessing a height and
+   hoping. `t` runs root to tip, `f` runs leading edge to trailing edge. */
+function upperSurface(p: Panel, t: number, f: number, lift = 0.01): THREE.Vector3 {
+  const profile: [number, number][] = [
+    [0.00, 0.00], [0.045, 0.56], [0.13, 0.94], [0.34, 1.07],
+    [0.62, 0.785], [0.84, 0.378], [1.00, 0.045],
+  ];
+  let shape = 0;
+  for (let i = 0; i < profile.length - 1; i++) {
+    const [a0, v0] = profile[i];
+    const [a1, v1] = profile[i + 1];
+    if (f >= a0 && f <= a1) {
+      shape = THREE.MathUtils.lerp(v0, v1, (f - a0) / (a1 - a0));
+      break;
+    }
+  }
+  const thick = THREE.MathUtils.lerp(p.rootThick, p.tipThick, t) / 2;
+  const chord = THREE.MathUtils.lerp(p.rootChord, p.tipChord, t);
+  return new THREE.Vector3(
+    p.originX + p.span * t,
+    p.originY + p.rise * t + shape * thick + lift,
+    THREE.MathUtils.lerp(p.rootZ, p.tipZ, t) + f * chord,
+  );
+}
+
+/**
+ * The seams around a control surface.
+ *
+ * What actually reads as detail on a wing at any distance worth drawing one
+ * is not rivets or panel lines — it is the hinge line, because a control
+ * surface is a different shape from the wing it hangs off and the gap
+ * between them catches light. One spanwise line at the hinge and a tick at
+ * each end of every surface gives ailerons, flaps and spoilers for a few
+ * dozen vertices, and turns a smooth slab into something with moving parts.
+ */
+function controlSeams(
+  p: Panel,
+  hinge: number,
+  runs: [number, number][],
+): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const seg = (a: THREE.Vector3, b: THREE.Vector3) => {
+    pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  };
+  for (const [t0, t1] of runs) {
+    // The hinge itself, walked in a few steps so it follows the dihedral
+    // instead of cutting a chord through it.
+    const steps = 6;
+    for (let i = 0; i < steps; i++) {
+      const ta = THREE.MathUtils.lerp(t0, t1, i / steps);
+      const tb = THREE.MathUtils.lerp(t0, t1, (i + 1) / steps);
+      seg(upperSurface(p, ta, hinge), upperSurface(p, tb, hinge));
+    }
+    // The ends: where one surface stops and the next begins.
+    for (const t of [t0, t1]) {
+      seg(upperSurface(p, t, hinge), upperSurface(p, t, 0.995));
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return g;
+}
+
+/**
+ * The wing-root fairing.
+ *
+ * An airliner does not have a wing that stops at the skin: it has a wing box
+ * running through the fuselage, and a long blister underneath covering it,
+ * the main gear bays and the air-conditioning packs. Without it the wing
+ * reads as having been pushed into the side of a tube, which is exactly what
+ * it was. It is the single largest thing missing from the silhouette, and
+ * from below it is most of what there is to see.
+ */
+function bellyFairing(): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(1, 40, 24);
+  g.scale(R * 1.02, R * 0.74, WING.rootChord * 1.42);
+  g.translate(0, -R * 0.66, WING.rootZ + WING.rootChord * 0.52);
+  return g;
+}
+
+/**
+ * The dorsal fillet ahead of the fin.
+ *
+ * A fin that meets the fuselage at a hard line looks glued on. Real ones run
+ * forward into a fillet that blends the join over several metres — a wedge,
+ * thick at the bottom where it meets the crown and vanishing at the top.
+ */
+function dorsalFillet(): THREE.BufferGeometry {
+  const z0 = 20.2;
+  const z1 = 25.6;
+  const halfWidth = 0.22;
+  const steps = 18;
+  const pos: number[] = [];
+  const idx: number[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const z = THREE.MathUtils.lerp(z0, z1, t);
+    // Sits on the crown, and climbs into the fin root as it goes aft.
+    const base = riseAt(z) + radiusAt(z) * 0.98;
+    const top = base + Math.pow(t, 2.1) * 1.55;
+    const w = halfWidth * (1 - Math.pow(t, 1.6)) + 0.02;
+    pos.push(-w, base, z, w, base, z, 0, top, z);
+  }
+  for (let i = 0; i < steps; i++) {
+    const a = i * 3;
+    const b = (i + 1) * 3;
+    // Two flanks and an underside, so it is a solid wedge from every angle.
+    idx.push(a, b, a + 2, b, b + 2, a + 2);
+    idx.push(a + 1, a + 2, b + 1, b + 1, a + 2, b + 2);
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 interface EngineMaterials {
   cowl: THREE.Material;
   intake: THREE.Material;
@@ -285,6 +406,16 @@ function engine(mirror: number, mat: EngineMaterials, track: <T extends { dispos
   nozzle.position.z = 2.2;
   nozzle.castShadow = nozzle.receiveShadow = true;
   g.add(nozzle);
+
+  /* The exhaust plug. A turbofan's hot nozzle is an annulus with a cone
+     filling the middle of it, not an open pipe — and since the aeroplane is
+     seen from behind more often than from anywhere else, an open pipe is
+     the error most on screen. */
+  const plug = new THREE.Mesh(track(new THREE.ConeGeometry(0.34, 1.1, 28)), mat.spinner);
+  plug.rotation.x = Math.PI / 2;
+  plug.position.z = 2.75;
+  plug.castShadow = true;
+  g.add(plug);
 
   const pylon = new THREE.Mesh(track(pylonGeometry()), mat.pylon);
   pylon.position.set(0, 0.05, 0.35);
@@ -531,16 +662,25 @@ export function createAirframe(): AirframeHandles {
 
   /* Wings: 34 m span, swept 25°, with dihedral. */
   for (const side of [1, -1]) {
-    const wing = new THREE.Mesh(
-      track(panelGeometry({
-        originX: side * R * 0.6, originY: WING.rootY, span: side * WING.span, rise: WING.rise,
-        rootZ: WING.rootZ, rootChord: WING.rootChord, rootThick: 0.86,
-        tipZ: WING.tipZ, tipChord: WING.tipChord, tipThick: 0.16,
-      })),
-      wingMat,
-    );
+    /* One panel description, used by the wing and by everything that has to
+       sit on it. Re-typing these numbers for the seams is how a hinge line
+       ends up floating half a metre above the wing it belongs to. */
+    const wingPanel: Panel = {
+      originX: side * R * 0.6, originY: WING.rootY, span: side * WING.span, rise: WING.rise,
+      rootZ: WING.rootZ, rootChord: WING.rootChord, rootThick: 0.86,
+      tipZ: WING.tipZ, tipChord: WING.tipChord, tipThick: 0.16,
+    };
+    const wing = new THREE.Mesh(track(panelGeometry(wingPanel)), wingMat);
     wing.castShadow = wing.receiveShadow = true;
     group.add(wing);
+
+    /* Flaps inboard, aileron outboard, and the spoiler run ahead of the
+       flaps — the three things that move on a wing, and the three lines
+       that stop it reading as a slab. */
+    group.add(new THREE.LineSegments(
+      track(controlSeams(wingPanel, 0.74, [[0.1, 0.42], [0.46, 0.66], [0.72, 0.95]])),
+      seamMat,
+    ));
 
     // Winglet, raked up off the tip.
     const winglet = new THREE.Mesh(
@@ -576,16 +716,19 @@ export function createAirframe(): AirframeHandles {
     }
 
     // Tailplane
-    const stab = new THREE.Mesh(
-      track(panelGeometry({
-        originX: side * 0.5, originY: 0.9, span: side * 5.9, rise: 0.5,
-        rootZ: 27.2, rootChord: 3.2, rootThick: 0.4,
-        tipZ: 29.4, tipChord: 1.1, tipThick: 0.1,
-      })),
-      wingMat,
-    );
+    const stabPanel: Panel = {
+      originX: side * 0.5, originY: 0.9, span: side * 5.9, rise: 0.5,
+      rootZ: 27.2, rootChord: 3.2, rootThick: 0.4,
+      tipZ: 29.4, tipChord: 1.1, tipThick: 0.1,
+    };
+    const stab = new THREE.Mesh(track(panelGeometry(stabPanel)), wingMat);
     stab.castShadow = stab.receiveShadow = true;
     group.add(stab);
+    // The elevator: one surface, most of the span.
+    group.add(new THREE.LineSegments(
+      track(controlSeams(stabPanel, 0.68, [[0.08, 0.94]])),
+      seamMat,
+    ));
 
     group.add(engine(side, {
       cowl: skin,
@@ -598,18 +741,47 @@ export function createAirframe(): AirframeHandles {
   }
 
   /* The fin: the same panel, stood on its edge so its span axis is height. */
-  const fin = new THREE.Mesh(
-    track(panelGeometry({
-      originX: 0, originY: 0, span: 6.1, rise: 0,
-      rootZ: 24.4, rootChord: 5.4, rootThick: 0.5,
-      tipZ: 27.9, tipChord: 2.2, tipThick: 0.22,
-    })),
-    navy,
-  );
+  const finPanel: Panel = {
+    originX: 0, originY: 0, span: 6.1, rise: 0,
+    rootZ: 24.4, rootChord: 5.4, rootThick: 0.5,
+    tipZ: 27.9, tipChord: 2.2, tipThick: 0.22,
+  };
+  const fin = new THREE.Mesh(track(panelGeometry(finPanel)), navy);
   fin.rotation.z = Math.PI / 2;
   fin.position.y = R * 0.72;
   fin.castShadow = fin.receiveShadow = true;
   group.add(fin);
+
+  // The rudder, hung on the same transform the fin is.
+  const rudder = new THREE.LineSegments(
+    track(controlSeams(finPanel, 0.7, [[0.05, 0.95]])),
+    seamMat,
+  );
+  rudder.rotation.copy(fin.rotation);
+  rudder.position.copy(fin.position);
+  group.add(rudder);
+
+  /* The blister under the wing box, and the fillet that runs the fin into
+     the crown. Both are silhouette rather than surface detail, which is why
+     they do more for the aeroplane than any amount of panel lining. */
+  const belly = new THREE.Mesh(track(bellyFairing()), skin);
+  belly.castShadow = belly.receiveShadow = true;
+  group.add(belly);
+
+  const fillet = new THREE.Mesh(track(dorsalFillet()), skin);
+  fillet.castShadow = fillet.receiveShadow = true;
+  group.add(fillet);
+
+  /* The APU exhaust, right at the tip of the tail cone. A tail that simply
+     tapers to nothing is the one part of an airliner nobody draws, and the
+     dark port at the end of it is the tell that somebody did. */
+  const apu = new THREE.Mesh(
+    track(new THREE.CylinderGeometry(0.16, 0.2, 0.5, 20, 1, true)),
+    nozzleMat,
+  );
+  apu.rotation.x = Math.PI / 2;
+  apu.position.set(0, riseAt(TAIL_Z - 0.3), TAIL_Z - 0.05);
+  group.add(apu);
 
   /* The mark on the fin, one decal per side, sitting just proud of the
      panel's own half-thickness at that height so it never punches through. */

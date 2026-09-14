@@ -686,7 +686,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const hRad = THREE.MathUtils.degToRad(a.heading);
-    const metresPerSecond = a.speed * 0.5144 * 1.9 * Math.max(1, height / 900);
+    /* The exaggeration factor. True airspeed alone is honest and reads as a
+       crawl: the ground is twenty kilometres away and the frame is a few
+       hundred metres of it, so a real 500 knots moves almost nothing per
+       second. This is the number to turn when the aeroplane should feel
+       like it is going somewhere. */
+    const metresPerSecond = a.speed * 0.5144 * 3.4 * Math.max(1, height / 900);
     shift.x += Math.sin(hRad) * metresPerSecond * dt;
     shift.z += Math.cos(hRad) * metresPerSecond * dt;
 
