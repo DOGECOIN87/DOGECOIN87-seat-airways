@@ -8,7 +8,7 @@
  */
 import { webcrypto as crypto } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { challenge, decodeDataUrl, imageType, sha256Hex, verifySignature } from '../dist-test/verify.js';
+import { challenge, decodeDataUrl, imageType, readStoredBanner, sha256Hex, verifySignature } from '../dist-test/verify.js';
 
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const toBase58 = (bytes) => {
@@ -115,6 +115,28 @@ await check('refuses a JPEG-labelled data URL carrying SVG bytes', async () => {
 await check('decodes a data URL to the exact bytes', async () => {
   assert.deepEqual(decodeDataUrl(dataUrl), JPEG);
   assert.equal(decodeDataUrl('not a data url'), null);
+});
+
+/* The wall reads every record in one request. These are the values that used
+   to throw out of it and take every advert down with them (Cloudflare 1101). */
+await check('a malformed record is skipped rather than thrown', async () => {
+  for (const raw of ['not json', '{"key":', '', null, 'null', '42', '"a string"', '[]']) {
+    assert.equal(readStoredBanner(raw), null, `did not skip ${JSON.stringify(raw)}`);
+  }
+});
+
+await check('a record with no artwork key is skipped', async () => {
+  assert.equal(readStoredBanner('{"alt":"no key"}'), null);
+  assert.equal(readStoredBanner('{"key":"../../etc/passwd","alt":"x"}'), null);
+});
+
+await check('a good record reads back exactly', async () => {
+  const rec = { key: 'banners/Wallet.jpg', alt: 'An advert', href: 'https://x.test', updated: '2026-09-14T00:00:00.000Z' };
+  assert.deepEqual(readStoredBanner(JSON.stringify(rec)), rec);
+  const bare = readStoredBanner('{"key":"banners/W.png"}');
+  assert.equal(bare.key, 'banners/W.png');
+  assert.equal(bare.alt, '');
+  assert.equal('href' in bare, false);
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

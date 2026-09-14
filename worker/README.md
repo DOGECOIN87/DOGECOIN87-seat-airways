@@ -151,9 +151,11 @@ Two layers, neither of which needs a Cloudflare account.
 npm test          # the checks, in isolation, with a real ed25519 keypair
 ```
 
-Nine cases over `verify.ts`: a genuine signature accepted, and a wrong
+Twelve cases over `verify.ts`: a genuine signature accepted, and a wrong
 wallet, a captured signature reused for other artwork, a moved timestamp,
-malformed base58 and SVG wearing a JPEG label each refused.
+malformed base58 and SVG wearing a JPEG label each refused — plus the record
+reader, which must skip a malformed `banner:` value rather than throw. One
+that threw once took the whole wall down with Cloudflare error 1101.
 
 ```bash
 npm run dev:local   # Miniflare, with simulated KV
