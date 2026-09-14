@@ -1,0 +1,106 @@
+name: Deploy the banners Worker
+
+# Only when the Worker itself changes. The site and the Worker are deployed
+# by different services on different schedules, and coupling them would mean
+# a CSS tweak redeploying the API.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A half-applied Worker deploy is worse than a queued one.
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+
+    # Read once at job level so the steps below can branch on whether the
+    # token exists. Secrets are not available to job-level `if:`, which is
+    # why this is an env var and not a condition up here.
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - run: npm ci
+
+      # The Worker is the only thing standing between a wallet signature and
+      # a picture on the page, so the verification logic is proved before it
+      # ships rather than after. These need no credentials — they run even on
+      # a fork with no token configured.
+      - run: npm run typecheck
+      - run: npm test
+
+      # Nothing below this line can work without a token, and a repository
+      # that has not been given one should not show a red cross on every
+      # push because of it. So this reports what is missing and stops.
+      - name: Check for credentials
+        id: creds
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Worker not deployed"
+              echo
+              echo "Tests passed, but \`CLOUDFLARE_API_TOKEN\` is not set, so"
+              echo "there is nothing to deploy with."
+              echo
+              echo "Add it under **Settings → Secrets and variables → Actions"
+              echo "→ Secrets**. The token needs *Workers Scripts: Edit*,"
+              echo "*Workers KV Storage: Edit* and *Workers R2 Storage: Edit*"
+              echo "on this account."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy
+        if: steps.creds.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+
+      # RPC_URL is deliberately not pushed from here.
+      #
+      # It gates publishing on actually holding the token, and it is a Worker
+      # secret rather than a var because paid endpoints carry the key in the
+      # URL. But wiring it through this workflow would mean writing whatever
+      # the repository secret contains on every deploy — including an empty
+      # string when it is unset, which silently turns the gate off. It is set
+      # once, out of band: Workers & Pages → seat-airlines-banners → Settings
+      # → Variables and Secrets → Add, or `wrangler secret put RPC_URL`.
+      # Unset, the Worker still deploys and simply does not gate; see
+      # holdsToken() in src/index.ts.
+
+      - name: Report the URL
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          {
+            echo "### Worker deployed"
+            echo
+            echo "Set \`VITE_BANNERS_API\` to the workers.dev URL above under"
+            echo "**Settings → Secrets and variables → Actions → Variables**,"
+            echo "then re-run the Pages deploy. That is the point at which"
+            echo "seat uploads go live."
+          } >> "$GITHUB_STEP_SUMMARY"
