@@ -1,0 +1,31 @@
+# The same Worker, with the storage branch flipped.
+#
+# `wrangler.local.toml` has no R2 binding, so the Worker keeps images in KV
+# and serves them itself. This one binds a bucket *and* sets
+# PUBLIC_IMAGE_BASE, which is the pair the Worker switches on — so running
+# the e2e suite against both configs exercises both halves of `storeImage`
+# rather than whichever one this account happens to have enabled today.
+#
+#   npm run dev:local:r2    # in one shell
+#   npm run test:e2e        # in another
+#
+# Nothing here reaches Cloudflare: the KV id is a placeholder and the bucket
+# is Miniflare's local simulation. PUBLIC_IMAGE_BASE is a plausible-looking
+# URL that does not resolve, which is the point — the image test asserts the
+# URL is well formed and on that base rather than fetching it, because in
+# this mode the bytes are on a CDN and not on this Worker.
+name = "seat-airlines-banners"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+[[kv_namespaces]]
+binding = "BANNERS"
+id = "local-test"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "seat-airlines-banners"
+
+[vars]
+PUBLIC_IMAGE_BASE = "https://pub-example.r2.dev"
+ALLOWED_ORIGINS = "http://localhost:3000"

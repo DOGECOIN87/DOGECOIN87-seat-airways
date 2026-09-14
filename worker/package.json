@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "esbuild src/verify.ts --outfile=dist-test/verify.js --format=esm --platform=node && node test/verify.test.mjs",
     "dev:local": "wrangler dev --local --config wrangler.local.toml --port 8787",
+    "dev:local:r2": "wrangler dev --local --config wrangler.local-r2.toml --port 8787",
     "test:e2e": "node test/e2e.test.mjs"
   },
   "devDependencies": {

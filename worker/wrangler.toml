@@ -2,31 +2,28 @@ name = "seat-airlines-banners"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 
-# The published wall: one small JSON record per wallet, and — while R2 is not
-# enabled on this account — the artwork itself alongside it.
+# The published wall: one small JSON record per wallet.
 [[kv_namespaces]]
 binding = "BANNERS"
 id = "0767939f209a41ab9692f2b1b1550c05"
 
-# Object storage for the artwork. Commented out deliberately.
-#
-# R2 needs a payment method before it can be enabled, even on the free tier,
-# so this deployment keeps images in KV instead and serves them from the
-# Worker at /images/<key>. A 384px JPEG is about 30 KB against KV's 25 MB
-# value limit, so they fit with room to spare.
-#
-# To move to R2 later: enable it in the dashboard, create the bucket, give it
-# public access, uncomment this block, set PUBLIC_IMAGE_BASE, and redeploy.
-# The Worker switches on the binding being present — no code change, and
-# images already in KV keep serving from there.
-#
-# [[r2_buckets]]
-# binding = "IMAGES"
-# bucket_name = "seat-airlines-banners"
+# The artwork.
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "seat-airlines-banners"
 
 [vars]
-# Only read when the R2 binding above is present.
-# PUBLIC_IMAGE_BASE = "https://REPLACE.r2.dev"
+# The Worker uses R2 only when this is set as well as the binding above, and
+# falls back to serving images out of KV when it is not. That is deliberate:
+# R2 is useful here precisely because images can be read straight from the
+# bucket without touching the Worker, and that needs a public URL. A bound
+# bucket with no public URL would mean paying R2's write path for none of its
+# read benefit.
+#
+# To finish: R2 → seat-airlines-banners → Settings → Public access → enable
+# r2.dev, then put that URL here and redeploy. Until then KV serves the
+# images and everything works.
+# PUBLIC_IMAGE_BASE = "https://pub-XXXXXXXX.r2.dev"
 
 # The origins allowed to call this. Left empty the Worker echoes whatever
 # origin asks, which is fine locally and careless in production.

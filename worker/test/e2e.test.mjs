@@ -106,12 +106,27 @@ await check('the stored advert appears on the wall', async () => {
   assert(wall[owner].alt === 'A test advert', 'alt did not round-trip');
 });
 
-await check('the artwork serves back as a real image', async () => {
-  // The gap the other cases left: they proved the record round-trips, not the
-  // bytes. Without R2 the Worker serves these itself, so this is the path an
-  // <img> actually takes.
+await check('the artwork is addressable, and served correctly in KV mode', async () => {
+  /* The gap the other cases left: they proved the record round-trips, not the
+     bytes.
+
+     What can be asserted depends on where the bytes went. In KV mode the
+     Worker serves them, so this is the exact path an <img> takes and every
+     header is checkable. In R2 mode the URL points at the bucket's public
+     domain, which is not this Worker and is not reachable from a test runner
+     — so the check is that the URL is well formed and on the configured base.
+     Fetching it would be testing Cloudflare's CDN, not this code. */
   const wall = await (await fetch(`${BASE}/banners`, { headers: { origin: ORIGIN } })).json();
-  const res = await fetch(wall[owner].image);
+  const url = wall[owner].image;
+  assert(typeof url === 'string' && url.includes(owner), 'image url does not name the owner');
+
+  const servedByWorker = url.startsWith(BASE);
+  if (!servedByWorker) {
+    assert(/^https:\/\/.+\/banners\/.+\.(jpg|png)$/.test(url), `malformed R2 url: ${url}`);
+    return;
+  }
+
+  const res = await fetch(url);
   assert(res.status === 200, `status ${res.status}`);
   assert(res.headers.get('content-type') === 'image/jpeg', `type ${res.headers.get('content-type')}`);
   assert(res.headers.get('x-content-type-options') === 'nosniff', 'missing nosniff');

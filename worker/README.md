@@ -76,6 +76,12 @@ bucket public access — either an `r2.dev` URL or, better, a custom domain —
 and set `PUBLIC_IMAGE_BASE` to it. Images are read constantly and written
 rarely, so serving them straight from R2 keeps the Worker off that path.
 
+Skipping `PUBLIC_IMAGE_BASE` is a supported state, not a broken one: without
+it the Worker keeps the artwork in KV and serves it from `/images/<key>`, and
+the site behaves identically. A bound bucket with no public URL, though, is
+the one combination worth avoiding — it pays R2's write path for none of its
+read benefit — so the Worker ignores the binding until the URL is set.
+
 Then, before going live:
 
 ```bash
@@ -122,15 +128,40 @@ wallet, a captured signature reused for other artwork, a moved timestamp,
 malformed base58 and SVG wearing a JPEG label each refused.
 
 ```bash
-npm run dev:local   # Miniflare, with simulated KV and R2
+npm run dev:local   # Miniflare, with simulated KV
 npm run test:e2e    # in another shell
 ```
 
-Eleven cases over the routes themselves, on real HTTP against real bindings:
+Twelve cases over the routes themselves, on real HTTP against real bindings:
 a signed advert is accepted, stored, and comes back out of `GET /banners`;
-a second publish inside the cooldown gets 429; forged, stale, unsigned and
-SVG-disguised uploads are refused with the right status each time; CORS
+the artwork is fetched back from the URL it was given and checked byte for
+byte; a second publish inside the cooldown gets 429; forged, stale, unsigned
+and SVG-disguised uploads are refused with the right status each time; CORS
 echoes the allowed origin and the preflight is answered.
 
-`wrangler.local.toml` exists only for that — its KV id is a placeholder that
-never reaches Cloudflare.
+Run it again in the other storage mode:
+
+```bash
+npm run dev:local:r2
+npm run test:e2e
+```
+
+The Worker picks its backend from whether an R2 binding and
+`PUBLIC_IMAGE_BASE` are *both* present, which means the branch that runs in
+production is decided by config rather than by code — and a test suite that
+only ever sees one config only ever tests half of `storeImage`. So there are
+two local configs and the same twelve cases run against each. The image case
+is the one that differs: in KV mode the Worker serves the bytes, so it is
+fetched and every header is checked; in R2 mode the URL points at a bucket
+domain that is not this Worker, so the check is that the URL is well formed
+and on the configured base. Fetching it would be testing Cloudflare's CDN.
+
+`wrangler.local.toml` and `wrangler.local-r2.toml` exist only for that —
+their KV id is a placeholder that never reaches Cloudflare, and the R2 one's
+public base is a URL that deliberately does not resolve.
+
+One trap worth knowing about: Miniflare keeps its simulated bindings in
+`.wrangler/state`, and that state is shared between the two configs. Records
+written in R2 mode point at the bucket, so replaying them in KV mode looks
+like a 404 from the `/images/` route. It is not — it is yesterday's data.
+`rm -rf .wrangler/state` between modes, with the Worker stopped.
