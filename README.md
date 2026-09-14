@@ -224,6 +224,69 @@ authorise any artwork for that wallet forever.
 With no advert server configured, an upload stays in the uploader's browser and
 the dialog says so.
 
+## Deploying
+
+The site is a static bundle, so GitHub Pages serves it directly.
+`.github/workflows/deploy.yml` builds on every push to `main` and on manual
+dispatch.
+
+**Turn Pages on first.** Repository → Settings → Pages → Source: **GitHub
+Actions**. Without that the workflow builds and then fails at the deploy step
+with a permissions error that does not explain itself.
+
+### Configuration
+
+Build-time values come from repository **variables** (Settings → Secrets and
+variables → Actions → Variables), not secrets — and that is deliberate.
+
+Vite inlines every `VITE_`-prefixed value into the bundle it ships. All of
+them are readable by anyone who opens the site and looks at the network tab.
+Storing one as a secret hides it from the repository and from nobody else.
+
+If your RPC endpoint carries a key, the only real protection is on the
+provider's side: restrict that key to this domain. Helius, QuickNode and
+Alchemy all support it.
+
+### The domain
+
+`public/CNAME` holds `seat-airlines.space`, and Vite copies it into `dist/`
+verbatim. That file has to exist in the built output: the Actions deploy
+publishes exactly what the artifact contains, so a custom domain set only in
+the Pages settings UI gets forgotten on the next deploy.
+
+DNS, at the registrar:
+
+| Type | Name | Value |
+| --- | --- | --- |
+| A | `@` | `185.199.108.153` |
+| A | `@` | `185.199.109.153` |
+| A | `@` | `185.199.110.153` |
+| A | `@` | `185.199.111.153` |
+| AAAA | `@` | `2606:50c0:8000::153` |
+| AAAA | `@` | `2606:50c0:8001::153` |
+| AAAA | `@` | `2606:50c0:8002::153` |
+| AAAA | `@` | `2606:50c0:8003::153` |
+| CNAME | `www` | `dogecoin87.github.io.` |
+
+All four A records, not one: they are GitHub's anycast front ends and dropping
+three of them removes the redundancy rather than simplifying anything. The
+AAAA records are optional but cost nothing and make the site reachable on
+IPv6-only networks.
+
+Then Settings → Pages → Custom domain → `seat-airlines.space`, wait for the
+DNS check to pass, and tick **Enforce HTTPS**. The certificate is issued after
+the domain resolves, so that tickbox stays greyed out until propagation
+finishes — usually minutes, occasionally an hour.
+
+### CORS, once the domain is live
+
+The advert Worker's `ALLOWED_ORIGINS` must name the site, or uploads fail in
+the browser with a CORS error and nothing useful in the response:
+
+```toml
+ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
+```
+
 ## Running it
 
 ```bash

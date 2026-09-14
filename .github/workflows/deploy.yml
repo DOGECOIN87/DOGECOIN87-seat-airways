@@ -1,0 +1,66 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # So a config change can be shipped without an empty commit.
+  workflow_dispatch:
+
+# Pages deployments need an OIDC token; nothing here needs write access to
+# the repository itself.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it half-uploaded, but
+# never run two at once.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # ── Configuration ──────────────────────────────────────────────────
+      # These are repository *variables*, not secrets, and that is not an
+      # oversight. Vite inlines every VITE_-prefixed value into the bundle it
+      # ships, so all of them are readable by anyone who opens the site and
+      # looks. Storing one as a secret would hide it from the repository and
+      # from nobody else.
+      #
+      # If the RPC endpoint carries a key, the only real protection is on the
+      # provider's side: restrict that key to this domain. Helius, QuickNode
+      # and Alchemy all support it.
+      - run: npm run build
+        env:
+          VITE_TOKEN_MINT: ${{ vars.VITE_TOKEN_MINT }}
+          VITE_RPC_URL: ${{ vars.VITE_RPC_URL }}
+          VITE_HOLDERS_URL: ${{ vars.VITE_HOLDERS_URL }}
+          VITE_MARKET_URL: ${{ vars.VITE_MARKET_URL }}
+          VITE_BANNERS_API: ${{ vars.VITE_BANNERS_API }}
+          VITE_BANNERS_URL: ${{ vars.VITE_BANNERS_URL }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
