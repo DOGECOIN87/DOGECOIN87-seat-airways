@@ -2,30 +2,38 @@ name = "seat-airlines-banners"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 
-# The published wall: one small JSON record per wallet.
+# The published wall: one small JSON record per wallet, and — while R2 is not
+# enabled on this account — the artwork itself alongside it.
 [[kv_namespaces]]
 binding = "BANNERS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "0767939f209a41ab9692f2b1b1550c05"
 
-# The artwork itself.
-[[r2_buckets]]
-binding = "IMAGES"
-bucket_name = "seat-airlines-banners"
+# Object storage for the artwork. Commented out deliberately.
+#
+# R2 needs a payment method before it can be enabled, even on the free tier,
+# so this deployment keeps images in KV instead and serves them from the
+# Worker at /images/<key>. A 384px JPEG is about 30 KB against KV's 25 MB
+# value limit, so they fit with room to spare.
+#
+# To move to R2 later: enable it in the dashboard, create the bucket, give it
+# public access, uncomment this block, set PUBLIC_IMAGE_BASE, and redeploy.
+# The Worker switches on the binding being present — no code change, and
+# images already in KV keep serving from there.
+#
+# [[r2_buckets]]
+# binding = "IMAGES"
+# bucket_name = "seat-airlines-banners"
 
 [vars]
-# Where the images are served from — an R2 public bucket URL, or a custom
-# domain in front of one. Images are read far more often than written, so
-# serving them straight from R2 keeps the Worker off that path entirely.
-PUBLIC_IMAGE_BASE = "https://REPLACE.r2.dev"
+# Only read when the R2 binding above is present.
+# PUBLIC_IMAGE_BASE = "https://REPLACE.r2.dev"
 
-# Lock this to the site's own origin before going live. Left empty, the
-# Worker echoes whatever origin asks, which is fine for local work and
-# careless in production.
-ALLOWED_ORIGINS = ""
+# The origins allowed to call this. Left empty the Worker echoes whatever
+# origin asks, which is fine locally and careless in production.
+ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 
-# Optional. With both set, the Worker refuses adverts from wallets that do
-# not hold the token, which stops the bucket being used as free storage.
-# TOKEN_MINT = ""
-
+# Set once the token exists, so the Worker can refuse adverts from wallets
+# that do not hold it:
+#   TOKEN_MINT = "<mint>"
 # RPC_URL is a secret rather than a var, since paid endpoints carry a key in
-# the URL:  wrangler secret put RPC_URL
+# the URL:  npx wrangler secret put RPC_URL

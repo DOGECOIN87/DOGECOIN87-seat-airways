@@ -23,9 +23,24 @@ import { challenge, decodeDataUrl, imageType, sha256Hex, verifySignature, MAX_AG
 
 export interface Env {
   BANNERS: KVNamespace;
-  IMAGES: R2Bucket;
-  /** Public base URL images are served from. */
-  PUBLIC_IMAGE_BASE: string;
+  /**
+   * Object storage for the artwork. Optional.
+   *
+   * Bound, images go to R2 and are served straight from it, which keeps the
+   * Worker off the read path entirely — the right answer once there is any
+   * traffic. Unbound, they go into KV instead and the Worker serves them.
+   *
+   * That fallback is not a compromise on correctness, it is a compromise on
+   * serving cost, and it exists because enabling R2 requires a payment method
+   * even on the free tier. A 384px JPEG is about 30 KB against KV's 25 MB
+   * value limit — three orders of magnitude of headroom — so the artwork fits
+   * either way and the choice can be deferred.
+   *
+   * Adding the binding later moves new uploads to R2 with no code change.
+   */
+  IMAGES?: R2Bucket;
+  /** Public base URL images are served from. Only needed with R2. */
+  PUBLIC_IMAGE_BASE?: string;
   /** Solana RPC, used only to check the publisher holds the token at all. */
   RPC_URL?: string;
   /** The token this aircraft is flying. */
@@ -34,12 +49,42 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
 }
 
-/** Stored shape. `key` is the R2 object; `image` is rebuilt on read. */
+/** Stored shape. `key` locates the bytes; `image` is rebuilt on read. */
 interface StoredBanner {
   key: string;
   alt: string;
   href?: string;
   updated: string;
+}
+
+/** Where the artwork lives, and how to address it. */
+const usingR2 = (env: Env) => Boolean(env.IMAGES && env.PUBLIC_IMAGE_BASE);
+
+/** Put the bytes somewhere, and return the URL they will be read back from. */
+async function storeImage(
+  env: Env,
+  request: Request,
+  key: string,
+  bytes: Uint8Array,
+  type: string,
+): Promise<string> {
+  if (usingR2(env)) {
+    await env.IMAGES!.put(key, bytes as BufferSource, {
+      httpMetadata: { contentType: type, cacheControl: 'public, max-age=300' },
+    });
+    return `${env.PUBLIC_IMAGE_BASE!.replace(/\/$/, '')}/${key}`;
+  }
+  // KV holds the bytes, and the content type rides along as metadata so the
+  // read path does not have to sniff them again.
+  await env.BANNERS.put(`image:${key}`, bytes as unknown as ArrayBuffer, { metadata: { type } });
+  return new URL(`/images/${key}`, request.url).toString();
+}
+
+/** The URL an already-stored image is served from. */
+function imageUrl(env: Env, request: Request, key: string): string {
+  return usingR2(env)
+    ? `${env.PUBLIC_IMAGE_BASE!.replace(/\/$/, '')}/${key}`
+    : new URL(`/images/${key}`, request.url).toString();
 }
 
 /** Does this wallet hold the token at all? Storage is not free. */
@@ -107,7 +152,7 @@ export default {
           const stored = await env.BANNERS.get<StoredBanner>(name, 'json');
           if (!stored) return;
           out[name.slice('banner:'.length)] = {
-            image: `${env.PUBLIC_IMAGE_BASE.replace(/\/$/, '')}/${stored.key}`,
+            image: imageUrl(env, request, stored.key),
             alt: stored.alt,
             ...(stored.href ? { href: stored.href } : {}),
           };
@@ -172,21 +217,33 @@ export default {
       }
 
       const key = `banners/${owner}.${type === 'image/png' ? 'png' : 'jpg'}`;
-      await env.IMAGES.put(key, bytes as BufferSource, {
-        httpMetadata: {
-          contentType: type,
-          cacheControl: 'public, max-age=300',
-        },
-      });
+      const image_url = await storeImage(env, request, key, bytes, type);
       const stored: StoredBanner = { key, alt, href, updated: new Date().toISOString() };
       await env.BANNERS.put(`banner:${owner}`, JSON.stringify(stored));
       await env.BANNERS.put(cooldownKey, '1', { expirationTtl: COOLDOWN_SECONDS });
 
-      return json(
-        { image: `${env.PUBLIC_IMAGE_BASE.replace(/\/$/, '')}/${key}` },
-        200,
-        cors,
-      );
+      return json({ image: image_url }, 200, cors);
+    }
+
+    /* Serving the artwork. Only reachable without R2 — with it, images are
+       read straight from the bucket and never touch the Worker.
+
+       Deliberately *not* CORS-wrapped: this is an <img> source, not an API,
+       and the content type is the one sniffed from the bytes at upload
+       rather than anything a request can influence. nosniff on top, so a
+       browser cannot be talked into interpreting it as anything else. */
+    if (request.method === 'GET' && url.pathname.startsWith('/images/')) {
+      const key = decodeURIComponent(url.pathname.slice('/images/'.length));
+      const hit = await env.BANNERS.getWithMetadata<{ type: string }>(`image:${key}`, 'arrayBuffer');
+      if (!hit.value) return json({ error: 'No such image.' }, 404, cors);
+      const type = hit.metadata?.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      return new Response(hit.value, {
+        headers: {
+          'content-type': type,
+          'cache-control': 'public, max-age=300',
+          'x-content-type-options': 'nosniff',
+        },
+      });
     }
 
     return json({ error: 'No such route.' }, 404, cors);

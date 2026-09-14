@@ -106,6 +106,20 @@ await check('the stored advert appears on the wall', async () => {
   assert(wall[owner].alt === 'A test advert', 'alt did not round-trip');
 });
 
+await check('the artwork serves back as a real image', async () => {
+  // The gap the other cases left: they proved the record round-trips, not the
+  // bytes. Without R2 the Worker serves these itself, so this is the path an
+  // <img> actually takes.
+  const wall = await (await fetch(`${BASE}/banners`, { headers: { origin: ORIGIN } })).json();
+  const res = await fetch(wall[owner].image);
+  assert(res.status === 200, `status ${res.status}`);
+  assert(res.headers.get('content-type') === 'image/jpeg', `type ${res.headers.get('content-type')}`);
+  assert(res.headers.get('x-content-type-options') === 'nosniff', 'missing nosniff');
+  const back = new Uint8Array(await res.arrayBuffer());
+  assert(back.length === JPEG.length, `got ${back.length} bytes, sent ${JPEG.length}`);
+  assert(back[0] === 0xff && back[1] === 0xd8 && back[2] === 0xff, 'not JPEG bytes');
+});
+
 await check('a second publish is rate limited', async () => {
   const res = await post(await signedBody());
   assert(res.status === 429, `status ${res.status}, expected 429`);
