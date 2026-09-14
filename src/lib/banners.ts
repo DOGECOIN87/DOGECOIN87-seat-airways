@@ -12,16 +12,29 @@
  * grid or blow up the payload.
  *
  * ── Where these live ──────────────────────────────────────────────────────
- * There is no server here yet, so a banner set by the browser stays in that
- * browser. That is a real limitation and the UI says so. A deployment that
- * wants everyone to see the same wall points
+ * Three sources, in increasing order of authority.
  *
- *   VITE_BANNERS_URL=https://…/banners.json
+ * `localStorage`, which is what an upload does when nothing else is
+ * configured: the banner stays in the browser that set it, and the UI says
+ * so rather than implying the wall has changed for anyone else.
  *
- * at a document of `{ "<seat>": { "image": "<url>", "alt": "…", "href": "…" } }`.
- * Those are read-only and win over anything local, so the published wall is
- * the published wall; a holder's own upload is a preview of what they are
- * buying until it is accepted.
+ *   VITE_BANNERS_API=https://…      self-serve, signed, keyed by wallet
+ *   VITE_BANNERS_URL=https://….json curated, read-only, keyed by seat
+ *
+ * The API is the production path and the one holders use. Note what it is
+ * keyed by: **the wallet, not the seat.**
+ *
+ * That is the decision this whole module turns on. Keying by seat would mean
+ * the server had to know who holds seat 3A, which means re-deriving the
+ * entire seat ladder server-side — the same ranking, the same cutoffs, the
+ * same tie-breaks — and keeping that copy in step with this one forever.
+ * Keyed by wallet, the server's only job is to prove you are the wallet you
+ * claim to be. The page already knows which seat a wallet sits in, because
+ * working that out is the thing the page does.
+ *
+ * It falls out better as product, too: get out-held and reseated from 3A to
+ * 7C and your advert moves with you, because it was never attached to 3A.
+ * Drop off the manifest entirely and it comes down on its own.
  */
 
 import { MARK_PATH } from '../components/Mark';
@@ -37,12 +50,18 @@ export interface Banner {
   published?: boolean;
   /** True for the airline's own creative, standing in until a holder buys it. */
   house?: boolean;
+  /** The wallet that published it, when it came from the signed API. */
+  owner?: string;
 }
 
 export type BannerSet = Readonly<Record<string, Banner>>;
 
 const KEY = 'seat-airways.banners.v1';
 const REMOTE = import.meta.env.VITE_BANNERS_URL as string | undefined;
+const API = (import.meta.env.VITE_BANNERS_API as string | undefined)?.replace(/\/$/, '');
+
+/** True when holders can publish for themselves rather than only locally. */
+export const canPublish = Boolean(API);
 
 /** The longest side of a stored banner, and the JPEG quality it keeps. */
 export const BANNER_SIZE = 384;
@@ -155,7 +174,130 @@ export async function fetchPublished(): Promise<Record<string, Banner>> {
   }
 }
 
-export const hasPublishedWall = Boolean(REMOTE);
+export const hasPublishedWall = Boolean(REMOTE || API);
+
+/* ────────────────────────────────────────────────────────────────────────
+   Publishing
+   ────────────────────────────────────────────────────────────────────────
+   Connecting a wallet proves nothing: an address is public and anybody can
+   type one into a request. So every write to the wall carries a signature
+   over a challenge that names the wallet, pins the exact image bytes, and is
+   stamped with the time.
+
+   Pinning the image matters as much as naming the wallet. Without the hash
+   in the signed text, one captured signature would authorise any artwork at
+   all for that wallet, forever — the holder signs "it's me", and whoever
+   caught the signature chooses the picture. With it, a signature authorises
+   exactly one image and nothing else. */
+
+/** The bytes behind a `data:` URL, which is what `toSquare` produces. */
+function dataUrlBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  const binary = atob(base64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The text a holder signs. Human-readable on purpose — this appears in a
+ * wallet popup, and somebody being asked to sign something ought to be able
+ * to read what it says.
+ */
+export function challenge(owner: string, imageHash: string, issued: string): string {
+  return [
+    'SEAT AIRWAYS',
+    'Publish this advert on my seat.',
+    '',
+    `wallet: ${owner}`,
+    `image:  sha256:${imageHash}`,
+    `issued: ${issued}`,
+  ].join('\n');
+}
+
+export interface PublishResult {
+  /** The stored image URL, once the server has it. */
+  image: string;
+}
+
+/**
+ * Put an advert on the wall for everybody.
+ *
+ * Throws with a message worth showing a person. The caller decides whether a
+ * failure is worth falling back to a local-only banner.
+ */
+export async function publishBanner(opts: {
+  owner: string;
+  /** A square data URL, as produced by `toSquare`. */
+  image: string;
+  alt: string;
+  href?: string;
+  sign: (message: string) => Promise<string>;
+}): Promise<PublishResult> {
+  if (!API) throw new Error('This deployment has no advert server configured.');
+
+  const bytes = dataUrlBytes(opts.image);
+  const hash = await sha256Hex(bytes);
+  const issued = new Date().toISOString();
+  const signature = await opts.sign(challenge(opts.owner, hash, issued));
+
+  const res = await fetch(`${API}/banner`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      owner: opts.owner,
+      image: opts.image,
+      alt: opts.alt,
+      href: opts.href,
+      issued,
+      signature,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `The advert server refused it (${res.status}).`);
+  }
+  const body = (await res.json()) as { image?: unknown };
+  if (typeof body.image !== 'string') throw new Error('The advert server returned no image.');
+  return { image: body.image };
+}
+
+/**
+ * The published wall, keyed by the wallet that owns each advert.
+ *
+ * The caller maps these onto seats through the manifest it already has.
+ */
+export async function fetchOwnerBanners(): Promise<Record<string, Banner>> {
+  if (!API) return {};
+  try {
+    const res = await fetch(`${API}/banners`);
+    if (!res.ok) return {};
+    const body: unknown = await res.json();
+    if (!body || typeof body !== 'object') return {};
+    const out: Record<string, Banner> = {};
+    for (const [owner, v] of Object.entries(body as Record<string, unknown>)) {
+      const b = v as Partial<Banner>;
+      const image = safeHref(typeof b?.image === 'string' ? b.image : undefined);
+      if (!image) continue;
+      out[owner] = {
+        image,
+        alt: typeof b.alt === 'string' ? b.alt : 'Advert',
+        href: safeHref(typeof b.href === 'string' ? b.href : undefined),
+        published: true,
+        owner,
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 /* ────────────────────────────────────────────────────────────────────────
    House adverts

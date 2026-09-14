@@ -21,7 +21,8 @@ import {
   type SeatPosition,
   type ZoneKey,
 } from './content/cabin';
-import { createSimulatedFeed, type FlightMode } from './lib/flightFeed';
+import { createSimulatedFeed, INITIAL_TICK, type FlightMode } from './lib/flightFeed';
+import { createLiveFeed, hasLiveMarket } from './lib/marketFeed';
 import {
   BAND_CLOUDS,
   BAND_MOON,
@@ -41,6 +42,9 @@ import { MANIFEST_SIZE } from './lib/manifest';
 import {
   houseAdverts,
   fetchPublished,
+  fetchOwnerBanners,
+  canPublish,
+  publishBanner,
   hasPublishedWall,
   localBanners,
   type Banner,
@@ -141,7 +145,13 @@ const SceneLoading = ({ exterior = false }: { exterior?: boolean }) => (
 
 export default function App() {
 
-  const feed = useMemo(() => createSimulatedFeed(), []);
+  /* Point the deployment at a token and it reads the market; leave it
+     unconfigured and it flies the simulator. The page states which one it is
+     on rather than dressing a simulation up as a live reading. */
+  const feed = useMemo(
+    () => (hasLiveMarket ? createLiveFeed(INITIAL_TICK) : createSimulatedFeed()),
+    [],
+  );
   const { tick, lamps } = useFlightState(feed);
   const sky = useSky();
   const band = useMemo(() => bandFor(tick.marketCap), [tick.marketCap]);
@@ -185,12 +195,35 @@ export default function App() {
      Every seat is a square, so every held seat is a billboard. The published
      set wins over anything this browser has put up locally. */
   const [published, setPublished] = useState<BannerSet>({});
+  /* The self-serve wall arrives keyed by wallet rather than by seat, because
+     the server that stores it has no idea what a seat is. Resolving one to
+     the other is this page's job — it is already holding the manifest that
+     answers it. */
+  const [byOwner, setByOwner] = useState<BannerSet>({});
   const [local, setLocal] = useState<BannerSet>(() => localBanners.read());
   const [advertising, setAdvertising] = useState<string | null>(null);
-  useEffect(() => {
-    if (!hasPublishedWall) return;
-    void fetchPublished().then(setPublished);
+  const reloadWall = useCallback(() => {
+    if (hasPublishedWall) void fetchPublished().then(setPublished);
+    if (canPublish) void fetchOwnerBanners().then(setByOwner);
   }, []);
+  useEffect(() => {
+    reloadWall();
+    // A wall somebody else is also publishing to should not need a refresh.
+    const id = setInterval(reloadWall, 60_000);
+    return () => clearInterval(id);
+  }, [reloadWall]);
+
+  /* Wallet → seat, through the manifest. An advert follows its holder: get
+     out-held from 3A to 7C and it moves with you, and drop off the manifest
+     altogether and it comes down, with nothing to clean up. */
+  const ownerSeats = useMemo(() => {
+    const out: Record<string, Banner> = {};
+    for (const entry of manifest.entries) {
+      const banner = byOwner[entry.address];
+      if (banner) out[entry.seat.id] = banner;
+    }
+    return out;
+  }, [byOwner, manifest.entries]);
   /* Held seats with nothing on them yet carry the airline's own campaigns, the
      way unsold inventory does on a real aircraft. A holder's own upload, and
      the published set, both beat them. */
@@ -199,8 +232,8 @@ export default function App() {
     [manifest.entries],
   );
   const banners = useMemo(
-    () => ({ ...house, ...local, ...published }),
-    [house, local, published],
+    () => ({ ...house, ...local, ...ownerSeats, ...published }),
+    [house, local, ownerSeats, published],
   );
   /* Just the images, keyed by seat, for the screens in the cabin: the 3D view
      has no business knowing what a Banner is. */
@@ -785,8 +818,10 @@ export default function App() {
           <p className="sa-close__note">
             The horizon, the tapes, the lamps and the log all read one input — the 24-hour price change — and
             the altitude is the market cap: $1M puts you above the clouds, $10M in space, $50M at the moon. The
-            sky is real: your own time of day, and the weather where you are. The market feed on this
-            deployment is simulated, and every figure it produces is labelled as such.
+            sky is real: your own time of day, and the weather where you are.{' '}
+            {feed.jumpTo
+              ? 'The market feed on this deployment is simulated, and every figure it produces is labelled as such.'
+              : 'The market feed is live, and the seat ladder is read from the chain.'}
           </p>
 
           <div className="sa-footer__bar">
@@ -800,7 +835,35 @@ export default function App() {
         <AdvertDialog
           seat={advertising}
           current={banners[advertising] ?? null}
-          onSave={(banner: Banner) => {
+          shared={canPublish && Boolean(wallet.address)}
+          onSave={async (banner: Banner) => {
+            /* With a server configured and a wallet connected, the advert goes
+               up for everybody — signed, so the wall can prove the seat was
+               the publisher's. Without either, it stays in this browser and
+               the dialog says as much rather than implying otherwise. */
+            if (canPublish && wallet.address) {
+              try {
+                const { image } = await publishBanner({
+                  owner: wallet.address,
+                  image: banner.image,
+                  alt: banner.alt,
+                  href: banner.href,
+                  sign: wallet.signMessage,
+                });
+                setByOwner((prev) => ({
+                  ...prev,
+                  [wallet.address as string]: { ...banner, image, published: true, owner: wallet.address as string },
+                }));
+                say(`Advert up on seat ${advertising}.`, 'pa');
+                return null;
+              } catch (e) {
+                const message = e instanceof Error ? e.message : 'That advert could not be published.';
+                // A refused signature is a decision, not a fault to report.
+                return /reject|denied|cancel/i.test(message)
+                  ? 'You did not sign it, so nothing went up.'
+                  : message;
+              }
+            }
             if (!localBanners.put(advertising, banner)) {
               return 'This browser would not store that image. Try a smaller one.';
             }

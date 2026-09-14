@@ -1,0 +1,18 @@
+{
+  "name": "seat-airways-banners",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "esbuild src/verify.ts --outfile=dist-test/verify.js --format=esm --platform=node && node test/verify.test.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260911.1",
+    "typescript": "~5.8.2",
+    "wrangler": "^4.33.0",
+    "esbuild": "^0.25.0"
+  },
+  "type": "module"
+}

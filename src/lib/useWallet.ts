@@ -13,6 +13,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 interface InjectedProvider {
   connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey?: { toString(): string } }>;
+  /* Every Solana wallet exposes this, and it is the only thing standing
+     between the advertising wall and anybody who can type a POST. */
+  signMessage?: (data: Uint8Array, encoding?: string) => Promise<{ signature: Uint8Array } | Uint8Array>;
   disconnect?: () => Promise<void>;
   on?: (event: string, handler: (...args: unknown[]) => void) => void;
   removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
@@ -45,6 +48,38 @@ export interface WalletState {
   unavailable: boolean;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
+  /**
+   * Sign a plain-text challenge, returning the signature as base58.
+   *
+   * Connecting a wallet proves nothing — the address is public and anyone can
+   * claim it. A signature is the proof, so every write to the wall carries
+   * one. Throws if the wallet refuses or cannot sign; the caller reports that
+   * rather than publishing anyway.
+   */
+  signMessage: (message: string) => Promise<string>;
+}
+
+/** Solana addresses and signatures are base58, so encoding one is on us. */
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+export function toBase58(bytes: Uint8Array): string {
+  let zeros = 0;
+  while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  const digits: number[] = [];
+  for (let i = zeros; i < bytes.length; i++) {
+    let carry = bytes[i];
+    for (let j = 0; j < digits.length; j++) {
+      carry += digits[j] << 8;
+      digits[j] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = (carry / 58) | 0;
+    }
+  }
+  let out = '1'.repeat(zeros);
+  for (let i = digits.length - 1; i >= 0; i--) out += B58[digits[i]];
+  return out;
 }
 
 export function useWallet(): WalletState {
@@ -108,5 +143,18 @@ export function useWallet(): WalletState {
     setAddress(null);
   }, []);
 
-  return { address, walletName, connecting, error, unavailable, connect, disconnect };
+  const signMessage = useCallback(async (message: string) => {
+    const found = findProvider();
+    if (!found) throw new Error('No wallet to sign with.');
+    if (!found.provider.signMessage) {
+      throw new Error(`${found.name} cannot sign messages.`);
+    }
+    const res = await found.provider.signMessage(new TextEncoder().encode(message), 'utf8');
+    // Phantom returns { signature }, some others return the bytes directly.
+    const sig = res instanceof Uint8Array ? res : res.signature;
+    if (!sig?.length) throw new Error('The wallet returned no signature.');
+    return toBase58(sig);
+  }, []);
+
+  return { address, walletName, connecting, error, unavailable, connect, disconnect, signMessage };
 }

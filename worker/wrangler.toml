@@ -1,0 +1,31 @@
+name = "seat-airways-banners"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# The published wall: one small JSON record per wallet.
+[[kv_namespaces]]
+binding = "BANNERS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# The artwork itself.
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "seat-airways-banners"
+
+[vars]
+# Where the images are served from — an R2 public bucket URL, or a custom
+# domain in front of one. Images are read far more often than written, so
+# serving them straight from R2 keeps the Worker off that path entirely.
+PUBLIC_IMAGE_BASE = "https://REPLACE.r2.dev"
+
+# Lock this to the site's own origin before going live. Left empty, the
+# Worker echoes whatever origin asks, which is fine for local work and
+# careless in production.
+ALLOWED_ORIGINS = ""
+
+# Optional. With both set, the Worker refuses adverts from wallets that do
+# not hold the token, which stops the bucket being used as free storage.
+# TOKEN_MINT = ""
+
+# RPC_URL is a secret rather than a var, since paid endpoints carry a key in
+# the URL:  wrangler secret put RPC_URL

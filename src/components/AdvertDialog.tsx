@@ -12,12 +12,21 @@ import { BANNER_SIZE, toSquare, type Banner } from '../lib/banners';
 interface AdvertDialogProps {
   seat: string;
   current: Banner | null;
-  onSave: (banner: Banner) => string | null;
+  /**
+   * Put it up. Resolves to an error worth showing, or null on success.
+   *
+   * Async because publishing now means a wallet signature and a round trip,
+   * and both of those are things a person waits on — the dialog has to be
+   * able to say so rather than appearing to hang.
+   */
+  onSave: (banner: Banner) => Promise<string | null> | string | null;
+  /** Whether saving publishes for everyone or only into this browser. */
+  shared?: boolean;
   onClear: () => void;
   onClose: () => void;
 }
 
-const AdvertDialog = ({ seat, current, onSave, onClear, onClose }: AdvertDialogProps) => {
+const AdvertDialog = ({ seat, current, onSave, onClear, onClose, shared }: AdvertDialogProps) => {
   const [image, setImage] = useState(current?.image ?? '');
   const [alt, setAlt] = useState(current?.alt ?? '');
   const [href, setHref] = useState(current?.href ?? '');
@@ -45,11 +54,23 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose }: AdvertDialogP
     }
   };
 
-  const save = () => {
+  const save = async () => {
     if (!image) return setError('Choose an image first.');
-    const failure = onSave({ image, alt: alt.trim() || `Advert on seat ${seat}`, href: href.trim() || undefined });
-    if (failure) setError(failure);
-    else onClose();
+    setBusy(true);
+    setError(null);
+    try {
+      const failure = await onSave({
+        image,
+        alt: alt.trim() || `Advert on seat ${seat}`,
+        href: href.trim() || undefined,
+      });
+      if (failure) setError(failure);
+      else onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That advert could not be published.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -123,10 +144,14 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose }: AdvertDialogP
           />
         </label>
 
-        {error && <p role="alert" className="mt-3 text-[11.5px] text-red-300">{error}</p>}
+        {error && (
+          <p role="alert" className="mt-3 text-[11.5px] font-semibold text-[#B3261E]">{error}</p>
+        )}
 
         <p className="mt-4 ui-rule pt-3 text-[10.5px] leading-relaxed text-ui-faint">
-          Saved in this browser only. Everyone else sees the published wall until yours is accepted onto it.
+          {shared
+            ? 'Your wallet will ask you to sign this advert. The signature proves the seat is yours and covers this exact image — it moves no funds.'
+            : 'Saved in this browser only. Everyone else sees the published wall until yours is accepted onto it.'}
         </p>
 
         <div className="mt-4 flex gap-2">
@@ -136,7 +161,7 @@ const AdvertDialog = ({ seat, current, onSave, onClear, onClose }: AdvertDialogP
             disabled={busy}
             className="sa-cta px-5 py-2 text-[11px] disabled:opacity-40"
           >
-            {busy ? 'Cropping…' : 'Put it up'}
+            {busy ? 'Working…' : shared ? 'Sign and put it up' : 'Put it up'}
           </button>
           {current && (
             <button

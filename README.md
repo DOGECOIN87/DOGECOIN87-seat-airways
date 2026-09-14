@@ -164,27 +164,65 @@ still navy and the cabin lighting is still amber, because those are things the
 aeroplane is made of rather than interface colours — the `seat` palette in
 `tailwind.config.js`, kept deliberately separate from `ui`.
 
-## The market feed is simulated
+## Going live
 
-`src/lib/flightFeed.ts` is the **only** file that has to change to go live:
+Nothing in the page is hard-wired to a simulation. Three seams read the world,
+each is configured by environment variable, and each states on screen which
+mode it is in rather than dressing a simulation up as a live reading.
 
-```ts
-const live: FlightFeed = {
-  subscribe(listener) {
-    const id = setInterval(async () => listener(await fetchMarketTick()), 15_000);
-    return () => clearInterval(id);
-  },
-  setMode() {},                   // a real aircraft does not take flight-sim input
-  get mode() { return 'live' as const },
-};
-```
+| Set | And | 
+| --- | --- |
+| `VITE_TOKEN_MINT` | the market feed reads Jupiter instead of the simulator |
+| `VITE_RPC_URL` | balances and the seat ladder come off the chain |
+| `VITE_HOLDERS_URL` | the manifest seats real holders |
+| `VITE_BANNERS_API` | holders publish their own adverts, signed |
 
-Hand that to `App` in place of `createSimulatedFeed()`. The horizon, the tapes,
-the annunciators, the seat ladder and the radio log all keep working untouched.
+See `.env.example`, which documents all of them.
 
-The **Market cap** buttons under the view (Ground / Above the clouds / Space /
-The moon) call the simulator's optional `jumpTo`, and hide themselves against a
-feed that does not implement it.
+**`VITE_HOLDERS_URL` is not really optional.** Without it the code falls back
+to the RPC's `getTokenLargestAccounts`, which returns at most 20 accounts —
+and the cabin seats 40. Half the aeroplane would sit empty however many
+holders the token has.
+
+### The market feed
+
+`src/lib/marketFeed.ts` reads Jupiter's free public API, which needs no key
+and sends CORS headers. One request carries all three numbers the cabin reads:
+market cap, the 24-hour move, and the holder count.
+
+Its parser looks up fields by **name, at any depth**, rather than by a fixed
+path. That is deliberate. Jupiter serves this data from several endpoints that
+have each moved between versions, and they do not agree on nesting — only on
+what the fields are called. A fixed path turns a shape change into a blank
+altimeter on a production page. Every value is validated, and anything missing
+leaves the previous reading in place: an aircraft that holds its last known
+altitude is better than one whose altimeter drops to zero because a key was
+renamed.
+
+To use something else, set `VITE_MARKET_URL` to any JSON endpoint with those
+numbers in it, under any of the names the parser knows.
+
+### The advertising wall
+
+`worker/` is the server that stores what holders upload — a Cloudflare Worker
+with R2 for the artwork and KV for the records. It has its own
+[README](worker/README.md) covering deployment and how a write is authorised.
+
+The thing worth knowing here: **adverts are stored against the wallet, not the
+seat.** The server has no idea what a seat is, and it must not learn — that
+would mean a second copy of the seat ladder, drifting from this one. The page
+resolves wallet to seat through the manifest it is already holding.
+
+Which also means an advert follows its holder. Get out-held from 3A to 7C and
+it moves with you; drop off the manifest and it comes down on its own.
+
+Every write carries a wallet signature over a challenge that names the wallet,
+**pins the exact image bytes**, and is stamped with the time. Pinning the image
+matters as much as naming the wallet: without it one captured signature would
+authorise any artwork for that wallet forever.
+
+With no advert server configured, an upload stays in the uploader's browser and
+the dialog says so.
 
 ## Running it
 
