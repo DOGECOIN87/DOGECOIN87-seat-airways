@@ -25,8 +25,8 @@
  */
 
 import type { FlightFeed, FlightTick } from './flightFeed';
+import { TOKEN_MINT } from './token';
 
-const MINT = import.meta.env.VITE_TOKEN_MINT as string | undefined;
 const MARKET_URL = import.meta.env.VITE_MARKET_URL as string | undefined;
 
 /**
@@ -65,7 +65,7 @@ export function defaultMarketUrl(mint: string): string {
 }
 
 /** True when this deployment has been pointed at a real token. */
-export const hasLiveMarket = Boolean(MINT);
+export const hasLiveMarket = Boolean(TOKEN_MINT);
 
 type Json = unknown;
 
@@ -161,7 +161,7 @@ export function readTick(body: Json, previous: FlightTick): FlightTick {
 
 /** A feed that reads the market. */
 export function createLiveFeed(start: FlightTick): FlightFeed {
-  const url = MARKET_URL ?? (MINT ? defaultMarketUrl(MINT) : null);
+  const url = MARKET_URL ?? (TOKEN_MINT ? defaultMarketUrl(TOKEN_MINT) : null);
   let latest: FlightTick = start;
 
   return {

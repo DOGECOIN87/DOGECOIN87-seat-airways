@@ -1526,3 +1526,31 @@ html {
 .sa-ca__copy:hover { box-shadow: var(--e); }
 .sa-ca__copy:active { box-shadow: var(--e-press); }
 .sa-ca__copy:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+
+/* ── Buy it ───────────────────────────────────────────────────────────
+   Beside the address, because that is what somebody who just copied it
+   was going to do next. A raised pill against the recessed plate, so it
+   reads as the one control on a strip that is otherwise a readout. */
+.sa-pump {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.26rem 0.75rem 0.26rem 0.5rem;
+  background: var(--face);
+  box-shadow: var(--e-sm);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+  color: var(--ui-ink);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.sa-pump:hover { box-shadow: var(--e); transform: translateY(-1px); }
+.sa-pump:active { box-shadow: var(--e-press); transform: translateY(1px); }
+.sa-pump:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+.sa-pump__mark { width: 1rem; height: 1rem; flex: none; }
+/* The wordmark gives way before the address does: on a phone the capsule
+   alone still says where the button goes. */
+@media (max-width: 520px) { .sa-pump__text { display: none; } }

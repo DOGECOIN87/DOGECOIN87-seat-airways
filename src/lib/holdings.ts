@@ -16,6 +16,8 @@
  * until the chain answers.
  */
 
+import { TOKEN_MINT } from './token';
+
 export interface Holding {
   /** The wallet's balance, in whole tokens. */
   balance: number;
@@ -32,7 +34,6 @@ export interface HoldingsSource {
 }
 
 const RPC_URL = import.meta.env.VITE_RPC_URL as string | undefined;
-const TOKEN_MINT = import.meta.env.VITE_TOKEN_MINT as string | undefined;
 
 /** True when this deployment has been pointed at a real token. */
 export const isConfigured = Boolean(RPC_URL && TOKEN_MINT);
