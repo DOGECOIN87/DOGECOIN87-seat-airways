@@ -173,32 +173,95 @@ const json = (body: unknown, status: number, headers: Record<string, string>) =>
     headers: { 'content-type': 'application/json', ...headers },
   });
 
+/* ── The wall ───────────────────────────────────────────────────────────── */
+
+/* Every published advert, in one record.
+
+   GET /banners used to list() the namespace and read each record, on every
+   page view. KV's free plan allows 1,000 list() calls a day, and launch
+   traffic spent them: from then on the handler threw "KV list() limit
+   exceeded for the day", the response went out as Cloudflare's CORS-less
+   1101 page, and every visitor saw house adverts. A page view is now one
+   get(), against a limit of 100,000.
+
+   list() moves to the upload path, which is rare and rate limited, and only
+   to heal the index: anything list() finds that the index is missing gets
+   put back. If list() is over its cap too, the index still gains the upload
+   that triggered it. Entries go through readStoredBanner on the way out, so
+   one malformed entry costs one advert, as it did before. */
+const WALL_KEY = 'wall';
+type Wall = Record<string, StoredBanner>;
+
+async function readWall(env: Env): Promise<Wall> {
+  const raw = await env.BANNERS.get(WALL_KEY).catch(() => null);
+  if (!raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object') return {};
+  const wall: Wall = {};
+  for (const [owner, entry] of Object.entries(parsed as Record<string, unknown>)) {
+    const stored = readStoredBanner(JSON.stringify(entry));
+    if (stored) wall[owner] = stored;
+  }
+  return wall;
+}
+
+async function addToWall(env: Env, owner: string, stored: StoredBanner): Promise<void> {
+  const wall = await readWall(env);
+  try {
+    const list = await env.BANNERS.list({ prefix: 'banner:' });
+    const missing = list.keys
+      .map(({ name }) => name.slice('banner:'.length))
+      .filter((o) => o !== owner && !wall[o]);
+    const found = await Promise.all(
+      missing.map(async (o) => readStoredBanner(await env.BANNERS.get(`banner:${o}`).catch(() => null))),
+    );
+    missing.forEach((o, i) => {
+      const record = found[i];
+      if (record) wall[o] = record;
+    });
+  } catch {
+    // Over the daily list() cap. The index keeps what it had, plus this.
+  }
+  wall[owner] = stored;
+  await env.BANNERS.put(WALL_KEY, JSON.stringify(wall));
+}
+
 /* ── Routes ─────────────────────────────────────────────────────────────── */
 
 export default {
+  /* An uncaught exception goes out as Cloudflare's error page, which carries
+     no CORS headers, so the browser reports a CORS failure and the real cause
+     is invisible from the site. Answer with JSON and CORS instead. */
   async fetch(request: Request, env: Env): Promise<Response> {
+    try {
+      return await handle(request, env);
+    } catch (e) {
+      console.error(e);
+      return json({ error: 'Something went wrong on our side.' }, 500, corsHeaders(env, request.headers.get('origin')));
+    }
+  },
+};
+
+async function handle(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const cors = corsHeaders(env, request.headers.get('origin'));
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
 
     if (request.method === 'GET' && url.pathname === '/banners') {
-      const list = await env.BANNERS.list({ prefix: 'banner:' });
       const out: Record<string, { image: string; alt: string; href?: string }> = {};
-      await Promise.all(
-        list.keys.map(async ({ name }) => {
-          // Read as text and parsed here, not with 'json': one malformed
-          // record must cost one advert, not the whole wall. See
-          // readStoredBanner for the outage this replaced.
-          const stored = readStoredBanner(await env.BANNERS.get(name).catch(() => null));
-          if (!stored) return;
-          out[name.slice('banner:'.length)] = {
-            image: imageUrl(env, request, stored.key, stored.updated),
-            alt: stored.alt,
-            ...(stored.href ? { href: stored.href } : {}),
-          };
-        }),
-      );
+      for (const [owner, stored] of Object.entries(await readWall(env))) {
+        out[owner] = {
+          image: imageUrl(env, request, stored.key, stored.updated),
+          alt: stored.alt,
+          ...(stored.href ? { href: stored.href } : {}),
+        };
+      }
       return json(out, 200, {
         ...cors,
         // The wall is read constantly and written rarely.
@@ -264,6 +327,7 @@ export default {
       const image_url = await storeImage(env, request, key, bytes, type, updated);
       const stored: StoredBanner = { key, alt, href, updated };
       await env.BANNERS.put(`banner:${owner}`, JSON.stringify(stored));
+      await addToWall(env, owner, stored);
       await env.BANNERS.put(cooldownKey, '1', { expirationTtl: COOLDOWN_SECONDS });
 
       return json({ image: image_url }, 200, cors);
@@ -307,5 +371,4 @@ export default {
     }
 
     return json({ error: 'No such route.' }, 404, cors);
-  },
-};
+}
