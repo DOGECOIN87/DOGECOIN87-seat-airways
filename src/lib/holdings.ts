@@ -115,6 +115,30 @@ export interface HolderList {
 
 interface LargestAccount { address: string; amount: string; decimals: number; uiAmount: number | null }
 
+/* A seat is for a person. The largest "holder" of a pump.fun token is its
+   bonding curve, holding most of the supply until the token graduates, and
+   after that it is the pool. Both are accounts owned by a program. A person's
+   wallet is either owned by the System Program or does not exist on chain at
+   all (a wallet that has only ever received tokens holds no SOL). Anything
+   else is a contract, and a contract in 1A would be the first thing anybody
+   noticed. Checked by owner program rather than by a list of known addresses,
+   so the next launchpad or AMM is excluded without anybody remembering to. */
+const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+
+/** Keeps the holders that are people. Null if the chain could not be asked. */
+async function peopleOnly(holders: Holder[]): Promise<Holder[] | null> {
+  if (!holders.length) return holders;
+  const res = await rpc<{ value: ({ owner: string } | null)[] }>('getMultipleAccounts', [
+    holders.map((h) => h.address),
+    { encoding: 'base64', dataSlice: { offset: 0, length: 0 } },
+  ]);
+  if (!res) return null;
+  return holders.filter((_, i) => {
+    const account = res.value[i];
+    return account === null || account.owner === SYSTEM_PROGRAM;
+  });
+}
+
 /** Token accounts belong to owners; the manifest names owners, not accounts. */
 async function ownersOf(accounts: string[]): Promise<(string | null)[]> {
   const res = await rpc<{
@@ -149,7 +173,13 @@ export async function readHolders(): Promise<HolderList | null> {
   const supply = supplyRes.value.uiAmount ?? Number(supplyRes.value.amount) / 10 ** supplyRes.value.decimals;
 
   const indexed = await fromIndexer();
-  if (indexed && indexed.length) return { holders: indexed, supply, live: true };
+  if (indexed && indexed.length) {
+    // Only as many as could be seated, with room for the contracts to drop
+    // out, and inside getMultipleAccounts' limit of 100.
+    const top = [...indexed].sort((a, b) => b.balance - a.balance).slice(0, Math.min(100, MANIFEST_SIZE + 10));
+    const people = await peopleOnly(top);
+    if (people) return { holders: people, supply, live: true };
+  }
 
   const largest = await rpc<{ value: LargestAccount[] }>('getTokenLargestAccounts', [TOKEN_MINT]);
   if (!largest) return null;
@@ -163,6 +193,8 @@ export async function readHolders(): Promise<HolderList | null> {
     }))
     .filter((h) => h.balance > 0);
 
-  return { holders, supply, live: true };
+  const people = await peopleOnly(holders);
+  if (!people) return null;
+  return { holders: people, supply, live: true };
 }
 

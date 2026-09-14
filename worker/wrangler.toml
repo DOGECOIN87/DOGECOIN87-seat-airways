@@ -29,8 +29,9 @@ bucket_name = "seat-airlines-banners"
 # origin asks, which is fine locally and careless in production.
 ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 
-# Set once the token exists, so the Worker can refuse adverts from wallets
-# that do not hold it:
-#   TOKEN_MINT = "<mint>"
+# The token. Together with the RPC_URL secret below, lets the Worker refuse
+# adverts from wallets that do not hold it; without that secret the check is
+# skipped, and adverts from non-holders still never display on the page.
+TOKEN_MINT = "AWJCyg9PrMtYju9yaQmdQLcwrGobHMTv9JU3mo4upump"
 # RPC_URL is a secret rather than a var, since paid endpoints carry a key in
 # the URL:  npx wrangler secret put RPC_URL
