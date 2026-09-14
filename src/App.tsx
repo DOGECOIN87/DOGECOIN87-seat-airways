@@ -43,6 +43,7 @@ import {
   fetchOwnerBanners,
   canPublish,
   publishBanner,
+  ServerUnreachable,
   hasPublishedWall,
   localBanners,
   type Banner,
@@ -775,6 +776,25 @@ export default function App() {
                 say(`Advert up on seat ${advertising}.`, 'pa');
                 return null;
               } catch (e) {
+                /* The server never answered — not deployed, not reachable,
+                   or not allowing this origin. The advert is not at fault
+                   and neither is the holder, who has already signed for it,
+                   so it goes up in this browser rather than evaporating, and
+                   the PA says plainly how far it got. Falling back on a
+                   *refusal* would be the wrong thing entirely: a 415 or a
+                   403 is the server having read it and said no, and hiding
+                   that behind a local save would look like success. */
+                if (e instanceof ServerUnreachable) {
+                  if (!localBanners.put(advertising, banner)) {
+                    return 'The advert server could not be reached, and this browser would not store it either. Try a smaller image.';
+                  }
+                  setLocal(localBanners.read());
+                  say(
+                    `Advert up on seat ${advertising}, in this browser only — the advert server could not be reached.`,
+                    'alert',
+                  );
+                  return null;
+                }
                 const message = e instanceof Error ? e.message : 'That advert could not be published.';
                 // A refused signature is a decision, not a fault to report.
                 return /reject|denied|cancel/i.test(message)

@@ -12,11 +12,15 @@
  *
  *   npm run test
  */
-import { dataUrlBytes, houseAdverts } from '../dist-test/banners.js';
+import { dataUrlBytes, houseAdverts, publishBanner, ServerUnreachable } from '../dist-test/banners.js';
 
 let pass = 0, fail = 0;
 const check = (name, fn) => {
   try { fn(); console.log(`  ok   ${name}`); pass++; }
+  catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); fail++; }
+};
+const checkAsync = async (name, fn) => {
+  try { await fn(); console.log(`  ok   ${name}`); pass++; }
   catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); fail++; }
 };
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
@@ -64,6 +68,52 @@ check('a malformed base64 payload says something a person can act on', () => {
 
 check('a string that is not a data URL at all is refused', () => {
   throws(() => dataUrlBytes('https://example.com/cat.png'), /cannot publish|choose a file/i, 'plain url');
+});
+
+/* ────────────────────────────────────────────────────────────────────────
+   Publishing, when the server is not there
+   ────────────────────────────────────────────────────────────────────────
+   The difference these two cases pin down is the whole reason the failure
+   has a type. A server that answers and says no has judged the advert, and
+   the holder has to hear its reason. A server that never answers has judged
+   nothing, and an advert thrown away over that is an upload and a wallet
+   signature spent on nothing. Only the second may fall back to a local save,
+   and mixing them up in either direction is a bug worth a test. */
+
+const JPEG = 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]).toString('base64');
+const publish = () =>
+  publishBanner({ owner: 'WalletOne', image: JPEG, alt: 'An advert', sign: async () => 'sig' });
+
+const rejects = async (fn, test, msg) => {
+  try { await fn(); } catch (e) { test(e); return; }
+  throw new Error(`${msg}: did not throw`);
+};
+
+console.log('\npublishing');
+
+await checkAsync('an unreachable server is told apart from a refusal', async () => {
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  await rejects(publish, (e) => {
+    assert(e instanceof ServerUnreachable, `got ${e.name}: ${e.message}`);
+    assert(!/failed to fetch/i.test(e.message), `leaked the browser's words: "${e.message}"`);
+  }, 'unreachable server');
+});
+
+await checkAsync('a refusal keeps the server’s reason, and is not an outage', async () => {
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: 'Adverts must be JPEG or PNG.' }), { status: 415 });
+  await rejects(publish, (e) => {
+    assert(!(e instanceof ServerUnreachable), 'a 415 was mistaken for an outage — it would be saved locally');
+    assert(/JPEG or PNG/.test(e.message), `lost the server's reason: "${e.message}"`);
+  }, 'refused advert');
+});
+
+await checkAsync('a refusal with no readable body still names the status', async () => {
+  globalThis.fetch = async () => new Response('<html>502</html>', { status: 502 });
+  await rejects(publish, (e) => {
+    assert(!(e instanceof ServerUnreachable), 'an answered request is not an outage');
+    assert(/502/.test(e.message), `did not name the status: "${e.message}"`);
+  }, 'gateway error');
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

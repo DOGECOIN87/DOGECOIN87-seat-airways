@@ -312,6 +312,28 @@ export interface PublishResult {
 }
 
 /**
+ * The advert server never answered.
+ *
+ * Worth its own type because it is the one failure that is not a decision.
+ * A 401, a 415, a 429 are all the server having looked at the request and
+ * said no, and the holder needs to hear exactly that. A `fetch` that rejects
+ * is nobody having looked at all — the Worker is not deployed, the origin is
+ * not on its allowlist, the aeroplane is on hotel wifi — and the advert
+ * itself was never the problem. The caller can keep it rather than throwing
+ * away a signature and an upload over a connection.
+ *
+ * A CORS refusal arrives here too, as a `TypeError` indistinguishable from
+ * an outage, which is correct: from inside the page, an answer it is not
+ * allowed to read and no answer at all are the same event.
+ */
+export class ServerUnreachable extends Error {
+  constructor(message = 'The advert server could not be reached.') {
+    super(message);
+    this.name = 'ServerUnreachable';
+  }
+}
+
+/**
  * Put an advert on the wall for everybody.
  *
  * Throws with a message worth showing a person. The caller decides whether a
@@ -335,18 +357,26 @@ export async function publishBanner(opts: {
   const issued = new Date().toISOString();
   const signature = await opts.sign(challenge(opts.owner, hash, issued));
 
-  const res = await fetch(`${API}/banner`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      owner: opts.owner,
-      image: opts.image,
-      alt: opts.alt,
-      href: opts.href,
-      issued,
-      signature,
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API}/banner`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        owner: opts.owner,
+        image: opts.image,
+        alt: opts.alt,
+        href: opts.href,
+        issued,
+        signature,
+      }),
+    });
+  } catch {
+    /* `fetch` rejects with a TypeError whose message is the browser's, not
+       anyone's — "Failed to fetch" told a holder who has just signed
+       something is worse than useless. */
+    throw new ServerUnreachable();
+  }
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;

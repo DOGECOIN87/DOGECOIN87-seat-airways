@@ -67,27 +67,65 @@ async function storeImage(
   key: string,
   bytes: Uint8Array,
   type: string,
+  updated: string,
 ): Promise<string> {
   if (usingR2(env)) {
     await env.IMAGES!.put(key, bytes as BufferSource, {
       httpMetadata: { contentType: type, cacheControl: 'public, max-age=300' },
     });
-    return `${env.PUBLIC_IMAGE_BASE!.replace(/\/$/, '')}/${key}`;
+  } else {
+    // KV holds the bytes, and the content type rides along as metadata so the
+    // read path does not have to sniff them again.
+    await env.BANNERS.put(`image:${key}`, bytes as unknown as ArrayBuffer, { metadata: { type } });
   }
-  // KV holds the bytes, and the content type rides along as metadata so the
-  // read path does not have to sniff them again.
-  await env.BANNERS.put(`image:${key}`, bytes as unknown as ArrayBuffer, { metadata: { type } });
-  return new URL(`/images/${key}`, request.url).toString();
+  return imageUrl(env, request, key, updated);
 }
 
-/** The URL an already-stored image is served from. */
-function imageUrl(env: Env, request: Request, key: string): string {
-  return usingR2(env)
+/**
+ * The URL an already-stored image is served from.
+ *
+ * ── Why there is a version on the end ─────────────────────────────────────
+ * The key is the wallet, so replacing an advert overwrites it in place and
+ * the URL never changes. That is the right storage shape — one wallet, one
+ * advert, nothing to sweep up — and it made publishing look broken.
+ *
+ * The bytes are served with `max-age=300`. A holder who put up a second
+ * advert got back the URL their browser had cached five minutes ago, so the
+ * page showed the *old* picture, on the seat, immediately after a successful
+ * publish they had just signed for. Nothing had failed; there was simply no
+ * way for the browser to know the image behind that URL had changed. So they
+ * would try again, hit the sixty-second cooldown, and be told to slow down.
+ *
+ * The record already carries the time it was written, and that is exactly
+ * the fact a cache needs: same advert, same URL, and a new advert is a URL
+ * no cache has seen. Both storage backends ignore the query string when
+ * looking the bytes up, and both cache on the whole URL including it.
+ */
+function imageUrl(env: Env, request: Request, key: string, updated?: string): string {
+  const base = usingR2(env)
     ? `${env.PUBLIC_IMAGE_BASE!.replace(/\/$/, '')}/${key}`
     : new URL(`/images/${key}`, request.url).toString();
+  const version = updated ? Date.parse(updated) : NaN;
+  return Number.isFinite(version) ? `${base}?v=${version}` : base;
 }
 
-/** Does this wallet hold the token at all? Storage is not free. */
+/**
+ * Does this wallet hold the token at all? Storage is not free.
+ *
+ * Every way of *not getting an answer* is treated as "do not know", and a
+ * wallet this cannot judge is let through. That is not laxity, it is the
+ * only reading that survives a public RPC: one 429 used to become
+ * "That wallet does not hold the token", told to a holder who does, with no
+ * way to tell the difference from the page. The check rests on the RPC being
+ * both reachable and truthful, so the moment it is neither the honest answer
+ * is to stand aside.
+ *
+ * What this costs if it is wrong is one signed upload of at most half a
+ * megabyte from a wallet that proved it owns its own key. What it saves is
+ * the wall staying writable through a rate limit. And an advert from a
+ * non-holder still never appears: the page hangs adverts off the manifest,
+ * so a wallet with no seat has nowhere to hang one.
+ */
 async function holdsToken(env: Env, owner: string): Promise<boolean> {
   // Unconfigured means "do not check" rather than "refuse everybody", so the
   // service is usable before a mint exists.
@@ -103,11 +141,15 @@ async function holdsToken(env: Env, owner: string): Promise<boolean> {
         params: [owner, { mint: env.TOKEN_MINT }, { encoding: 'jsonParsed' }],
       }),
     });
-    if (!res.ok) return false;
+    // Rate limited, out of credit, misconfigured, down: not an answer.
+    if (!res.ok) return true;
     const body = (await res.json()) as {
       result?: { value?: { account: { data: { parsed: { info: { tokenAmount: { uiAmount: number | null } } } } } }[] };
     };
-    const accounts = body.result?.value ?? [];
+    // A JSON-RPC error carries no `result` at all. Absent is unknown; an
+    // empty `value` is a real answer, and means no.
+    const accounts = body.result?.value;
+    if (!Array.isArray(accounts)) return true;
     return accounts.some((a) => (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0) > 0);
   } catch {
     // An RPC outage should not take the wall offline for everyone.
@@ -122,7 +164,7 @@ function corsHeaders(env: Env, origin: string | null): Record<string, string> {
   const ok = origin && (allowed.length === 0 || allowed.includes(origin));
   return {
     'access-control-allow-origin': ok && origin ? origin : allowed[0] ?? '*',
-    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-methods': 'GET,HEAD,POST,OPTIONS',
     'access-control-allow-headers': 'content-type',
     'access-control-max-age': '86400',
     vary: 'Origin',
@@ -152,7 +194,7 @@ export default {
           const stored = await env.BANNERS.get<StoredBanner>(name, 'json');
           if (!stored) return;
           out[name.slice('banner:'.length)] = {
-            image: imageUrl(env, request, stored.key),
+            image: imageUrl(env, request, stored.key, stored.updated),
             alt: stored.alt,
             ...(stored.href ? { href: stored.href } : {}),
           };
@@ -217,8 +259,11 @@ export default {
       }
 
       const key = `banners/${owner}.${type === 'image/png' ? 'png' : 'jpg'}`;
-      const image_url = await storeImage(env, request, key, bytes, type);
-      const stored: StoredBanner = { key, alt, href, updated: new Date().toISOString() };
+      // One timestamp, used for both the record and the URL's version, so
+      // what the publisher is handed back is the same URL the wall will serve.
+      const updated = new Date().toISOString();
+      const image_url = await storeImage(env, request, key, bytes, type, updated);
+      const stored: StoredBanner = { key, alt, href, updated };
       await env.BANNERS.put(`banner:${owner}`, JSON.stringify(stored));
       await env.BANNERS.put(cooldownKey, '1', { expirationTtl: COOLDOWN_SECONDS });
 
@@ -228,20 +273,36 @@ export default {
     /* Serving the artwork. Only reachable without R2 — with it, images are
        read straight from the bucket and never touch the Worker.
 
-       Deliberately *not* CORS-wrapped: this is an <img> source, not an API,
-       and the content type is the one sniffed from the bytes at upload
-       rather than anything a request can influence. nosniff on top, so a
-       browser cannot be talked into interpreting it as anything else. */
-    if (request.method === 'GET' && url.pathname.startsWith('/images/')) {
+       This used to send no CORS header at all, on the reasoning that an
+       <img> source is not an API and does not need one. That is true of the
+       seat map, and false of the cabin: the adverts on the seat-back screens
+       are WebGL textures, and three.js asks for every texture with
+       crossOrigin="anonymous". A cross-origin image answered without
+       access-control-allow-origin is discarded by the browser, so every
+       screen in the aeroplane fell back to the airline's mark and nothing
+       said why — TextureLoader's failures are silent.
+
+       Wide open rather than the allowlist above, and deliberately so. These
+       are public bytes served with no cookies and no credentials, and `*` is
+       the header that says exactly that; echoing a single allowed origin
+       would hand a cached response to the wrong one. The content type is
+       still the one sniffed from the bytes at upload rather than anything a
+       request can influence, with nosniff on top.
+
+       HEAD is answered too, because link unfurlers and CDN health checks use
+       it, and a 404 to HEAD on a URL that GETs fine reads as a broken image. */
+    if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname.startsWith('/images/')) {
       const key = decodeURIComponent(url.pathname.slice('/images/'.length));
       const hit = await env.BANNERS.getWithMetadata<{ type: string }>(`image:${key}`, 'arrayBuffer');
       if (!hit.value) return json({ error: 'No such image.' }, 404, cors);
       const type = hit.metadata?.type === 'image/png' ? 'image/png' : 'image/jpeg';
-      return new Response(hit.value, {
+      return new Response(request.method === 'HEAD' ? null : hit.value, {
         headers: {
           'content-type': type,
+          'content-length': String(hit.value.byteLength),
           'cache-control': 'public, max-age=300',
           'x-content-type-options': 'nosniff',
+          'access-control-allow-origin': '*',
         },
       });
     }

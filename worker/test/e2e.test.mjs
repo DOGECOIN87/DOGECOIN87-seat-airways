@@ -122,7 +122,7 @@ await check('the artwork is addressable, and served correctly in KV mode', async
 
   const servedByWorker = url.startsWith(BASE);
   if (!servedByWorker) {
-    assert(/^https:\/\/.+\/banners\/.+\.(jpg|png)$/.test(url), `malformed R2 url: ${url}`);
+    assert(/^https:\/\/.+\/banners\/.+\.(jpg|png)\?v=\d+$/.test(url), `malformed R2 url: ${url}`);
     return;
   }
 
@@ -133,6 +133,55 @@ await check('the artwork is addressable, and served correctly in KV mode', async
   const back = new Uint8Array(await res.arrayBuffer());
   assert(back.length === JPEG.length, `got ${back.length} bytes, sent ${JPEG.length}`);
   assert(back[0] === 0xff && back[1] === 0xd8 && back[2] === 0xff, 'not JPEG bytes');
+});
+
+await check('the artwork is readable as a WebGL texture', async () => {
+  /* The regression this pins: the adverts on the cabin's seat-back screens
+     are textures, not <img> tags, and three.js requests every texture with
+     crossOrigin="anonymous". Answer one without access-control-allow-origin
+     and the browser throws the bytes away — so the screens showed the
+     airline's mark, the seat map showed the advert, and nothing in either
+     console said why, because TextureLoader reports nothing when it is not
+     given an error handler.
+
+     `*` rather than the echoed origin on purpose: this is public artwork
+     served without credentials, and it is read from a texture loader whose
+     request carries the *page's* origin, not the wall's. */
+  const wall = await (await fetch(`${BASE}/banners`, { headers: { origin: ORIGIN } })).json();
+  const url = wall[owner].image;
+  if (!url.startsWith(BASE)) return; // R2 mode: the bucket's CDN sets this.
+
+  const res = await fetch(url, { headers: { origin: 'https://seat-airlines.space' } });
+  assert(res.headers.get('access-control-allow-origin') === '*', 'a texture loader could not read this image');
+
+  const head = await fetch(url, { method: 'HEAD' });
+  assert(head.status === 200, `HEAD says ${head.status} where GET says 200`);
+  assert(head.headers.get('content-type') === 'image/jpeg', `HEAD type ${head.headers.get('content-type')}`);
+});
+
+await check('the image URL is versioned, so a replacement is not read from cache', async () => {
+  /* Adverts are keyed by wallet and overwritten in place, so without this the
+     second advert a holder publishes lives at the URL their browser cached
+     five minutes ago for the first one — the publish succeeds, the seat keeps
+     showing the old picture, and it looks like nothing saved.
+
+     Replacing one for real is not exercised here: the cooldown is a minute
+     and an e2e suite should not sit through it. What is checked instead is
+     the mechanism the fix rests on — the version is the moment the record
+     was written, so a new advert necessarily gets a URL no cache has seen,
+     and carrying a query string does not stop the bytes being found. */
+  const before = Date.now();
+  const wall = await (await fetch(`${BASE}/banners`, { headers: { origin: ORIGIN } })).json();
+  const url = wall[owner].image;
+
+  const version = Number(new URL(url).searchParams.get('v'));
+  assert(Number.isFinite(version) && version > 0, `no version on the image url: ${url}`);
+  assert(version <= before && version > before - 10 * 60_000, `version is not when it was stored: ${version}`);
+
+  if (!url.startsWith(BASE)) return; // R2 mode: the bucket serves these.
+  const res = await fetch(url);
+  assert(res.status === 200, `a versioned url did not serve the bytes: ${res.status}`);
+  assert((await res.arrayBuffer()).byteLength === JPEG.length, 'versioned url served the wrong bytes');
 });
 
 await check('a second publish is rate limited', async () => {

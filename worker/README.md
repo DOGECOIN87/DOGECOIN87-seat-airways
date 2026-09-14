@@ -2,12 +2,13 @@
 
 Holders put images on their own seats. This is what stores them.
 
-Two routes:
+Two routes, and one that only exists in KV mode:
 
 | | |
 | --- | --- |
 | `GET /banners` | the published wall, keyed by wallet |
 | `POST /banner` | put an advert up, if you can prove the wallet is yours |
+| `GET /images/…` | the artwork, when it is kept in KV rather than R2 |
 
 ## What it deliberately does not know
 
@@ -60,7 +61,34 @@ that wallet, forever — the holder signs "it's me" and whoever caught the
 signature picks the picture. With it, a signature authorises exactly one
 image.
 
+## Serving the artwork
+
+An advert is keyed by the wallet that published it, so replacing one
+overwrites it in place and its URL never changes. Left there, that makes a
+successful publish look like a failure: the bytes are served with
+`max-age=300`, so a holder putting up their second advert is handed a URL
+their browser cached five minutes ago and the seat keeps showing the old
+picture. The URL therefore carries `?v=<the moment it was stored>` — same
+advert, same URL; new advert, a URL no cache has seen.
+
+The `/images/` route answers with `access-control-allow-origin: *`, which the
+API routes deliberately do not. The adverts on the cabin's seat-back screens
+are WebGL textures rather than `<img>` tags, and three.js asks for every
+texture with `crossOrigin="anonymous"`; without the header the browser
+discards the bytes and the screen silently falls back to the airline's mark.
+These are public bytes served with no credentials, sniffed from the magic
+bytes at upload and sent with `nosniff`, so `*` is simply what is true. The
+allowlist still guards everything that writes.
+
 ## Deploying
+
+CI does this on every push that touches `worker/`, but only once the
+repository has a `CLOUDFLARE_API_TOKEN` secret — without one the workflow
+runs the tests, writes what is missing to the job summary and stops, so a
+green tick does **not** by itself mean the Worker was deployed. Check the
+Deploy step in the run, not the run's conclusion.
+
+By hand:
 
 ```bash
 cd worker
@@ -132,12 +160,13 @@ npm run dev:local   # Miniflare, with simulated KV
 npm run test:e2e    # in another shell
 ```
 
-Twelve cases over the routes themselves, on real HTTP against real bindings:
-a signed advert is accepted, stored, and comes back out of `GET /banners`;
-the artwork is fetched back from the URL it was given and checked byte for
-byte; a second publish inside the cooldown gets 429; forged, stale, unsigned
-and SVG-disguised uploads are refused with the right status each time; CORS
-echoes the allowed origin and the preflight is answered.
+Fourteen cases over the routes themselves, on real HTTP against real
+bindings: a signed advert is accepted, stored, and comes back out of
+`GET /banners`; the artwork is fetched back from the URL it was given and
+checked byte for byte; that URL is readable as a WebGL texture and carries a
+version; a second publish inside the cooldown gets 429; forged, stale,
+unsigned and SVG-disguised uploads are refused with the right status each
+time; CORS echoes the allowed origin and the preflight is answered.
 
 Run it again in the other storage mode:
 
@@ -150,7 +179,7 @@ The Worker picks its backend from whether an R2 binding and
 `PUBLIC_IMAGE_BASE` are *both* present, which means the branch that runs in
 production is decided by config rather than by code — and a test suite that
 only ever sees one config only ever tests half of `storeImage`. So there are
-two local configs and the same twelve cases run against each. The image case
+two local configs and the same fourteen cases run against each. The image case
 is the one that differs: in KV mode the Worker serves the bytes, so it is
 fetched and every header is checked; in R2 mode the URL points at a bucket
 domain that is not this Worker, so the check is that the URL is well formed
