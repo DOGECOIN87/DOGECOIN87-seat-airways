@@ -108,3 +108,29 @@ things are Cloudflare-shaped, and each has an obvious counterpart elsewhere:
 
 The verification logic — base58, the challenge text, the magic-byte sniff —
 is plain TypeScript with no runtime dependencies and moves unchanged.
+
+## Testing it before it goes anywhere
+
+Two layers, neither of which needs a Cloudflare account.
+
+```bash
+npm test          # the checks, in isolation, with a real ed25519 keypair
+```
+
+Nine cases over `verify.ts`: a genuine signature accepted, and a wrong
+wallet, a captured signature reused for other artwork, a moved timestamp,
+malformed base58 and SVG wearing a JPEG label each refused.
+
+```bash
+npm run dev:local   # Miniflare, with simulated KV and R2
+npm run test:e2e    # in another shell
+```
+
+Eleven cases over the routes themselves, on real HTTP against real bindings:
+a signed advert is accepted, stored, and comes back out of `GET /banners`;
+a second publish inside the cooldown gets 429; forged, stale, unsigned and
+SVG-disguised uploads are refused with the right status each time; CORS
+echoes the allowed origin and the preflight is answered.
+
+`wrangler.local.toml` exists only for that — its KV id is a placeholder that
+never reaches Cloudflare.

@@ -1,0 +1,15 @@
+name = "seat-airlines-banners"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+[[kv_namespaces]]
+binding = "BANNERS"
+id = "local-test"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "seat-airlines-banners"
+
+[vars]
+PUBLIC_IMAGE_BASE = "http://localhost:8787/images"
+ALLOWED_ORIGINS = "http://localhost:3000"

@@ -6,7 +6,9 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "test": "esbuild src/verify.ts --outfile=dist-test/verify.js --format=esm --platform=node && node test/verify.test.mjs"
+    "test": "esbuild src/verify.ts --outfile=dist-test/verify.js --format=esm --platform=node && node test/verify.test.mjs",
+    "dev:local": "wrangler dev --local --config wrangler.local.toml --port 8787",
+    "test:e2e": "node test/e2e.test.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260911.1",
