@@ -1554,3 +1554,11 @@ html {
 /* The wordmark gives way before the address does: on a phone the capsule
    alone still says where the button goes. */
 @media (max-width: 520px) { .sa-pump__text { display: none; } }
+
+/* Seat advert editor: tactile controls, drag surface, and compact preview. */
+.sa-editor-crop { cursor: grab; touch-action: none; background: var(--ui-sink); }
+.sa-editor-crop:active { cursor: grabbing; }
+.sa-adpreview { position: relative; width: 52px; height: 52px; overflow: hidden; border-radius: var(--r-sm); background: var(--face); box-shadow: var(--e-sm); }
+.sa-adpreview::before { content: ''; position: absolute; left: 12%; right: 12%; top: 8%; height: 6%; border-radius: 999px; background: var(--ui-sink); z-index: 1; }
+.sa-adpreview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (prefers-reduced-motion: reduce) { .sa-editor-crop { scroll-behavior: auto; } }

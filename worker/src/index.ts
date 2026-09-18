@@ -67,7 +67,7 @@ async function storeImage(
 ): Promise<string> {
   if (usingR2(env)) {
     await env.IMAGES!.put(key, bytes as BufferSource, {
-      httpMetadata: { contentType: type, cacheControl: 'public, max-age=300' },
+      httpMetadata: { contentType: type, cacheControl: 'public, max-age=31536000, immutable' },
     });
   } else {
     // KV holds the bytes, and the content type rides along as metadata so the
@@ -101,7 +101,8 @@ function imageUrl(env: Env, request: Request, key: string, updated?: string): st
   const base = usingR2(env)
     ? `${env.PUBLIC_IMAGE_BASE!.replace(/\/$/, '')}/${key}`
     : new URL(`/images/${key}`, request.url).toString();
-  const version = updated ? Date.parse(updated) : NaN;
+  const hashKeyed = /^banners\/[0-9a-f]{32}\./.test(key);
+  const version = !hashKeyed && updated ? Date.parse(updated) : NaN;
   return Number.isFinite(version) ? `${base}?v=${version}` : base;
 }
 
@@ -231,6 +232,11 @@ async function addToWall(env: Env, owner: string, stored: StoredBanner): Promise
   await env.BANNERS.put(WALL_KEY, JSON.stringify(wall));
 }
 
+function wallEtag(wall: Wall): string {
+  const newest = Object.values(wall).reduce((max, item) => Math.max(max, Date.parse(item.updated) || 0), 0);
+  return `"${Object.keys(wall).length}-${newest}"`;
+}
+
 /* ── Routes ─────────────────────────────────────────────────────────────── */
 
 export default {
@@ -254,8 +260,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
 
     if (request.method === 'GET' && url.pathname === '/banners') {
+      const wall = await readWall(env);
+      const etag = wallEtag(wall);
+      if (request.headers.get('if-none-match') === etag) {
+        return new Response(null, { status: 304, headers: { ...cors, etag, 'cache-control': 'public, max-age=30, stale-while-revalidate=120' } });
+      }
       const out: Record<string, { image: string; alt: string; href?: string }> = {};
-      for (const [owner, stored] of Object.entries(await readWall(env))) {
+      for (const [owner, stored] of Object.entries(wall)) {
         out[owner] = {
           image: imageUrl(env, request, stored.key, stored.updated),
           alt: stored.alt,
@@ -265,7 +276,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
       return json(out, 200, {
         ...cors,
         // The wall is read constantly and written rarely.
-        'cache-control': 'public, max-age=30',
+        etag,
+        'cache-control': 'public, max-age=30, stale-while-revalidate=120',
       });
     }
 
@@ -303,7 +315,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
         return json({ error: 'That image is too large.' }, 413, cors);
       }
       const type = imageType(bytes);
-      if (!type) return json({ error: 'Adverts must be JPEG or PNG.' }, 415, cors);
+      if (!type) return json({ error: 'Adverts must be JPEG, PNG, or WebP.' }, 415, cors);
 
       // The signature authorises *this* image, not merely this wallet.
       const hash = await sha256Hex(bytes);
@@ -320,7 +332,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
         return json({ error: 'That wallet does not hold the token.' }, 403, cors);
       }
 
-      const key = `banners/${owner}.${type === 'image/png' ? 'png' : 'jpg'}`;
+      const key = `banners/${hash.slice(0, 32)}.${type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg'}`;
       // One timestamp, used for both the record and the URL's version, so
       // what the publisher is handed back is the same URL the wall will serve.
       const updated = new Date().toISOString();
@@ -329,6 +341,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       await env.BANNERS.put(`banner:${owner}`, JSON.stringify(stored));
       await addToWall(env, owner, stored);
       await env.BANNERS.put(cooldownKey, '1', { expirationTtl: COOLDOWN_SECONDS });
+      try { await caches.default.delete(new Request(new URL('/banners', request.url).toString())); } catch { /* best effort */ }
 
       return json({ image: image_url }, 200, cors);
     }
@@ -358,12 +371,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
       const key = decodeURIComponent(url.pathname.slice('/images/'.length));
       const hit = await env.BANNERS.getWithMetadata<{ type: string }>(`image:${key}`, 'arrayBuffer');
       if (!hit.value) return json({ error: 'No such image.' }, 404, cors);
-      const type = hit.metadata?.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      const type = hit.metadata?.type === 'image/png' ? 'image/png' : hit.metadata?.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
       return new Response(request.method === 'HEAD' ? null : hit.value, {
         headers: {
           'content-type': type,
           'content-length': String(hit.value.byteLength),
-          'cache-control': 'public, max-age=300',
+          'cache-control': /^banners\/[0-9a-f]{32}\./.test(key) ? 'public, max-age=31536000, immutable' : 'public, max-age=300',
           'x-content-type-options': 'nosniff',
           'access-control-allow-origin': '*',
         },
