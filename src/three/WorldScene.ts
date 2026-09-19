@@ -317,6 +317,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   farmland.day.repeat.set(40, 40);
   /* The lights repeat with the land, because they are the same land. */
   farmland.night.repeat.set(40, 40);
+  farmland.water.repeat.set(40, 40);
   /* Bigger tiles than the farmland's. A crater is a landform, not a field:
      at five-kilometre tiles the largest one in the texture was a few hundred
      metres across and the plain read as flat grey from any altitude worth
@@ -338,9 +339,26 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     roughness: 1,
     metalness: 0,
   });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(GROUND, GROUND), groundMat);
+  const groundGeometry = new THREE.PlaneGeometry(GROUND, GROUND);
+  const ground = new THREE.Mesh(groundGeometry, groundMat);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
+  const waterMat = new THREE.MeshPhysicalMaterial({
+    map: farmland.water,
+    color: 0x9ed9e5,
+    roughness: 0.18,
+    metalness: 0.08,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.12,
+    transparent: true,
+    depthWrite: false,
+    opacity: 0,
+  });
+  const water = new THREE.Mesh(groundGeometry, waterMat);
+  water.position.y = 0.025;
+  water.rotation.x = -Math.PI / 2;
+  water.visible = false;
+  scene.add(water);
 
   /* ── The limb ─────────────────────────────────────────────────────────
      A flat plate is a fair model of the ground until you can see far enough
@@ -568,6 +586,11 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     /* Ground: farmland below, regolith at the moon, and haze that thickens
        with distance so the horizon dissolves rather than ending. Above the
        atmosphere the plate gives way to the limb, which is a sphere. */
+    const waterFade = band.band === 'atmosphere'
+      ? 1 - THREE.MathUtils.smoothstep(height, 1450, 2150)
+      : 0;
+    waterMat.opacity = waterFade;
+    water.visible = waterFade > 0.01;
     if (onMoon && groundMat.map !== moon) {
       groundMat.map = moon;
       // Nobody is home up here.
@@ -700,6 +723,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     if (map) {
       const tile = GROUND / map.repeat.x;
       map.offset.set(shift.x / tile, shift.z / tile);
+      farmland.water.offset.copy(map.offset);
       /* The emissive map has to travel with the diffuse one to the pixel.
          Drifting them apart slides every town's lights off the town. */
       groundMat.emissiveMap?.offset.copy(map.offset);

@@ -32,6 +32,8 @@ export interface GroundTextures {
   day: THREE.CanvasTexture;
   /** What of it is still visible once the sun has gone: an emissive map. */
   night: THREE.CanvasTexture;
+  /** Transparent low-altitude water bodies that sit over the land tile. */
+  water: THREE.CanvasTexture;
 }
 
 export function farmlandTextures(size = 2048): GroundTextures {
@@ -48,6 +50,10 @@ export function farmlandTextures(size = 2048): GroundTextures {
   const n = nc.getContext('2d') as CanvasRenderingContext2D;
   n.fillStyle = '#000000';
   n.fillRect(0, 0, size, size);
+
+  const wc = document.createElement('canvas');
+  wc.width = wc.height = size;
+  const w = wc.getContext('2d') as CanvasRenderingContext2D;
 
   g.fillStyle = '#4a5c3a';
   g.fillRect(0, 0, size, size);
@@ -128,6 +134,43 @@ export function farmlandTextures(size = 2048): GroundTextures {
     g.strokeStyle = 'rgba(28,40,22,0.42)';
     g.lineWidth = 2;
     g.strokeRect(f.x, f.y, f.w, f.h);
+  }
+
+  /* Water is a separate transparent layer so it can disappear with altitude
+     instead of staining the farmland when the aircraft climbs above the
+     low-level detail range. Seeded basins keep every flight consistent while
+     still breaking the regular field pattern with natural silhouettes. */
+  const water = ['#2f7792', '#286b87', '#3b8ca0', '#245e7b'];
+  w.lineJoin = 'round';
+  w.lineCap = 'round';
+  for (let i = 0; i < 11; i++) {
+    const x = size * (0.04 + rand() * 0.92);
+    const y = size * (0.06 + rand() * 0.88);
+    const rx = size * (0.012 + rand() * 0.045);
+    const ry = rx * (0.42 + rand() * 0.92);
+    const points = 13;
+    w.beginPath();
+    for (let p = 0; p < points; p++) {
+      const a = (p / points) * Math.PI * 2;
+      const wobble = 0.78 + rand() * 0.42;
+      const px = x + Math.cos(a) * rx * wobble;
+      const py = y + Math.sin(a) * ry * wobble;
+      if (p === 0) w.moveTo(px, py); else w.lineTo(px, py);
+    }
+    w.closePath();
+    w.fillStyle = water[i % water.length];
+    w.globalAlpha = 0.78;
+    w.fill();
+    w.globalAlpha = 1;
+    w.strokeStyle = 'rgba(171,224,228,0.62)';
+    w.lineWidth = Math.max(1.5, size / 900);
+    w.stroke();
+    w.strokeStyle = 'rgba(205,242,241,0.38)';
+    w.lineWidth = Math.max(1, size / 1500);
+    w.beginPath();
+    w.moveTo(x - rx * 0.45, y - ry * 0.12);
+    w.quadraticCurveTo(x, y - ry * 0.32, x + rx * 0.46, y - ry * 0.08);
+    w.stroke();
   }
 
   // Woodland, in the corners the plough cannot reach.
@@ -227,7 +270,12 @@ export function farmlandTextures(size = 2048): GroundTextures {
   nightTex.anisotropy = 16;
   nightTex.colorSpace = THREE.SRGBColorSpace;
 
-  return { day: tex, night: nightTex };
+  const waterTex = new THREE.CanvasTexture(wc);
+  waterTex.wrapS = waterTex.wrapT = THREE.RepeatWrapping;
+  waterTex.anisotropy = 16;
+  waterTex.colorSpace = THREE.SRGBColorSpace;
+
+  return { day: tex, night: nightTex, water: waterTex };
 }
 
 /**
