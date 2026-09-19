@@ -31,6 +31,7 @@ import {
   formatFeet,
 } from './lib/flightModel';
 import { useFlightState } from './lib/useFlightState';
+import { useAircraftAudio } from './lib/useAircraftAudio';
 import { useSky } from './lib/useSky';
 import { useWallet } from './lib/useWallet';
 import { holdingsSource, type Holding } from './lib/holdings';
@@ -135,6 +136,7 @@ export default function App() {
   const { tick, lamps } = useFlightState(feed);
   const sky = useSky();
   const band = useMemo(() => bandFor(tick.marketCap), [tick.marketCap]);
+  const aircraftAudio = useAircraftAudio(lamps, tick.change5m, band.band);
 
   /* The page opens outside, on the whole aeroplane. It is the one frame that
      explains the premise without a caption — one plane, everyone in it — and
@@ -433,6 +435,15 @@ export default function App() {
                   className="sa-ghost"
                 >
                   Step inside the cabin
+                </button>
+                <button
+                  type="button"
+                  onClick={aircraftAudio.toggle}
+                  aria-pressed={aircraftAudio.enabled}
+                  className={chip(aircraftAudio.enabled)}
+                  title="Enable engine, airflow, cabin, and warning sounds"
+                >
+                  {aircraftAudio.enabled ? 'Sound on' : 'Sound off'}
                 </button>
               </div>
             </div>
