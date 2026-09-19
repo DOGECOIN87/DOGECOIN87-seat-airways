@@ -735,6 +735,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 
     /* Fly the aircraft. Pitch, bank and heading come from the flight model;
        height is the market cap. The camera then simply sits in it. */
+    const lowSpeed = 1 - THREE.MathUtils.smoothstep(a.speed, 215, 245);
+    const descent = THREE.MathUtils.smoothstep(-a.pitch, 6, 20);
+    const climb = THREE.MathUtils.smoothstep(a.pitch, 8, 22) * 0.55;
+    airframe.setFlapDeployment(Math.max(lowSpeed, descent, climb));
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
       THREE.MathUtils.degToRad(a.pitch),

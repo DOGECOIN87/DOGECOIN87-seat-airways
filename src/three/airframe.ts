@@ -267,6 +267,33 @@ function controlSeams(
   return g;
 }
 
+/** A separate trailing-edge surface that can rotate around its hinge. */
+function flapGeometry(
+  p: Panel,
+  t0: number,
+  t1: number,
+  hinge: number,
+  trail: number,
+): { geometry: THREE.BufferGeometry; pivot: THREE.Vector3 } {
+  const pivot = upperSurface(p, t0, hinge, 0.025);
+  const points = [
+    upperSurface(p, t0, hinge, 0.025),
+    upperSurface(p, t1, hinge, 0.025),
+    upperSurface(p, t1, trail, 0.025),
+    upperSurface(p, t0, trail, 0.025),
+  ];
+  const thickness = 0.065;
+  const pos: number[] = [];
+  for (const point of points) pos.push(point.x - pivot.x, point.y - pivot.y, point.z - pivot.z);
+  for (const point of points) pos.push(point.x - pivot.x, point.y - pivot.y - thickness, point.z - pivot.z);
+  const idx = [0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geometry.setIndex(idx);
+  geometry.computeVertexNormals();
+  return { geometry, pivot };
+}
+
 /**
  * The wing-root fairing.
  *
@@ -631,6 +658,8 @@ export interface AirframeHandles {
   group: THREE.Group;
   /** Light the windows of the rows somebody has actually booked. */
   setRowsLit(isLit: (row: number) => boolean): void;
+  /** Smoothly deploy the trailing-edge flaps from 0 (retracted) to 1. */
+  setFlapDeployment(target: number): void;
   dispose(): void;
 }
 
@@ -638,6 +667,8 @@ export function createAirframe(): AirframeHandles {
   const group = new THREE.Group();
   const dispose: (() => void)[] = [];
   const track = <T extends { dispose(): void }>(x: T) => (dispose.push(() => x.dispose()), x);
+  const flapGroups: THREE.Group[] = [];
+  let flapDeployment = 0;
 
   // Airline white is barely off-white and only gently glossy. A restrained
   // clearcoat gives the barrel a moving specular highlight without turning it
@@ -650,6 +681,9 @@ export function createAirframe(): AirframeHandles {
   }));
   const wingMat = track(new THREE.MeshPhysicalMaterial({
     color: 0xeef2f7, roughness: 0.3, metalness: 0.1, clearcoat: 0.1, clearcoatRoughness: 0.45,
+  }));
+  const flapMat = track(new THREE.MeshPhysicalMaterial({
+    color: 0xd8e0eb, roughness: 0.26, metalness: 0.16, clearcoat: 0.16, clearcoatRoughness: 0.34,
   }));
   const intake = track(new THREE.MeshStandardMaterial({ color: 0x080d16, roughness: 0.82, metalness: 0.15, side: THREE.DoubleSide }));
   const fanMat = track(new THREE.MeshStandardMaterial({ color: 0x5b6676, roughness: 0.42, metalness: 0.72, side: THREE.DoubleSide }));
@@ -696,6 +730,25 @@ export function createAirframe(): AirframeHandles {
       track(controlSeams(wingPanel, 0.74, [[0.1, 0.42], [0.46, 0.66], [0.72, 0.95]])),
       seamMat,
     ));
+
+    /* Two independently hinged trailing-edge panels. They are real meshes,
+       rather than another seam, so deployment changes the silhouette and
+       catches a separate highlight from the wing. */
+    for (const [t0, t1] of [[0.1, 0.42], [0.46, 0.66]] as const) {
+      const flap = new THREE.Group();
+      const built = flapGeometry(wingPanel, t0, t1, 0.74, 0.98);
+      flap.position.copy(built.pivot);
+      const surface = new THREE.Mesh(track(built.geometry), flapMat);
+      surface.castShadow = surface.receiveShadow = true;
+      flap.add(surface);
+      const actuator = new THREE.Mesh(track(new THREE.CylinderGeometry(0.045, 0.045, 0.72, 8)), pylonMat);
+      actuator.rotation.x = Math.PI / 2;
+      actuator.position.set(0, -0.16, 0.34);
+      actuator.castShadow = true;
+      flap.add(actuator);
+      flapGroups.push(flap);
+      group.add(flap);
+    }
 
     // Winglet, raked up off the tip.
     const winglet = new THREE.Mesh(
@@ -903,11 +956,16 @@ export function createAirframe(): AirframeHandles {
     for (const s of seats) windows.setColorAt(s.i, isLit(s.row) ? lit : dark);
     if (windows.instanceColor) windows.instanceColor.needsUpdate = true;
   };
+  const setFlapDeployment = (target: number) => {
+    flapDeployment = THREE.MathUtils.lerp(flapDeployment, THREE.MathUtils.clamp(target, 0, 1), 0.14);
+    for (const flap of flapGroups) flap.rotation.x = -flapDeployment * 0.42;
+  };
   setRowsLit(() => false);
 
   return {
     group,
     setRowsLit,
+    setFlapDeployment,
     dispose: () => {
       dispose.forEach((d) => d());
       windows.dispose();
