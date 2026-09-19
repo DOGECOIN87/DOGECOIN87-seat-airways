@@ -1279,17 +1279,13 @@ html {
    single accent in it.
    ============================================================ */
 .sa-lamps {
-  display: flex;
-  overflow-x: auto;
-  scrollbar-width: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-.sa-lamps::-webkit-scrollbar { display: none; }
 .sa-lamp {
   position: relative;
   display: flex;
-  flex: 1 1 0;
-  flex-shrink: 0;
-  min-width: 10.5rem;
+  min-width: 0;
   align-items: center;
   gap: 0.8rem;
   padding: 0.9rem 1.1rem;
@@ -1344,8 +1340,16 @@ html {
   background: radial-gradient(circle at 34% 30%, #fff, #CFEEFF 60%, #9FDCFF 100%);
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
 }
+.sa-lamp--caution .sa-lamp__state { color: #fff; }
 .sa-lamp--caution + .sa-lamp::after,
 .sa-lamp--caution::after { background: rgba(255, 255, 255, 0.3); }
+
+@media (max-width: 720px) {
+  .sa-lamps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sa-lamp { padding: 0.75rem 0.8rem; gap: 0.55rem; }
+  .sa-lamp__label { font-size: 10px; letter-spacing: 0.12em; }
+  .sa-lamp__detail { font-size: 9px; letter-spacing: 0.09em; }
+}
 
 /* ============================================================
    Cards
@@ -1562,3 +1566,16 @@ html {
 .sa-adpreview::before { content: ''; position: absolute; left: 12%; right: 12%; top: 8%; height: 6%; border-radius: 999px; background: var(--ui-sink); z-index: 1; }
 .sa-adpreview img { width: 100%; height: 100%; object-fit: cover; display: block; }
 @media (prefers-reduced-motion: reduce) { .sa-editor-crop { scroll-behavior: auto; } }
+
+/* Annunciator readability override: keep each status legible at desktop and phone widths. */
+.sa-lamp__label,
+.sa-lamp__detail { white-space: normal; overflow-wrap: anywhere; }
+.sa-lamp__detail { margin-top: 0.22rem; }
+.sa-lamp__copy { min-width: 0; }
+.sa-lamp__state { margin-right: 0.45rem; font-weight: 800; letter-spacing: 0.16em; }
+@media (max-width: 720px) {
+  .sa-lamps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sa-lamp { padding: 0.75rem 0.8rem; gap: 0.55rem; }
+  .sa-lamp__label { font-size: 10px; letter-spacing: 0.12em; }
+  .sa-lamp__detail { font-size: 9px; letter-spacing: 0.09em; }
+}

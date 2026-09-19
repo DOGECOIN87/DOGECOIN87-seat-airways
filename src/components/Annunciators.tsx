@@ -24,9 +24,9 @@ interface LampProps {
 const Lamp = ({ label, on, caution, detail }: LampProps) => (
   <li className={`sa-lamp ${on ? 'sa-lamp--on' : ''} ${on && caution ? 'sa-lamp--caution' : ''}`}>
     <span aria-hidden className={`sa-lamp__bulb ${on && caution ? 'sa-pulse-glow' : ''}`} />
-    <span className="min-w-0">
-      <span className="sa-lamp__label">{label}</span>
-      <span className="sa-lamp__detail">{on ? detail : 'Off'}</span>
+      <span className="sa-lamp__copy">
+        <span className="sa-lamp__label">{label}</span>
+        <span className="sa-lamp__detail"><span className="sa-lamp__state">{on ? 'ON' : 'OFF'}</span>{on ? detail : 'System normal'}</span>
     </span>
   </li>
 );
