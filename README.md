@@ -304,7 +304,11 @@ npm run build      # typecheck, then bundle to dist/
 npm run preview
 ```
 
-No API keys, no backend, no database. The production bundle is a single page.
+The production bundle is a static single page. Optional holder publishing is
+provided by the separately deployed Cloudflare Worker in `worker/`, backed by
+KV/R2 rather than an in-process server, so it is not tied to a running browser
+or this development machine. Its liveness endpoint is `/health`; after every
+Worker deployment, verify it with `curl -fsS <worker-url>/health`.
 
 ## How it is put together
 

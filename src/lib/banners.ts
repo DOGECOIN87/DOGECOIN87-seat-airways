@@ -59,6 +59,9 @@ export type BannerSet = Readonly<Record<string, Banner>>;
 const KEY = 'seat-airlines.banners.v1';
 const REMOTE = import.meta.env.VITE_BANNERS_URL as string | undefined;
 const API = (import.meta.env.VITE_BANNERS_API as string | undefined)?.replace(/\/$/, '');
+let cachedPublished: Record<string, Banner> = {};
+let cachedOwnerBanners: Record<string, Banner> = {};
+let ownerEtag: string | undefined;
 
 /** True when holders can publish for themselves rather than only locally. */
 export const canPublish = Boolean(API);
@@ -190,10 +193,10 @@ export interface BannerStore {
 export async function fetchPublished(): Promise<Record<string, Banner>> {
   if (!REMOTE) return {};
   try {
-    const res = await fetch(REMOTE);
-    if (!res.ok) return {};
+    const res = await fetch(REMOTE, { cache: 'no-store' });
+    if (!res.ok) return cachedPublished;
     const body: unknown = await res.json();
-    if (!body || typeof body !== 'object') return {};
+    if (!body || typeof body !== 'object') return cachedPublished;
     const out: Record<string, Banner> = {};
     for (const [seat, v] of Object.entries(body as Record<string, unknown>)) {
       const b = v as Partial<Banner>;
@@ -205,9 +208,10 @@ export async function fetchPublished(): Promise<Record<string, Banner>> {
         published: true,
       };
     }
+    cachedPublished = out;
     return out;
   } catch {
-    return {};
+    return cachedPublished;
   }
 }
 
@@ -395,10 +399,14 @@ export async function publishBanner(opts: {
 export async function fetchOwnerBanners(): Promise<Record<string, Banner>> {
   if (!API) return {};
   try {
-    const res = await fetch(`${API}/banners`);
-    if (!res.ok) return {};
+    const headers: HeadersInit = ownerEtag ? { 'if-none-match': ownerEtag } : {};
+    const res = await fetch(`${API}/banners`, { headers, cache: 'no-store' });
+    if (res.status === 304) return cachedOwnerBanners;
+    if (!res.ok) return cachedOwnerBanners;
+    const nextEtag = res.headers.get('etag');
+    if (nextEtag) ownerEtag = nextEtag;
     const body: unknown = await res.json();
-    if (!body || typeof body !== 'object') return {};
+    if (!body || typeof body !== 'object') return cachedOwnerBanners;
     const out: Record<string, Banner> = {};
     for (const [owner, v] of Object.entries(body as Record<string, unknown>)) {
       const b = v as Partial<Banner>;
@@ -412,9 +420,10 @@ export async function fetchOwnerBanners(): Promise<Record<string, Banner>> {
         owner,
       };
     }
+    cachedOwnerBanners = out;
     return out;
   } catch {
-    return {};
+    return cachedOwnerBanners;
   }
 }
 

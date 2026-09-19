@@ -8,6 +8,7 @@ Two routes, and one that only exists in KV mode:
 | --- | --- |
 | `GET /banners` | the published wall, keyed by wallet |
 | `POST /banner` | put an advert up, if you can prove the wallet is yours |
+| `GET /health` | a no-store liveness response for monitoring and smoke tests |
 | `GET /images/…` | the artwork, when it is kept in KV rather than R2 |
 
 ## What it deliberately does not know
@@ -121,6 +122,10 @@ Then, before going live:
 npx wrangler secret put RPC_URL
 
 npx wrangler deploy
+
+# After deployment, verify the Worker is serving requests. Replace the host
+# with the workers.dev/custom-domain URL printed by Wrangler.
+curl -fsS https://seat-airlines-banners.<your-subdomain>.workers.dev/health
 ```
 
 Finally point the frontend at it:

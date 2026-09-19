@@ -192,6 +192,7 @@ const json = (body: unknown, status: number, headers: Record<string, string>) =>
    one malformed entry costs one advert, as it did before. */
 const WALL_KEY = 'wall';
 type Wall = Record<string, StoredBanner>;
+const MAX_REQUEST_BYTES = 1_500_000;
 
 async function readWall(env: Env): Promise<Wall> {
   const raw = await env.BANNERS.get(WALL_KEY).catch(() => null);
@@ -258,6 +259,22 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const cors = corsHeaders(env, request.headers.get('origin'));
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+
+    // Keep oversized bodies out of parsing and signature verification. The
+    // client sends a compressed 384px image, so this is intentionally well
+    // above the 512 KiB stored-image limit while still bounding an abuse case.
+    const contentLength = Number(request.headers.get('content-length'));
+    if (request.method === 'POST' && Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
+      return json({ error: 'That request is too large.' }, 413, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/health') {
+      return json({
+        ok: true,
+        service: 'seat-airlines-banners',
+        storage: usingR2(env) ? 'r2' : 'kv',
+      }, 200, { ...cors, 'cache-control': 'no-store' });
+    }
 
     if (request.method === 'GET' && url.pathname === '/banners') {
       const wall = await readWall(env);
