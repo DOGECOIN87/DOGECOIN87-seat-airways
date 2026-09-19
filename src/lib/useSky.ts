@@ -16,6 +16,7 @@ import {
   type SkyState,
   type WeatherKind,
 } from './sky';
+import { visibilityAwareInterval } from './visibility';
 
 const CLOCK_INTERVAL = 60_000;
 const WEATHER_INTERVAL = 15 * 60_000;
@@ -28,25 +29,25 @@ export function useSky(): SkyState {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), CLOCK_INTERVAL);
-    return () => clearInterval(id);
+    return visibilityAwareInterval(() => setNow(new Date()), CLOCK_INTERVAL);
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
     let cancelled = false;
+    let controller: AbortController | undefined;
 
     const load = async () => {
+      controller?.abort();
+      controller = new AbortController();
       const reading = await fetchWeather(coords[0], coords[1], controller.signal);
       if (!cancelled && reading) setWeather({ ...reading, live: true });
     };
 
-    load();
-    const id = setInterval(load, WEATHER_INTERVAL);
+    const stop = visibilityAwareInterval(load, WEATHER_INTERVAL);
     return () => {
       cancelled = true;
-      controller.abort();
-      clearInterval(id);
+      controller?.abort();
+      stop();
     };
   }, [coords]);
 

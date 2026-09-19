@@ -74,13 +74,16 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: !lowPower,
-    powerPreference: 'high-performance',
+    powerPreference: lowPower ? 'low-power' : 'high-performance',
     // The scene spans a window a few centimetres from the camera through a
     // sky dome 160 km away. Log depth keeps window glass and the exterior
     // livery from z-fighting at that range.
     logarithmicDepthBuffer: true,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5));
+  const maxPixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5);
+  const minPixelRatio = lowPower ? 0.8 : 1;
+  let pixelRatio = maxPixelRatio;
+  renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.85;
@@ -476,6 +479,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const NEUTRAL_CLOUD = new THREE.Color(0xb9c2cf);
   let cloudDeckY = 2400;
   let cloudCount = 0;
+  let cloudUpdateClock = 0;
+  let frameClock = 0;
+  let frameSamples = 0;
+  let frameTimeTotal = 0;
 
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -842,23 +849,44 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     // pose is final; using camera.local quaternion here makes them turn edge
     // on during a bank or heading change.
     if (clouds.visible) {
-      aircraft.updateMatrixWorld(true);
-      camera.getWorldQuaternion(dummy.quaternion);
-      for (let i = 0; i < cloudCount; i++) {
-        const c = cloudSeeds[i];
-        dummy.position.set(
-          wrap(c.x - shift.x),
-          cloudDeckY + c.y,
-          wrap(c.z + shift.z),
-        );
-        dummy.scale.set(c.s, c.s * 0.55, 1);
-        dummy.updateMatrix();
-        clouds.setMatrixAt(i, dummy.matrix);
+      cloudUpdateClock += dt;
+      if (cloudUpdateClock >= 1 / 30) {
+        cloudUpdateClock = 0;
+        aircraft.updateMatrixWorld(true);
+        camera.getWorldQuaternion(dummy.quaternion);
+        for (let i = 0; i < cloudCount; i++) {
+          const c = cloudSeeds[i];
+          dummy.position.set(
+            wrap(c.x - shift.x),
+            cloudDeckY + c.y,
+            wrap(c.z + shift.z),
+          );
+          dummy.scale.set(c.s, c.s * 0.55, 1);
+          dummy.updateMatrix();
+          clouds.setMatrixAt(i, dummy.matrix);
+        }
+        clouds.instanceMatrix.needsUpdate = true;
       }
-      clouds.instanceMatrix.needsUpdate = true;
     }
 
+    const frameStart = performance.now();
     renderer.render(scene, camera);
+    frameTimeTotal += performance.now() - frameStart;
+    frameSamples += 1;
+    frameClock += dt;
+    if (frameClock >= 1 && frameSamples >= 20) {
+      const averageMs = frameTimeTotal / frameSamples;
+      if (averageMs > 24 && pixelRatio > minPixelRatio) {
+        pixelRatio = Math.max(minPixelRatio, pixelRatio - 0.1);
+        renderer.setPixelRatio(pixelRatio);
+      } else if (averageMs < 15 && pixelRatio < maxPixelRatio) {
+        pixelRatio = Math.min(maxPixelRatio, pixelRatio + 0.1);
+        renderer.setPixelRatio(pixelRatio);
+      }
+      frameClock = 0;
+      frameSamples = 0;
+      frameTimeTotal = 0;
+    }
   };
 
   const resize = (w: number, h: number) => {

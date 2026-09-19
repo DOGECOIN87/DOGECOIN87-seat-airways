@@ -44,6 +44,7 @@ import {
   type Banner,
   type BannerSet,
 } from './lib/banners';
+import { visibilityAwareInterval } from './lib/visibility';
 
 // The renderer and Three.js are the heaviest parts of the experience. Keeping
 // them behind the view boundary lets the controls and live flight data become
@@ -222,10 +223,8 @@ export default function App() {
     if (canPublish) void fetchOwnerBanners().then(setByOwner);
   }, []);
   useEffect(() => {
-    reloadWall();
     // A wall somebody else is also publishing to should not need a refresh.
-    const id = setInterval(reloadWall, 60_000);
-    return () => clearInterval(id);
+    return visibilityAwareInterval(reloadWall, 60_000);
   }, [reloadWall]);
 
   /* Wallet → seat, through the manifest. An advert follows its holder: get
@@ -323,12 +322,11 @@ export default function App() {
       if (!cancelled && next) setHolding(next);
       if (!cancelled) setLoadingHolding(false);
     };
-    read();
     // A bag can grow while the page is open; so can somebody else's.
-    const id = setInterval(read, 120_000);
+    const stop = visibilityAwareInterval(read, 120_000);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stop();
     };
   }, [wallet.address]);
 

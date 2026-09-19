@@ -10,5 +10,18 @@ export default defineConfig({
   // The sandbox exposes previews through a generated hostname that is not
   // known at build time. This is only used by the local preview server.
   preview: { host: '0.0.0.0', port: 3000, allowedHosts: true },
-  build: { target: 'es2022', sourcemap: false },
+  build: {
+    target: 'es2022',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('/three/')) return 'three-vendor';
+          if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-vendor';
+          return undefined;
+        },
+      },
+    },
+  },
 });

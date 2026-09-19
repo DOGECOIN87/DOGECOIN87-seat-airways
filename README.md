@@ -352,6 +352,13 @@ feed ticks a few times a second, the horizon moves at sixty, and after mount no
 React render is involved in the instruments at all. The stateful parts — lamps,
 the radio log — re-render at a human cadence instead.
 
+Network polling pauses in hidden tabs, aborts superseded requests, and resumes
+with a fresh read when the page becomes visible again. The WebGL scene throttles
+cloud-instance uploads to 30 Hz and adapts pixel ratio to measured render time;
+low-power devices also request the low-power GPU path. React and Three.js are
+split into stable vendor chunks so routine application changes do not invalidate
+both libraries in the browser cache.
+
 Everything is vector SVG, so it stays sharp at 4× zoom and adds nothing to the
 bundle. `prefers-reduced-motion` drops the rAF loop entirely: values snap rather than
 ease, nothing drifts on its own, and the scene is repainted on a slow,

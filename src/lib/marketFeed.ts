@@ -174,11 +174,15 @@ export function createLiveFeed(start: FlightTick): FlightFeed {
       if (!url) return () => {};
       let stopped = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let controller: AbortController | undefined;
 
       const poll = async () => {
+        if (stopped || document.visibilityState === 'hidden') return;
         let wait = POLL_MS;
+        controller?.abort();
+        controller = new AbortController();
         try {
-          const res = await fetch(url, { headers: { accept: 'application/json' } });
+          const res = await fetch(url, { headers: { accept: 'application/json' }, signal: controller.signal });
           if (res.ok) {
             latest = readTick(await res.json(), latest);
             if (!stopped) listener(latest);
@@ -188,13 +192,25 @@ export function createLiveFeed(start: FlightTick): FlightFeed {
                on schedule just keeps the window full. */
             wait = BACKOFF_MS;
           }
-        } catch {
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') return;
           /* Offline or blocked. Hold the last reading: the aircraft keeps
              flying on what it knew, which is what a real instrument does
              when its source goes quiet. */
         }
-        if (!stopped) timer = setTimeout(poll, wait);
+        if (!stopped && document.visibilityState === 'visible') timer = setTimeout(poll, wait);
       };
+
+      const onVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+          if (timer) clearTimeout(timer);
+          timer = undefined;
+          controller?.abort();
+        } else {
+          void poll();
+        }
+      };
+      document.addEventListener('visibilitychange', onVisibilityChange);
 
       // Report what we have immediately, then go and ask.
       listener(latest);
@@ -203,6 +219,8 @@ export function createLiveFeed(start: FlightTick): FlightFeed {
       return () => {
         stopped = true;
         if (timer) clearTimeout(timer);
+        controller?.abort();
+        document.removeEventListener('visibilitychange', onVisibilityChange);
       };
     },
   };

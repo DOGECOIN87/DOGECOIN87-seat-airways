@@ -127,6 +127,8 @@ async function holdsToken(env: Env, owner: string): Promise<boolean> {
   // Unconfigured means "do not check" rather than "refuse everybody", so the
   // service is usable before a mint exists.
   if (!env.RPC_URL || !env.TOKEN_MINT) return true;
+  const cachedUntil = ownerCache.get(owner) ?? 0;
+  if (cachedUntil > Date.now()) return true;
   try {
     const res = await fetch(env.RPC_URL, {
       method: 'POST',
@@ -147,7 +149,9 @@ async function holdsToken(env: Env, owner: string): Promise<boolean> {
     // empty `value` is a real answer, and means no.
     const accounts = body.result?.value;
     if (!Array.isArray(accounts)) return true;
-    return accounts.some((a) => (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0) > 0);
+    const valid = accounts.some((a) => (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0) > 0);
+    if (valid) ownerCache.set(owner, Date.now() + OWNER_CACHE_MS);
+    return valid;
   } catch {
     // An RPC outage should not take the wall offline for everyone.
     return true;
@@ -185,52 +189,50 @@ const json = (body: unknown, status: number, headers: Record<string, string>) =>
    1101 page, and every visitor saw house adverts. A page view is now one
    get(), against a limit of 100,000.
 
-   list() moves to the upload path, which is rare and rate limited, and only
-   to heal the index: anything list() finds that the index is missing gets
-   put back. If list() is over its cap too, the index still gains the upload
-   that triggered it. Entries go through readStoredBanner on the way out, so
-   one malformed entry costs one advert, as it did before. */
+   Uploads update the index directly; the warm Worker isolate keeps a short
+   snapshot so repeated reads do not hit KV. Entries go through
+   readStoredBanner on the way out, so one malformed entry costs one advert,
+   as it did before. */
 const WALL_KEY = 'wall';
 type Wall = Record<string, StoredBanner>;
 const MAX_REQUEST_BYTES = 1_500_000;
+const WALL_CACHE_MS = 30_000;
+const OWNER_CACHE_MS = 45_000;
+let wallSnapshot: { value: Wall; expiresAt: number } | undefined;
+const ownerCache = new Map<string, number>();
 
 async function readWall(env: Env): Promise<Wall> {
+  if (wallSnapshot && wallSnapshot.expiresAt > Date.now()) return wallSnapshot.value;
   const raw = await env.BANNERS.get(WALL_KEY).catch(() => null);
-  if (!raw) return {};
+  if (!raw) {
+    wallSnapshot = { value: {}, expiresAt: Date.now() + WALL_CACHE_MS };
+    return {};
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
+    wallSnapshot = { value: {}, expiresAt: Date.now() + WALL_CACHE_MS };
     return {};
   }
-  if (!parsed || typeof parsed !== 'object') return {};
+  if (!parsed || typeof parsed !== 'object') {
+    wallSnapshot = { value: {}, expiresAt: Date.now() + WALL_CACHE_MS };
+    return {};
+  }
   const wall: Wall = {};
   for (const [owner, entry] of Object.entries(parsed as Record<string, unknown>)) {
     const stored = readStoredBanner(JSON.stringify(entry));
     if (stored) wall[owner] = stored;
   }
+  wallSnapshot = { value: wall, expiresAt: Date.now() + WALL_CACHE_MS };
   return wall;
 }
 
 async function addToWall(env: Env, owner: string, stored: StoredBanner): Promise<void> {
   const wall = await readWall(env);
-  try {
-    const list = await env.BANNERS.list({ prefix: 'banner:' });
-    const missing = list.keys
-      .map(({ name }) => name.slice('banner:'.length))
-      .filter((o) => o !== owner && !wall[o]);
-    const found = await Promise.all(
-      missing.map(async (o) => readStoredBanner(await env.BANNERS.get(`banner:${o}`).catch(() => null))),
-    );
-    missing.forEach((o, i) => {
-      const record = found[i];
-      if (record) wall[o] = record;
-    });
-  } catch {
-    // Over the daily list() cap. The index keeps what it had, plus this.
-  }
   wall[owner] = stored;
   await env.BANNERS.put(WALL_KEY, JSON.stringify(wall));
+  wallSnapshot = { value: wall, expiresAt: Date.now() + WALL_CACHE_MS };
 }
 
 function wallEtag(wall: Wall): string {

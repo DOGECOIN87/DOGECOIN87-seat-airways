@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { isConfigured, readHolders, type HolderList } from './holdings';
 import type { Holding } from './holdings';
 import { EMPTY_MANIFEST, seatHolders, type Manifest } from './manifest';
+import { visibilityAwareInterval } from './visibility';
 
 /**
  * The manifest, kept current.
@@ -34,9 +35,8 @@ export function useManifest(address: string | null, holding: Holding | null): Ma
       // emptying the aircraft.
       if (alive && next) setList(next);
     };
-    void load();
-    const id = setInterval(load, REFRESH);
-    return () => { alive = false; clearInterval(id); };
+    const stop = visibilityAwareInterval(load, REFRESH);
+    return () => { alive = false; stop(); };
   }, []);
 
   return useMemo(() => {

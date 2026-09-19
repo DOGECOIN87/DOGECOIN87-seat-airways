@@ -103,13 +103,20 @@ npx wrangler r2 bucket create seat-airlines-banners
 Put the KV id from that first command into `wrangler.toml`, then give the R2
 bucket public access — either an `r2.dev` URL or, better, a custom domain —
 and set `PUBLIC_IMAGE_BASE` to it. Images are read constantly and written
-rarely, so serving them straight from R2 keeps the Worker off that path.
+rare, so serving them straight from R2 keeps the Worker off that path.
+
+The Worker also keeps a short warm-isolate snapshot of the wall index, while
+uploads update that index directly instead of scanning the KV namespace.
 
 Skipping `PUBLIC_IMAGE_BASE` is a supported state, not a broken one: without
 it the Worker keeps the artwork in KV and serves it from `/images/<key>`, and
 the site behaves identically. A bound bucket with no public URL, though, is
 the one combination worth avoiding — it pays R2's write path for none of its
 read benefit — so the Worker ignores the binding until the URL is set.
+
+For production traffic, enabling public R2 access (or an R2 custom domain) and
+setting `PUBLIC_IMAGE_BASE` is the highest-impact backend performance setting:
+image bytes then bypass Worker execution and KV reads entirely.
 
 Then, before going live:
 

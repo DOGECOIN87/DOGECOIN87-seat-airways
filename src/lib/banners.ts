@@ -193,7 +193,7 @@ export interface BannerStore {
 export async function fetchPublished(): Promise<Record<string, Banner>> {
   if (!REMOTE) return {};
   try {
-    const res = await fetch(REMOTE, { cache: 'no-store' });
+    const res = await fetch(REMOTE, { cache: 'no-cache' });
     if (!res.ok) return cachedPublished;
     const body: unknown = await res.json();
     if (!body || typeof body !== 'object') return cachedPublished;
