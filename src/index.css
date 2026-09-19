@@ -1026,16 +1026,45 @@ html {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-height: 3.65rem;
   padding: 0.7rem 1.1rem;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0));
   border-bottom: 1px solid rgba(255, 255, 255, 0.8);
 }
+.sa-zone-head__mark {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: var(--e-press);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--ui-soft);
+}
+.sa-zone-head__title { min-width: 0; }
 .sa-zone-head h3 {
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.2em;
   color: var(--accent-deep);
+}
+.sa-zone-head__visual {
+  display: block;
+  margin-top: 0.16rem;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ui-faint);
 }
 .sa-zone-head--plain h3 { color: var(--ui-faint); }
 .sa-zone-head__note {
@@ -1045,6 +1074,16 @@ html {
   letter-spacing: 0.14em;
   color: var(--ui-faint);
 }
+.sa-zone--deck .sa-zone-head { background: linear-gradient(110deg, rgba(255, 214, 231, 0.8), rgba(255, 255, 255, 0.15)); }
+.sa-zone--deck .sa-zone-head__mark,
+.sa-zone--first .sa-zone-head__mark { background: linear-gradient(145deg, #fff5fa, #f4bdd6); color: #9b3b68; }
+.sa-zone--first .sa-zone-head { background: linear-gradient(110deg, rgba(255, 225, 239, 0.75), rgba(255, 255, 255, 0.12)); }
+.sa-zone--business .sa-zone-head { background: linear-gradient(110deg, rgba(226, 220, 255, 0.78), rgba(255, 255, 255, 0.12)); }
+.sa-zone--business .sa-zone-head__mark { background: linear-gradient(145deg, #f8f6ff, #c9c0f4); color: #55408e; }
+.sa-zone--exit .sa-zone-head { background: linear-gradient(110deg, rgba(211, 247, 250, 0.82), rgba(255, 255, 255, 0.12)); }
+.sa-zone--exit .sa-zone-head__mark,
+.sa-zone--economy .sa-zone-head__mark { background: linear-gradient(145deg, #f2ffff, #b9e7eb); color: #13727d; }
+.sa-zone--economy .sa-zone-head { background: linear-gradient(110deg, rgba(219, 247, 249, 0.62), rgba(255, 255, 255, 0.12)); }
 
 /* ── A seat ───────────────────────────────────────────────── */
 .sa-seat {
@@ -1052,11 +1091,19 @@ html {
   flex: none;
   overflow: hidden;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: 12px 12px 9px 9px;
   background: var(--ui-sink);
   box-shadow: var(--e-press);
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
+.sa-zone--deck .sa-seat,
+.sa-zone--first .sa-seat { border-radius: 15px 15px 10px 10px; }
+.sa-zone--first .sa-seat--sold,
+.sa-zone--first .sa-seat--advert { background-color: #f8e8ef; box-shadow: 0 5px 14px rgba(155, 59, 104, 0.18), inset 0 1px 0 #fff; }
+.sa-zone--business .sa-seat--sold,
+.sa-zone--business .sa-seat--advert { background-color: #eeeafd; box-shadow: 0 5px 14px rgba(85, 64, 142, 0.16), inset 0 1px 0 #fff; }
+.sa-zone--exit .sa-seat--open { background: linear-gradient(145deg, #d9f8fa, #c2e7ea); }
+.sa-zone--economy .sa-seat--open { background: linear-gradient(145deg, #dfe3e8, #cfd5dc); }
 /* Open: a socket. Nothing in it, and it reads as nothing in it. */
 .sa-seat--open:hover {
   box-shadow: inset -3px -3px 7px rgba(255, 255, 255, 0.9), inset 3px 3px 7px rgba(0, 135, 234, 0.3);

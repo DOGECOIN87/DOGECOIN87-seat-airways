@@ -36,6 +36,10 @@ export interface CabinZone {
   rows: readonly CabinRow[];
   /** Accent the zone wears in the seat map. */
   accent: 'cerise' | 'cyan' | 'violet';
+  /** Short identifier shown as the zone's visual badge. */
+  code: string;
+  /** The material/experience cue shown beside the zone name. */
+  visual: string;
 }
 
 export interface CabinRow {
@@ -63,6 +67,8 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     group: '1',
     perk: 'You have the PA. One announcement a day. Use it well.',
     accent: 'cerise',
+    code: 'FDK',
+    visual: 'Command / 02 seats',
     rows: [{ n: null, left: ['CPT'], right: ['FO'] }],
   },
   {
@@ -73,6 +79,8 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     group: '1',
     perk: 'Lie-flat. Champagne on every green candle.',
     accent: 'cerise',
+    code: 'FST',
+    visual: 'Private suite / 08 seats',
     rows: rowRange(1, 2, ['A', 'B'], ['E', 'F']),
   },
   {
@@ -83,6 +91,8 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     group: '2',
     perk: 'Priority boarding, and first off the aircraft in an emergency landing.',
     accent: 'violet',
+    code: 'BUS',
+    visual: 'Widebody comfort / 30 seats',
     rows: rowRange(3, 7, LR, RR),
   },
   {
@@ -93,6 +103,8 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     group: '3',
     perk: 'You have agreed to open that door. Sign the message.',
     accent: 'cyan',
+    code: 'EXR',
+    visual: 'Extra legroom / 12 seats',
     rows: rowRange(16, 17, LR, RR),
   },
   {
@@ -103,6 +115,8 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     group: '4',
     perk: 'Seat back and tray table. Welcome aboard.',
     accent: 'cyan',
+    code: 'ECO',
+    visual: 'Main cabin / 138 seats',
     rows: [...rowRange(8, 15, LR, RR), ...rowRange(18, 30, LR, RR)],
   },
 ];

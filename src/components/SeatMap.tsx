@@ -209,9 +209,13 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
           {CABIN_ZONES.map((zone) => {
             const accent = ACCENT[zone.accent];
             return (
-              <section key={zone.key}>
-                <header className={`sa-zone-head ${accent}`}>
-                  <h3>{zone.name}</h3>
+                <section key={zone.key} className={`sa-zone sa-zone--${zone.key}`}>
+                  <header className={`sa-zone-head ${accent}`}>
+                  <span className="sa-zone-head__mark" aria-hidden>{zone.code}</span>
+                  <div className="sa-zone-head__title">
+                    <h3>{zone.name}</h3>
+                    <span className="sa-zone-head__visual">{zone.visual}</span>
+                  </div>
                   <span className="sa-zone-head__note">{zone.note}</span>
                 </header>
 
@@ -277,7 +281,11 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
           {/* ── Cargo hold ── */}
           <section>
             <header className="sa-zone-head sa-zone-head--plain">
-              <h3>{CARGO_HOLD.name}</h3>
+              <span className="sa-zone-head__mark" aria-hidden>CRG</span>
+              <div className="sa-zone-head__title">
+                <h3>{CARGO_HOLD.name}</h3>
+                <span className="sa-zone-head__visual">Below the cutoff / unpressurized</span>
+              </div>
               <span className="sa-zone-head__note">{CARGO_HOLD.note}</span>
             </header>
             <p className="px-4 py-4 text-[12.5px] leading-relaxed text-ui-soft">{CARGO_HOLD.body}</p>
