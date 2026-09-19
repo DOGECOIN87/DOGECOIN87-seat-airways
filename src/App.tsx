@@ -50,13 +50,17 @@ import {
 // interactive immediately, rather than making the whole page wait on WebGL.
 const CabinView3D = lazy(() => import('./components/CabinView3D'));
 const ExteriorView = lazy(() => import('./components/ExteriorView'));
-const FlightDeck = lazy(() => import('./components/FlightDeck'));
+const loadFlightDeck = () => import('./components/FlightDeck');
+const loadSeatMap = () => import('./components/SeatMap');
+const FlightDeck = lazy(loadFlightDeck);
 const CargoHold = lazy(() => import('./components/CargoHold'));
 const CheckIn = lazy(() => import('./components/CheckIn'));
 const BoardingLadder = lazy(() => import('./components/BoardingLadder'));
-const SeatMap = lazy(() => import('./components/SeatMap'));
+const SeatMap = lazy(loadSeatMap);
 const BoardingPass = lazy(() => import('./components/BoardingPass'));
 const RadioLog = lazy(() => import('./components/RadioLog'));
+const prefetchFlightDeck = () => { void loadFlightDeck(); };
+const prefetchSeatMap = () => { void loadSeatMap(); };
 
 const Deferred = ({ children, minHeight = '6rem' }: { children: ReactNode; minHeight?: string }) => {
   const host = useRef<HTMLDivElement>(null);
@@ -459,7 +463,7 @@ export default function App() {
                 to the top holders in order — and every one of them is a billboard.
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <a href="#wall" className="sa-cta sa-shine">
+                <a href="#wall" className="sa-cta sa-shine" onMouseEnter={prefetchSeatMap} onFocus={prefetchSeatMap}>
                   Claim a seat <span aria-hidden>→</span>
                 </a>
                 <button
@@ -560,6 +564,8 @@ export default function App() {
                   key={z.key}
                   type="button"
                   onClick={() => walkTo(z.key)}
+                  onMouseEnter={z.key === 'deck' ? prefetchFlightDeck : undefined}
+                  onFocus={z.key === 'deck' ? prefetchFlightDeck : undefined}
                   aria-pressed={camera !== 'exterior' && camera !== 'hold' && viewZone === z.key}
                   className={chip(camera !== 'exterior' && camera !== 'hold' && viewZone === z.key)}
                 >
@@ -754,7 +760,7 @@ export default function App() {
           <div className="sa-close">
             <Mark size={34} background="none" color="#0087EA" />
             <p className="sa-close__line">One plane. Everyone&apos;s in it.</p>
-            <a href="#wall" className="sa-cta sa-shine mt-2">
+            <a href="#wall" className="sa-cta sa-shine mt-2" onMouseEnter={prefetchSeatMap} onFocus={prefetchSeatMap}>
               Claim a seat <span aria-hidden>→</span>
             </a>
           </div>
