@@ -344,14 +344,14 @@ export default function App() {
   }, []);
 
   /** Walk the camera to a seat. Looking is free; sitting there is not. */
-  const visit = (id: string, zoneKey: ZoneKey) => {
+  const visit = useCallback((id: string, zoneKey: ZoneKey) => {
     const seat = findSeat(id);
     setViewZone(zoneKey);
     setCamera(zoneKey === 'deck' ? 'deck' : 'seat');
     setFacing('forward');
     if (seat) setViewPosition(seat.position);
     showView();
-  };
+  }, [showView]);
 
 
   return (

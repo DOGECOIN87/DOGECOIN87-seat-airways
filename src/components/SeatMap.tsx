@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { memo, useMemo, useState, type CSSProperties } from 'react';
 import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, type CabinRow, type ZoneKey } from '../content/cabin';
 import { safeHref, type Banner, type BannerSet } from '../lib/banners';
 import { shortAddress, type Manifest, type ManifestEntry } from '../lib/manifest';
@@ -107,7 +107,7 @@ interface SeatMapProps {
   onAdvertise: (seat: string) => void;
 }
 
-const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }: SeatMapProps) => {
+const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }: SeatMapProps) {
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
@@ -413,6 +413,6 @@ const SeatMap = ({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }
       </aside>
     </div>
   );
-};
+});
 
 export default SeatMap;

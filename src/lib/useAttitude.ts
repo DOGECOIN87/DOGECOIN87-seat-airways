@@ -61,6 +61,7 @@ export function useAttitude(feed: FlightFeed, apply: ApplyAttitude): void {
     let last = performance.now();
 
     const frame = (now: number) => {
+      if (document.visibilityState === 'hidden') return;
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       // Frame-rate independent easing, so 60Hz and 120Hz settle alike and a
@@ -101,9 +102,19 @@ export function useAttitude(feed: FlightFeed, apply: ApplyAttitude): void {
       };
     }
 
-    raf = requestAnimationFrame(frame);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        cancelAnimationFrame(raf);
+        return;
+      }
+      last = performance.now();
+      raf = requestAnimationFrame(frame);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    if (document.visibilityState !== 'hidden') raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       unsubscribe();
     };
   }, [feed]);

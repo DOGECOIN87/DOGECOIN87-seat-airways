@@ -272,7 +272,11 @@ html {
   animation: sa-pulse-glow 2.2s ease-in-out infinite;
 }
 
-.sa-section { padding-top: var(--sa-section); }
+.sa-section {
+  padding-top: var(--sa-section);
+  content-visibility: auto;
+  contain-intrinsic-size: 0 900px;
+}
 /* Body copy: the base size, set on a golden leading — 1.618 line
    height is the one place the ratio is also the most readable answer. */
 .sa-lead {

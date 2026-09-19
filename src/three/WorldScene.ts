@@ -68,19 +68,19 @@ export interface WorldHandles {
 }
 
 export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
+  const lowPower =
+    (typeof navigator !== 'undefined' && (navigator.hardwareConcurrency ?? 8) <= 4) ||
+    (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: true,
+    antialias: !lowPower,
     powerPreference: 'high-performance',
     // The scene spans a window a few centimetres from the camera through a
     // sky dome 160 km away. Log depth keeps window glass and the exterior
     // livery from z-fighting at that range.
     logarithmicDepthBuffer: true,
-    // Lets the canvas be read back after a frame, which is how the view gets
-    // captured for review; the cost is negligible at this scene's size.
-    preserveDrawingBuffer: true,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.85;
@@ -153,7 +153,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const sunPos = new THREE.Vector3();
   const sun = new THREE.DirectionalLight(0xffffff, 2.4);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(lowPower ? 256 : 512, lowPower ? 256 : 512);
   sun.shadow.camera.left = -36;
   sun.shadow.camera.right = 36;
   sun.shadow.camera.top = 36;
