@@ -1,16 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import FlightDeck from './components/FlightDeck';
-import CargoHold from './components/CargoHold';
-import CheckIn from './components/CheckIn';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Mark from './components/Mark';
 import ContractBar from './components/ContractBar';
-import BoardingLadder from './components/BoardingLadder';
 import ViewFrame from './components/ViewFrame';
 import Annunciators from './components/Annunciators';
-import SeatMap from './components/SeatMap';
 import AdvertDialog from './components/AdvertDialog';
-import BoardingPass from './components/BoardingPass';
-import RadioLog, { type LogEntry } from './components/RadioLog';
+import type { LogEntry } from './components/RadioLog';
 import {
   ALL_SEATS,
   CABIN_ZONES,
@@ -56,6 +50,44 @@ import {
 // interactive immediately, rather than making the whole page wait on WebGL.
 const CabinView3D = lazy(() => import('./components/CabinView3D'));
 const ExteriorView = lazy(() => import('./components/ExteriorView'));
+const FlightDeck = lazy(() => import('./components/FlightDeck'));
+const CargoHold = lazy(() => import('./components/CargoHold'));
+const CheckIn = lazy(() => import('./components/CheckIn'));
+const BoardingLadder = lazy(() => import('./components/BoardingLadder'));
+const SeatMap = lazy(() => import('./components/SeatMap'));
+const BoardingPass = lazy(() => import('./components/BoardingPass'));
+const RadioLog = lazy(() => import('./components/RadioLog'));
+
+const Deferred = ({ children, minHeight = '6rem' }: { children: ReactNode; minHeight?: string }) => {
+  const host = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const node = host.current;
+    if (!node || !('IntersectionObserver' in window)) {
+      setReady(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setReady(true);
+        observer.disconnect();
+      },
+      { rootMargin: '900px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={host} style={!ready ? { minHeight } : undefined}>
+      {ready ? <Suspense fallback={<div className="sa-view-loading" role="status" aria-label="Loading section" />}>
+        {children}
+      </Suspense> : null}
+    </div>
+  );
+};
 
 /**
  * SEAT AIRLINES — the cabin.
@@ -355,7 +387,8 @@ export default function App() {
 
 
   return (
-    <div className="sa-app relative min-h-screen text-ui-ink">
+    <Suspense fallback={<SceneLoading />}>
+      <div className="sa-app relative min-h-screen text-ui-ink">
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="sa-ground absolute inset-0" />
       </div>
@@ -637,14 +670,16 @@ export default function App() {
             </ol>
 
             <div className="mt-10">
-              <SeatMap
-                manifest={manifest}
-                banners={banners}
-                mine={claimed}
-                canAdvertise={claimed}
-                onVisit={visit}
-                onAdvertise={setAdvertising}
-              />
+              <Deferred minHeight="42rem">
+                <SeatMap
+                  manifest={manifest}
+                  banners={banners}
+                  mine={claimed}
+                  canAdvertise={claimed}
+                  onVisit={visit}
+                  onAdvertise={setAdvertising}
+                />
+              </Deferred>
             </div>
           </div>
         </section>
@@ -674,21 +709,29 @@ export default function App() {
               line. */}
           <div className="mt-9 grid gap-6 lg:grid-cols-[minmax(0,1.382fr)_minmax(0,1fr)]">
             <div className="flex flex-col gap-6">
-              <CheckIn wallet={wallet} holding={holding} berth={berth} loading={loadingHolding} />
-              <BoardingLadder
-                berth={berth}
-                holding={holding}
-                address={seatKey}
-                manifestSize={manifest.entries.length}
-              />
+              <Deferred>
+                <CheckIn wallet={wallet} holding={holding} berth={berth} loading={loadingHolding} />
+              </Deferred>
+              <Deferred>
+                <BoardingLadder
+                  berth={berth}
+                  holding={holding}
+                  address={seatKey}
+                  manifestSize={manifest.entries.length}
+                />
+              </Deferred>
             </div>
 
             <div className="flex flex-col gap-6">
-              <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
+              <Deferred>
+                <BoardingPass passenger={passenger} seat={claimed} zone={claimedZone} boardedAt={boardedAt} />
+              </Deferred>
               {/* The log takes whatever height the column has left, so a live
                   panel is as tall as the page can make it rather than a stub. */}
               <div className="min-h-[14rem] flex-1">
-                <RadioLog entries={log} />
+                <Deferred minHeight="14rem">
+                  <RadioLog entries={log} />
+                </Deferred>
               </div>
             </div>
           </div>
@@ -827,6 +870,7 @@ export default function App() {
           onClose={() => setAdvertising(null)}
         />
       )}
-    </div>
+      </div>
+    </Suspense>
   );
 }

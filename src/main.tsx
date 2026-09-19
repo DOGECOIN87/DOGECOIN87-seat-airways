@@ -11,3 +11,12 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+
+if ('serviceWorker' in navigator) {
+  const register = () => void navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(register, { timeout: 2500 });
+  } else {
+    globalThis.setTimeout(register, 1500);
+  }
+}
