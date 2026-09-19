@@ -1,0 +1,6 @@
+{
+  "name": "SEAT AIRLINES — SA350",
+  "description": "A flight simulator flown by one number. Market cap is altitude: $1M is above the clouds, $10M is space, $50M is the moon.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
