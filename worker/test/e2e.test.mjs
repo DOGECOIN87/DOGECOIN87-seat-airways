@@ -328,8 +328,7 @@ await check('a card is published and read back', async () => {
   const mine = roster[alice.address];
   assert(mine, 'the published card is not in the directory');
   assert(mine.displayName === 'Aisle Hopper', `the wrong name came back: ${mine.displayName}`);
-  assert(mine.email === card.email, 'the holder cannot read their own email back');
-  assert(mine.sharesContact === false, 'publishing a card shared the contact details by itself');
+  assert(mine.email === card.email, 'the email did not survive the round trip');
 });
 
 await check('a card survives a new session, which localStorage never did', async () => {
@@ -346,28 +345,19 @@ await check('a javascript: contact link is refused', async () => {
   assert(res.status === 400, `status ${res.status}, expected 400`);
 });
 
-await check('contact details are withheld from other holders until shared', async () => {
+await check('a card reaches another holder, contact details and all', async () => {
+  /* Contact details are a holder's perk, and the gate is the session: it is
+     opened only by a wallet that proved its key and holds the token, so a
+     non-holder has no token to ask with. This is the other half of
+     "the directory is closed without a session" above — what a holder who
+     *is* in the room gets to read. */
   bobToken = (await (await api('/session', { method: 'POST', body: await signInBody(bob) })).json()).token;
 
-  const withheld = (await (await api('/directory', { token: bobToken })).json())[alice.address];
-  assert(withheld, 'the card is missing from another holder’s roster entirely');
-  assert(withheld.displayName === 'Aisle Hopper', 'the name should be on the roster for everyone');
-  assert(withheld.email === '', `another holder read an unshared email: ${withheld.email}`);
-  assert(withheld.website === '', 'another holder read an unshared website');
-  assert(withheld.sharesContact === false, 'the card claims to share what it withholds');
-
-  // Opting in is what hands them over, and nothing else.
-  await api('/profile', {
-    method: 'PUT', token: aliceToken,
-    body: {
-      displayName: 'Aisle Hopper', role: 'Partnerships',
-      email: 'aisle@seat-airlines.space', website: 'https://seat-airlines.space',
-      linkedin: '', shareContact: true,
-    },
-  });
-  const shared = (await (await api('/directory', { token: bobToken })).json())[alice.address];
-  assert(shared.email === 'aisle@seat-airlines.space', 'opting in did not hand the email over');
-  assert(shared.sharesContact === true, 'the shared card does not say so');
+  const theirs = (await (await api('/directory', { token: bobToken })).json())[alice.address];
+  assert(theirs, 'the card is missing from another holder’s roster');
+  assert(theirs.displayName === 'Aisle Hopper', `the wrong name came back: ${theirs.displayName}`);
+  assert(theirs.email === 'aisle@seat-airlines.space', 'another holder could not read the contact details');
+  assert(theirs.website === 'https://seat-airlines.space', 'the website did not reach another holder');
 });
 
 await check('an introduction reaches the other wallet', async () => {

@@ -264,13 +264,13 @@ require knowing who sits where — the section perks are the page's reading of
 the manifest, for the same reason adverts are keyed by wallet rather than by
 seat.
 
-Which is why **contact details are withheld until their holder opts in.** A
-name and a role are what a roster is for and go out to every signed-in
-holder; an email cannot be promised to one section by a service that cannot
-tell the sections apart. So the card asks, in the words that are true — these
-go to any signed-in holder, not only your section — and nothing leaves until
-the answer is yes. Consent is a thing a server can check; a seat is not.
-`worker/README.md` has that argument in full.
+**The directory is a room for holders.** A session is opened only by a wallet
+that has proved its key and holds the token — the same check the wall makes
+before storing an advert — so the cards inside, contact details and all, are
+never handed to somebody who has not bought their way into the cabin. That is
+the boundary the server keeps; which *section* sees what is the page's
+reading of the manifest on top of it. `worker/README.md` has the argument in
+full, including what the check does when the RPC cannot answer.
 
 Without `VITE_DIRECTORY_API` (which falls back to `VITE_BANNERS_API`, since
 one Worker serves both), the hub says plainly that no directory is connected

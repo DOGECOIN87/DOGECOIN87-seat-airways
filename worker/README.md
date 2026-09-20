@@ -125,28 +125,31 @@ Which seat anybody is in — for the same reason the wall does not, and the
 page reads the ladder; this service answers "is this really the wallet it
 claims to be".
 
-So the lines it draws are the ones it can actually hold:
+So the lines it draws are the two it can actually hold:
 
 | | |
 | --- | --- |
-| A name and role | on the roster for any signed-in holder — that is what a roster is |
-| Contact details | withheld from everyone but their owner until that holder opts in |
-| An introduction | readable only by the two wallets named on it |
+| A card, contact details and all | readable by holders, because nothing here is readable without a session |
+| An introduction | readable only by the two wallets named on it, whoever else is signed in |
 
-That middle row exists because the page shows contact details to your own
-section and this service cannot check that claim. Sections come off the seat
-ladder, which it does not know, so the real audience for anything it hands
-out is every signed-in holder. Publishing a card used to mean publishing an
-email address to that whole room by implication. Now the contact fields are
-withheld until somebody ticks a box that says, in those words, who will be
-able to read them — because consent is a thing a server *can* check, and a
-section is not.
+The first is the whole reason `POST /session` checks the token: a session is
+opened only by a wallet that has proved its key **and** holds the token, so
+the cards inside — the emails, the links, the lot — are never handed to
+somebody who has not bought their way into the cabin. It is the same check
+the wall makes before storing an advert, and it is enforced in the one place
+that can enforce it rather than being implied by the interface.
+
+That check stands aside when it cannot reach the RPC to make it, and when no
+`RPC_URL`/`TOKEN_MINT` is configured there is nothing to check against at all
+— see `holdsToken` for why an unanswered question is treated as "do not
+know". A deployment that wants the directory to be a holders' room needs
+those two set, exactly as the wall does.
 
 The finer perks — contacts surfaced to your own section, introductions
 between First Class members — remain the page's reading of the manifest it
-already holds: an interface affordance, not a boundary. Anything stronger
-would mean a second copy of the seat ladder here, drifting from the page's
-copy from the day it was written.
+already holds: an interface affordance, not a boundary, because anything
+stronger would mean a second copy of the seat ladder here, drifting from the
+page's copy from the day it was written.
 
 Abuse is bounded by what does not need the ladder: 20 introductions per wallet
 per hour, 1,000 characters each, and contact links that must be `http(s)`.

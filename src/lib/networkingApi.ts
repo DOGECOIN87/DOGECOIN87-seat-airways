@@ -20,6 +20,10 @@
  * The token is the only thing this module keeps in `localStorage`, and it is
  * a credential rather than data: losing it costs a signature, and it is
  * scoped to the wallet that opened it, so switching wallets drops it.
+ *
+ * A session only opens for a wallet that holds the token, which is what makes
+ * the directory a room for holders: the cards in it, contact details and all,
+ * are never handed to anybody who has not bought their way into the cabin.
  */
 
 const API = (
@@ -40,26 +44,14 @@ export interface NetworkingProfile {
   email: string;
   website: string;
   linkedin: string;
-  /**
-   * Whether the contact fields reach other holders at all.
-   *
-   * The page shows contact details to your own section, but the server
-   * cannot enforce that — sections come off the seat ladder, which it
-   * deliberately does not know — so the real audience is every signed-in
-   * holder. This is the holder agreeing to that, and the server withholds
-   * the fields from everybody but its owner until they do.
-   */
-  shareContact: boolean;
 }
 
 export const EMPTY_PROFILE: NetworkingProfile = {
-  displayName: '', role: '', email: '', website: '', linkedin: '', shareContact: false,
+  displayName: '', role: '', email: '', website: '', linkedin: '',
 };
 
 export interface PublishedProfile extends NetworkingProfile {
   address: string;
-  /** False when this card's contact fields were withheld from you. */
-  sharesContact: boolean;
   updated: string;
 }
 

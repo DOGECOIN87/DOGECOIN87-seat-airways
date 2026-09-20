@@ -7,10 +7,10 @@
  * ladder it has already worked out.
  *
  * This is the page's own filter, not the boundary. The server cannot check a
- * section without a second copy of that ladder, so the rule it does hold is
- * consent: contact details reach nobody but their owner until that holder
- * opts in. These two work together — the server decides what may be sent,
- * this decides what is worth showing.
+ * section without a second copy of that ladder; the rule it does hold is that
+ * the directory opens only to a wallet holding the token, so everything in it
+ * is a holders' room to begin with. The two work together — the server
+ * decides who is let in, this decides what is worth showing them.
  */
 import type { ZoneKey } from '../content/cabin';
 

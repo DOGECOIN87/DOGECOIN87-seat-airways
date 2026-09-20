@@ -268,13 +268,19 @@ function wallEtag(wall: Wall): string {
    wallet, and messages read back by recipient and by sender.
 
    What this service still does not know is which seat anybody is in. The page
-   decides that, as it does for adverts, and the same rule follows from it —
-   the directory answers "is this really the wallet it claims to be", and the
-   section perks (contacts to your own section, introductions between First
-   Class members) are the page's reading of the manifest it already holds.
+   decides that, as it does for adverts, and the section perks — contacts
+   surfaced to your own section, introductions between First Class members —
+   are the page's reading of the manifest it already holds.
 
-   The line this service does draw is the one it can: a card is published to
-   the cabin, and an introduction is readable only by the two wallets on it. */
+   The lines this service does draw are the two it can hold on its own:
+
+     · Nothing here is readable without a session, and a session is only
+       opened by a wallet that proved its key *and* holds the token. Contact
+       details are a holder's perk because a non-holder never gets a token to
+       ask with. (`holdsToken` stands aside when it cannot reach the RPC to
+       find out — see its own note on why that is the honest failure.)
+     · An introduction is readable only by the two wallets named on it,
+       whoever else is signed in. */
 
 interface ProfileRow {
   address: string;
@@ -283,7 +289,6 @@ interface ProfileRow {
   email: string;
   website: string;
   linkedin: string;
-  share_contact: number;
   updated_at: string;
 }
 
@@ -295,29 +300,15 @@ interface MessageRow {
   sent_at: string;
 }
 
-/**
- * A card as the asking wallet is allowed to see it.
- *
- * Name and role are what the roster is for and go to everyone. The contact
- * fields are withheld unless their owner has said to share them — with your
- * own card the exception, since a holder editing their own is not a stranger
- * reading it. `sharesContact` goes out either way, so the page can say
- * "not shared" rather than showing a blank and implying there is nothing
- * there.
- */
-const asProfile = (row: ProfileRow, viewer: string) => {
-  const open = row.share_contact === 1 || row.address === viewer;
-  return {
-    address: row.address,
-    displayName: row.display_name,
-    role: row.role,
-    email: open ? row.email : '',
-    website: open ? row.website : '',
-    linkedin: open ? row.linkedin : '',
-    sharesContact: row.share_contact === 1,
-    updated: row.updated_at,
-  };
-};
+const asProfile = (row: ProfileRow) => ({
+  address: row.address,
+  displayName: row.display_name,
+  role: row.role,
+  email: row.email,
+  website: row.website,
+  linkedin: row.linkedin,
+  updated: row.updated_at,
+});
 
 const asMessage = (row: MessageRow) => ({
   id: row.id,
@@ -458,12 +449,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (request.method === 'GET' && url.pathname === '/directory') {
         const { results } = await db
           .prepare(
-            'SELECT address, display_name, role, email, website, linkedin, share_contact, updated_at' +
+            'SELECT address, display_name, role, email, website, linkedin, updated_at' +
             ' FROM profiles ORDER BY updated_at DESC LIMIT 500',
           )
           .all<ProfileRow>();
         const out: Record<string, ReturnType<typeof asProfile>> = {};
-        for (const row of results ?? []) out[row.address] = asProfile(row, me);
+        for (const row of results ?? []) out[row.address] = asProfile(row);
         return json(out, 200, priv);
       }
 
@@ -481,20 +472,16 @@ async function handle(request: Request, env: Env): Promise<Response> {
         const { profile } = parsed;
         await db
           .prepare(
-            'INSERT INTO profiles (address, display_name, role, email, website, linkedin, share_contact, updated_at)' +
-            ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)' +
+            'INSERT INTO profiles (address, display_name, role, email, website, linkedin, updated_at)' +
+            ' VALUES (?, ?, ?, ?, ?, ?, ?)' +
             ' ON CONFLICT(address) DO UPDATE SET display_name = excluded.display_name,' +
             ' role = excluded.role, email = excluded.email, website = excluded.website,' +
-            ' linkedin = excluded.linkedin, share_contact = excluded.share_contact,' +
-            ' updated_at = excluded.updated_at',
+            ' linkedin = excluded.linkedin, updated_at = excluded.updated_at',
           )
-          .bind(
-            me, profile.displayName, profile.role, profile.email, profile.website, profile.linkedin,
-            profile.shareContact ? 1 : 0, updated,
-          )
+          .bind(me, profile.displayName, profile.role, profile.email, profile.website, profile.linkedin, updated)
           .run();
 
-        return json({ ...profile, address: me, sharesContact: profile.shareContact, updated }, 200, priv);
+        return json({ ...profile, address: me, updated }, 200, priv);
       }
 
       if (request.method === 'GET' && url.pathname === '/messages') {

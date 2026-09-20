@@ -67,7 +67,6 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
         email: published.email,
         website: published.website,
         linkedin: published.linkedin,
-        shareContact: published.sharesContact,
       }
       : EMPTY_PROFILE);
   }, [published, editing]);
@@ -146,8 +145,8 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
         </div>
         <div className="mt-5 grid gap-2 text-[11px] leading-relaxed text-ui-soft sm:grid-cols-2">
           <p className="rounded-xl border border-ui-line bg-ui-bg px-3 py-2.5">
-            <strong className="text-ui-ink">Contacts:</strong> shared only if you choose to, and then with any
-            signed-in holder. The page surfaces them to your own section.
+            <strong className="text-ui-ink">Contacts:</strong> holders only — the directory opens to a wallet that
+            holds the token. The page surfaces them to members of your own section.
           </p>
           <p className="rounded-xl border border-ui-line bg-ui-bg px-3 py-2.5">
             <strong className="text-ui-ink">Messages:</strong> First Class members can message other First Class
@@ -197,14 +196,12 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                           <p>Sign in to the directory to read contact details.</p>
                         ) : !card ? (
                           <p>This holder has not published a card yet.</p>
-                        ) : card.sharesContact ? (
+                        ) : (
                           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
                             <span>Email: {card.email || 'Not given'}</span>
                             {card.website && <a className="underline" href={card.website} target="_blank" rel="noreferrer">Website</a>}
                             {card.linkedin && <a className="underline" href={card.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
                           </div>
-                        ) : (
-                          <p>This holder keeps their contact details to themselves.</p>
                         )}
                         {messageable && directory.session && (
                           <div className="mt-4 rounded-xl border border-[#FF668F]/30 bg-white/70 p-3">
@@ -259,21 +256,10 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                 </label>
               ))}
 
-              {/* The one thing the server can actually hold, so it is asked
-                  plainly rather than assumed by publishing a card. */}
-              <label className="flex gap-2 rounded-lg border border-ui-line bg-white px-3 py-2.5 text-[11px] leading-relaxed text-ui-soft">
-                <input
-                  type="checkbox"
-                  checked={form.shareContact}
-                  onChange={(event) => setForm((current) => ({ ...current, shareContact: event.target.checked }))}
-                  className="mt-0.5 shrink-0 accent-ui-blue"
-                />
-                <span>
-                  <strong className="text-ui-ink">Share my contact details.</strong> Your name and role are on the
-                  roster either way. Tick this and the email and links go with them — to every signed-in holder,
-                  not only your section, because the server cannot tell the difference.
-                </span>
-              </label>
+              <p className="rounded-lg border border-ui-line bg-white px-3 py-2.5 text-[11px] leading-relaxed text-ui-soft">
+                Your card is read by holders, and only by holders: the directory opens to a wallet that holds the
+                token and to nobody else. The page puts your contact details in front of your own section.
+              </p>
               <button type="button" onClick={() => void saveCard()} disabled={directory.saving} className="sa-cta w-full justify-center disabled:opacity-60">
                 {directory.saving ? 'Publishing…' : 'Publish card'} <span aria-hidden>→</span>
               </button>
@@ -283,11 +269,9 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
               <p className="font-heading text-xl text-ui-ink">{form.displayName || shortMember(address)}</p>
               <p>{form.role || defaultRole(currentEntry.seat.zone)} · {sectionLabel(currentEntry.seat.zone)}</p>
               <p className="pt-2 text-[11px] leading-relaxed">
-                {!published
-                  ? 'Nothing published yet. A card is stored against your wallet, so it follows you to any browser.'
-                  : `Published ${when(published.updated)}. ${published.sharesContact
-                    ? 'Your contact details go out with it.'
-                    : 'Your name and role only — your contact details stay with you.'}`}
+                {published
+                  ? `Published ${when(published.updated)}, to holders only. It is stored against your wallet, so it follows you to any browser.`
+                  : 'Nothing published yet. A card is stored against your wallet, so it follows you to any browser.'}
               </p>
               <button type="button" onClick={() => setEditing(true)} className="sa-cta mt-2">{published ? 'Edit card' : 'Publish a card'} <span aria-hidden>→</span></button>
             </div>

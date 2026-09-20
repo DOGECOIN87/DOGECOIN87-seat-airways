@@ -88,17 +88,6 @@ await check('a javascript: contact link is refused', () => {
   assert('error' in out, 'a javascript: URL was stored as a contact link');
 });
 
-await check('sharing contact details is off unless it is asked for', () => {
-  assert(readProfileInput({ email: 'a@b.co' }).profile.shareContact === false,
-    'publishing a card shared the contact details by itself');
-  assert(readProfileInput({ shareContact: true }).profile.shareContact === true,
-    'a holder who opted in was not recorded as having done so');
-  for (const value of ['true', 1, {}, 'yes']) {
-    assert(readProfileInput({ shareContact: value }).profile.shareContact === false,
-      `"${String(value)}" was taken as consent`);
-  }
-});
-
 await check('an email that is not one is refused', () => {
   assert('error' in readProfileInput({ email: 'not-an-email' }), 'a malformed email was accepted');
   assert(!('error' in readProfileInput({ email: 'pilot@seat-airlines.space' })), 'a real email was refused');
