@@ -158,9 +158,9 @@ html {
     url('/seat-airlines-mark-pattern.svg'),
     url('/seat-airlines-mark-pattern.svg');
   background-repeat: repeat;
-  background-size: 45rem 45rem;
-  background-position: 0 4rem, 22.5rem 26.5rem;
-  opacity: 0.82;
+  background-size: 28rem 28rem;
+  background-position: 28rem 28rem, 42rem 42rem;
+  opacity: 0.9;
   mask-image: linear-gradient(to bottom, transparent 0, black 10rem, black calc(100% - 10rem), transparent 100%);
   animation: sa-logo-drift 42s ease-in-out infinite alternate;
   will-change: background-position;
@@ -170,8 +170,8 @@ html {
    airborne quality. The long duration keeps it atmospheric rather than
    attention-seeking. */
 @keyframes sa-logo-drift {
-  from { background-position: 0 4rem, 22.5rem 26.5rem; }
-  to { background-position: 3rem 1rem, 25.5rem 23.5rem; }
+  from { background-position: 28rem 28rem, 42rem 42rem; }
+  to { background-position: -2rem -2rem, 12rem 12rem; }
 }
 /* The dark theme's grid and scanlines do not survive the move to a
    light panel — a panel face is a panel face, not a CRT. */
