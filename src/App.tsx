@@ -795,13 +795,6 @@ export default function App() {
             </div>
           </div>
 
-          <p className="sa-close__note">
-            The horizon, the tapes, the lamps and the log all read one input — the 5-minute price change — and
-            the altitude is the market cap: $1M puts you above the clouds, $10M in space, $50M at the moon. The
-            sky is real: your own time of day, and the weather where you are.{' '}
-            The market feed is live, and the seat ladder is read from the chain.
-          </p>
-
           <div className="sa-footer__bar">
             <span>Seat Airlines · SA350 · Nonstop</span>
             <span>Your bag is your seat</span>
