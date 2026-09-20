@@ -393,6 +393,7 @@ export default function App() {
       <div className="sa-app relative min-h-screen text-ui-ink">
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="sa-ground absolute inset-0" />
+        <div className="sa-ground__pattern absolute inset-0" />
       </div>
 
       <a href="#wall" className="sa-skip">Skip to the seat map</a>

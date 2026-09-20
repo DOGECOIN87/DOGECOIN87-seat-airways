@@ -149,8 +149,7 @@ html {
    and faded into the panel ground. Two offset repeat layers create staggered
    rows rather than a rigid checkerboard, so the pattern reads as atmosphere
    instead of decoration competing with the instruments. */
-.sa-ground::after {
-  content: '';
+.sa-ground__pattern {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -1000,7 +999,7 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .sd-shake, .sa-pulse-glow, .sa-shine::after, .sa-sweep, .sa-logo-drift, .sa-ground::after, .sa-view-loading__mark { animation: none !important; }
+  .sd-shake, .sa-pulse-glow, .sa-shine::after, .sa-sweep, .sa-logo-drift, .sa-ground__pattern, .sa-view-loading__mark { animation: none !important; }
 }
 
 /* ============================================================
