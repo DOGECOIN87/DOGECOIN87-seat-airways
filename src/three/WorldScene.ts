@@ -101,6 +101,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const cabin = createCabin();
   aircraft.add(cabin.group);
   aircraft.add(camera);
+  const cabinLamps: Array<{ light: THREE.PointLight; intensity: number }> = [];
+  cabin.group.traverse(object => {
+    if (object instanceof THREE.PointLight) cabinLamps.push({ light: object, intensity: object.intensity });
+  });
 
   /* The aeroplane itself, for when the camera is outside it. */
   const airframe = createAirframe();
@@ -826,6 +830,13 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       cabinAmbient.intensity = 0;
     } else {
       /* A seat is a place in the cabin, so looking around is looking around. */
+      const interiorLightLevel = skyState.phase === 'night'
+        ? 0.42
+        : skyState.phase === 'astronomical'
+          ? 0.58
+          : skyState.phase === 'dusk' || skyState.phase === 'dawn'
+            ? 0.82
+            : 1;
       cabin.setViewer(pose.id);
       const x = pose.seatIndex === null ? 0 : CABIN.seatX[pose.seatIndex];
       const z = pose.seatIndex === null ? rowZ(1) - 4.2 : rowZ(pose.row);
@@ -836,14 +847,16 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         camera.fov = 70;
         camera.updateProjectionMatrix();
       }
-      renderer.toneMappingExposure = 0.85;
+      renderer.toneMappingExposure = 0.85 * (skyState.phase === 'night' ? 0.78 : skyState.phase === 'astronomical' ? 0.88 : 1);
 
       airframe.group.visible = false;
       bounce.visible = false;
       cabin.group.visible = pose.seatIndex !== null;
       cabinLight.visible = pose.seatIndex !== null;
-      cabinFill.intensity = pose.seatIndex !== null ? 0.45 : 0;
-      cabinAmbient.intensity = pose.seatIndex !== null ? 0.32 : 0;
+      cabinLight.intensity = 11 * interiorLightLevel;
+      cabinLamps.forEach(({ light, intensity }) => { light.intensity = intensity * interiorLightLevel; });
+      cabinFill.intensity = pose.seatIndex !== null ? 0.45 * interiorLightLevel : 0;
+      cabinAmbient.intensity = pose.seatIndex !== null ? 0.32 * interiorLightLevel : 0;
     }
 
     // Clouds are world objects while the camera rides in the rotating
