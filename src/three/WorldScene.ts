@@ -769,7 +769,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const lowSpeed = 1 - THREE.MathUtils.smoothstep(a.speed, 215, 245);
     const descent = THREE.MathUtils.smoothstep(-a.pitch, 6, 20);
     const climb = THREE.MathUtils.smoothstep(a.pitch, 8, 22) * 0.55;
-    airframe.setFlapDeployment(Math.max(lowSpeed, descent, climb));
+    // Keep the control-surface cue visible but restrained; pitch and speed
+    // should not make the exterior look as though the aircraft is landing.
+    airframe.setFlapDeployment(Math.max(lowSpeed, descent, climb) * 0.28);
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
       THREE.MathUtils.degToRad(a.pitch),

@@ -319,8 +319,8 @@ function bellyFairing(): THREE.BufferGeometry {
  * thick at the bottom where it meets the crown and vanishing at the top.
  */
 function dorsalFillet(): THREE.BufferGeometry {
-  const z0 = 20.2;
-  const z1 = 25.6;
+  const z0 = 21.4;
+  const z1 = 26.8;
   const halfWidth = 0.22;
   const steps = 18;
   const pos: number[] = [];
@@ -786,8 +786,8 @@ export function createAirframe(): AirframeHandles {
     // Tailplane
     const stabPanel: Panel = {
       originX: side * 0.5, originY: 0.9, span: side * 5.9, rise: 0.5,
-      rootZ: 27.2, rootChord: 3.2, rootThick: 0.4,
-      tipZ: 29.4, tipChord: 1.1, tipThick: 0.1,
+      rootZ: 28.0, rootChord: 3.2, rootThick: 0.4,
+      tipZ: 30.2, tipChord: 1.1, tipThick: 0.1,
     };
     const stab = new THREE.Mesh(track(panelGeometry(stabPanel)), wingMat);
     stab.castShadow = stab.receiveShadow = true;
@@ -811,8 +811,8 @@ export function createAirframe(): AirframeHandles {
   /* The fin: the same panel, stood on its edge so its span axis is height. */
   const finPanel: Panel = {
     originX: 0, originY: 0, span: 6.1, rise: 0,
-    rootZ: 24.4, rootChord: 5.4, rootThick: 0.5,
-    tipZ: 27.9, tipChord: 2.2, tipThick: 0.22,
+    rootZ: 25.6, rootChord: 5.4, rootThick: 0.5,
+    tipZ: 29.1, tipChord: 2.2, tipThick: 0.22,
   };
   const fin = new THREE.Mesh(track(panelGeometry(finPanel)), navy);
   fin.rotation.z = Math.PI / 2;
@@ -862,7 +862,7 @@ export function createAirframe(): AirframeHandles {
   for (const side of [1, -1]) {
     const decal = new THREE.Mesh(track(new THREE.PlaneGeometry(FIN_MARK, FIN_MARK)), finMarkMat);
     // 42% up the fin, where the panel is still 0.38 m thick.
-    decal.position.set(side * 0.2, R * 0.72 + 2.56, 27.75);
+    decal.position.set(side * 0.2, R * 0.72 + 2.56, 28.95);
     decal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
     group.add(decal);
   }
@@ -879,7 +879,7 @@ export function createAirframe(): AirframeHandles {
   }
 
   const topBeacon = new THREE.Mesh(track(new THREE.SphereGeometry(0.09, 14, 10)), beaconLamp);
-  topBeacon.position.set(0, R * 0.72 + 6.12, 28.65);
+  topBeacon.position.set(0, R * 0.72 + 6.12, 29.85);
   group.add(topBeacon);
   const bellyBeacon = new THREE.Mesh(track(new THREE.SphereGeometry(0.08, 14, 10)), beaconLamp);
   bellyBeacon.position.set(0, -R - 0.02, 13.7);
@@ -958,7 +958,9 @@ export function createAirframe(): AirframeHandles {
   };
   const setFlapDeployment = (target: number) => {
     flapDeployment = THREE.MathUtils.lerp(flapDeployment, THREE.MathUtils.clamp(target, 0, 1), 0.14);
-    for (const flap of flapGroups) flap.rotation.x = -flapDeployment * 0.42;
+    // Flaps are detail, not a second attitude indicator: keep their response
+    // to a small trim-like movement rather than a full landing deployment.
+    for (const flap of flapGroups) flap.rotation.x = -flapDeployment * 0.16;
   };
   setRowsLit(() => false);
 
