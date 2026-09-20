@@ -41,20 +41,23 @@ export interface Ladder {
   live: boolean;
   /** The cabin a wallet is in, or null when it is in the hold. */
   zoneOf(address: string): ZoneKey | null;
+  /** Everybody with a seat, which is everybody the page draws. */
+  seated(): readonly string[];
   /**
-   * Every seated wallet level with this zone or forward of it.
+   * Seated wallets strictly aft of this zone.
    *
-   * The complement is what a holder there may overhear: anybody not on this
-   * list is behind them — a seat further aft, or the hold, which has no seat
-   * at all. Asking it this way round is what lets the question be put to SQL,
-   * since the people in front of you are a list of at most a cabinful and the
-   * people behind you are however many wallets exist.
+   * Asked as a list of people rather than as "everybody except those in
+   * front" on purpose. The complement would sweep in every wallet that has
+   * ever held the token, and the hold is not on the manifest, not on the
+   * roster, and not something the page can put a name to — so a conversation
+   * between two of them is nobody's to read and nothing anybody would want
+   * queried. The aircraft is the list; the list is at most a cabinful.
    */
-  atOrAbove(zone: ZoneKey | null): readonly string[];
+  seatedBehind(zone: ZoneKey | null): readonly string[];
 }
 
 /** A ladder that knows nothing, and therefore permits nothing. */
-const NO_LADDER: Ladder = { live: false, zoneOf: () => null, atOrAbove: () => [] };
+const NO_LADDER: Ladder = { live: false, zoneOf: () => null, seated: () => [], seatedBehind: () => [] };
 
 let snapshot: { value: Ladder; expiresAt: number } | undefined;
 
@@ -110,8 +113,9 @@ export async function readLadder(env: LadderEnv): Promise<Ladder> {
   const value: Ladder = {
     live: true,
     zoneOf: (address) => zones.get(address) ?? null,
-    atOrAbove: (zone) => manifest.entries
-      .filter((e) => zoneRank(e.seat.zone) <= zoneRank(zone))
+    seated: () => manifest.entries.map((e) => e.address),
+    seatedBehind: (zone) => manifest.entries
+      .filter((e) => zoneRank(e.seat.zone) > zoneRank(zone))
       .map((e) => e.address),
   };
 

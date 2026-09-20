@@ -480,15 +480,28 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (request.method === 'GET' && url.pathname === '/directory') {
         const ladder = await readLadder(env);
         const mine = ladder.zoneOf(me);
+
+        /* Only the aircraft, and only ever the aircraft.
+
+           The roster the page draws is the manifest, so a card belonging to a
+           wallet that has dropped off it is one nobody can see — and a row
+           nobody can see is a row not worth reading out of the database. This
+           used to be the last 500 cards written, which fetched the hold's
+           and then quietly declined to show them. Your own card is always in
+           the list, seated or not, because you are allowed to edit it after
+           being out-held. */
+        const wanted = [...new Set([...ladder.seated(), me])];
+        const holes = wanted.map(() => '?').join(',');
         const { results } = await db
           .prepare(
             'SELECT address, display_name, role, email, website, linkedin, updated_at' +
-            ' FROM profiles ORDER BY updated_at DESC LIMIT 500',
+            ` FROM profiles WHERE address IN (${holes}) ORDER BY updated_at DESC`,
           )
+          .bind(...wanted)
           .all<ProfileRow>();
+
         const out: Record<string, ReturnType<typeof asProfile>> = {};
         for (const row of results ?? []) {
-          // Your own card is always yours to read, seated or not.
           const readable = row.address === me
             || (ladder.live && canViewContact(mine, ladder.zoneOf(row.address)));
           out[row.address] = asProfile(row, readable);
@@ -529,30 +542,33 @@ async function handle(request: Request, env: Env): Promise<Response> {
           db.prepare(`${columns} WHERE sender = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
         ]);
 
-        /* What carries back from further aft.
+        /* What carries forward from further aft.
 
            The cabin is transparent looking backwards and opaque looking
            forwards: a holder reads the conversations of every section behind
-           them, and none of the one they are in or ahead of it. Asked as
-           "neither end is level with me or in front of me", because the
-           people in front are a list of at most a cabinful while the people
-           behind are every wallet that exists.
+           them, and none of the one they are in or ahead of it.
 
-           Unseated, you overhear nothing: the hold is the bottom of the
-           aircraft, and there is nothing below it to listen to. */
+           Named as the people it covers rather than as everybody it does not.
+           "Neither end is in front of me" would also sweep in the hold, whose
+           wallets are on no manifest and no roster and have no name the page
+           could put to them — two strangers the reader cannot see, talking.
+           Nobody is owed that, and it is a table scan to fetch it. So the
+           question asked is the small one: both ends seated, both behind me.
+
+           Unseated yourself, you overhear nothing. */
         let overheard: MessageRow[] = [];
         const ladder = await readLadder(env);
         const mine = ladder.zoneOf(me);
         if (ladder.live && mine) {
-          const shielded = ladder.atOrAbove(mine);
-          if (shielded.length) {
-            const holes = shielded.map(() => '?').join(',');
+          const behind = ladder.seatedBehind(mine);
+          if (behind.length) {
+            const holes = behind.map(() => '?').join(',');
             const rows = await db
               .prepare(
-                `${columns} WHERE sender NOT IN (${holes}) AND recipient NOT IN (${holes})` +
+                `${columns} WHERE sender IN (${holes}) AND recipient IN (${holes})` +
                 ' ORDER BY sent_at DESC LIMIT ?',
               )
-              .bind(...shielded, ...shielded, MESSAGE_PAGE)
+              .bind(...behind, ...behind, MESSAGE_PAGE)
               .all<MessageRow>();
             overheard = rows.results ?? [];
           }

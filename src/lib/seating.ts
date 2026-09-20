@@ -151,22 +151,33 @@ export function outranks(zone: ZoneKey | null, other: ZoneKey | null): boolean {
 /**
  * Whether a viewer may read a member's contact details.
  *
- * Your own section, and everything behind it. Somebody in front of you keeps
- * their card to themselves, which is what makes moving up the aircraft worth
- * something: the view forward is the thing you cannot buy with a smaller bag.
+ * Your own section, and every seated section behind it. Somebody in front of
+ * you keeps their card to themselves, which is what makes moving up the
+ * aircraft worth something: the view forward is the thing you cannot buy with
+ * a smaller bag.
+ *
+ * Both of you have to be on the manifest. The hold is not a section — it is
+ * everybody who did not get a seat, it is on no roster, and the page cannot
+ * put a name to any of it, so there is nothing there to show and nothing
+ * worth fetching.
  */
 export function canViewContact(viewerZone: ZoneKey | null, memberZone: ZoneKey | null): boolean {
-  if (!viewerZone) return false;
+  if (!viewerZone || !memberZone) return false;
   return zoneRank(viewerZone) <= zoneRank(memberZone);
 }
 
 /**
  * Whether a viewer may read a conversation they are not part of.
  *
- * Both ends have to be behind you. A chat with one end level with you or in
- * front of you is not yours to read — otherwise economy could follow a
+ * Both ends seated, and both behind you. A chat with one end level with you
+ * or in front of you is not yours to read — otherwise economy could follow a
  * conversation simply by being cc'd into the cabin it happened in, and the
  * whole point is that the aircraft is only transparent looking aft.
+ *
+ * Both ends *seated* for the same reason a card from the hold is not shown:
+ * two wallets nobody can see, talking to each other, are not part of the
+ * aircraft the page draws. The last row therefore hears nothing, which is
+ * what being in the last row means.
  *
  * Being *on* the message is handled by the caller: sender and recipient can
  * always read their own, whatever anybody's seat is doing.
@@ -176,6 +187,6 @@ export function canOverhear(
   senderZone: ZoneKey | null,
   recipientZone: ZoneKey | null,
 ): boolean {
-  if (!viewerZone) return false;
+  if (!viewerZone || !senderZone || !recipientZone) return false;
   return outranks(viewerZone, senderZone) && outranks(viewerZone, recipientZone);
 }

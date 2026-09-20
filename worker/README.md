@@ -133,14 +133,23 @@ aft and opaque looking forward:
 | | |
 | --- | --- |
 | A name and role | the roster, and the roster belongs to the whole cabin |
-| Contact details | your own section and every cabin behind it, never one in front |
+| Contact details | your own section and every seated cabin behind it, never one in front |
 | A conversation | the two wallets on it, plus any section seated ahead of **both** |
 
-Two consequences worth stating plainly, because they are the point rather
-than side effects. The flight deck reads everything; economy reads only the
-hold. And a section cannot read its *peers* — First Class sees every
-conversation in business and economy, and none of the other First Class ones,
-because a chat with one end level with you is not behind you.
+Three consequences worth stating plainly, because they are the point rather
+than side effects. The flight deck reads everything, and economy — with no
+cabin behind it — reads nothing. A section cannot read its *peers*: First
+Class sees every conversation in business and economy, and none of the other
+First Class ones, because a chat with one end level with you is not behind
+you.
+
+And **the hold is not a cabin.** Every rule above is scoped to the manifest.
+A wallet that did not get a seat is on no roster and has no name the page
+could put to it, so its card is not served and its conversations are not
+read out of the database in order to be withheld. Both queries name the
+seats — `WHERE address IN (…)` and `WHERE sender IN (…) AND recipient IN
+(…)`, a cabinful of bound parameters — rather than asking for everything and
+filtering after. A row nobody can be shown is a row not worth fetching.
 
 So the seat is not just a placement any more. It is how far forward you can
 see, which is the seat ladder's own argument applied to people instead of

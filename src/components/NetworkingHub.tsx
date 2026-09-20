@@ -83,7 +83,9 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
     if (!viewerZone) return null;
     const ahead = CABIN_ZONES.filter((zone) => outranks(zone.key, viewerZone)).map((zone) => sectionLabel(zone.key));
     const behind = CABIN_ZONES.filter((zone) => outranks(viewerZone, zone.key)).map((zone) => sectionLabel(zone.key));
-    return { ahead: list(ahead), aheadCount: ahead.length, behind: list([...behind, 'the hold']) };
+    // The hold is not a cabin: nobody on the manifest, nobody on the roster,
+    // and so nothing to read back there.
+    return { ahead: list(ahead), aheadCount: ahead.length, behind: list(behind), behindCount: behind.length };
   }, [viewerZone]);
   const overheardBy = sections?.ahead ?? '';
 
@@ -155,7 +157,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
               {sections ? (
                 <>
                   From <strong className="text-ui-ink">{sectionLabel(viewerZone as ZoneKey)}</strong> you read your own
-                  section and everything behind it — {sections.behind}.{' '}
+                  section{sections.behindCount ? <> and everything behind it — {sections.behind}</> : <>, and there is no cabin behind you</>}.{' '}
                   {sections.aheadCount
                     ? <>{sections.ahead} {sections.aheadCount === 1 ? 'reads' : 'read'} you, and you cannot read them.</>
                     : <>Nothing is ahead of you. The whole aircraft is yours to read.</>}

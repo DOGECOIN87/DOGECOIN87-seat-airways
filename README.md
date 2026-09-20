@@ -265,9 +265,16 @@ has not bought their way into the cabin.
 forward.** A name and a role are the roster and belong to everyone. Contact
 details reach your own section and every cabin behind it. A conversation is
 readable by the two wallets on it and by any section seated ahead of *both* —
-so the flight deck reads everything, economy reads only the hold, and no
-section can read its own peers, because a chat with one end level with you is
-not behind you. The seat stopped being a placement and became how far forward
+so the flight deck reads everything and economy, with no cabin behind it,
+reads nothing. No section can read its own peers either, because a chat with
+one end level with you is not behind you.
+
+**The hold is not a cabin.** Everything above is scoped to the manifest: a
+wallet that did not get a seat is on no roster, has no name the page could
+put to it, and is not somebody the aircraft can see. So its cards are not
+served and its conversations are not read out of the database to then be
+withheld — the queries ask for the seats, which are at most a cabinful, and
+never for the rest. The seat stopped being a placement and became how far forward
 you can see, which is the seat ladder's own argument applied to people rather
 than to legroom.
 

@@ -33,7 +33,6 @@ check('you can read every cabin behind you', () => {
   assert.equal(canViewContact(deck, economy), true);
   assert.equal(canViewContact(first, business), true);
   assert.equal(canViewContact(business, economy), true);
-  assert.equal(canViewContact(economy, hold), true, 'the hold is behind the last row');
 });
 
 check('you can read nothing ahead of you', () => {
@@ -42,8 +41,10 @@ check('you can read nothing ahead of you', () => {
   assert.equal(canViewContact(first, deck), false);
 });
 
-check('the hold reads nobody, and neither does a visitor', () => {
-  assert.equal(canViewContact(hold, economy), false);
+check('the hold is not a cabin: nobody reads it, and it reads nobody', () => {
+  assert.equal(canViewContact(hold, economy), false, 'an unseated wallet reads nothing');
+  assert.equal(canViewContact(economy, hold), false, 'there is no card in the hold to read');
+  assert.equal(canViewContact(deck, hold), false, 'not even from the flight deck');
   assert.equal(canViewContact(hold, hold), false);
 });
 
@@ -60,9 +61,11 @@ check('a section cannot read its own peers', () => {
   assert.equal(canOverhear(business, business, business), false);
 });
 
-check('the hold overhears nothing', () => {
-  assert.equal(canOverhear(hold, first, economy), false);
-  assert.equal(canOverhear(economy, hold, hold), true, 'but the last row hears the hold');
+check('a conversation with the hold is nobody’s to read', () => {
+  assert.equal(canOverhear(hold, first, economy), false, 'an unseated wallet overhears nothing');
+  assert.equal(canOverhear(economy, hold, hold), false, 'two wallets nobody can see are not the cabin’s business');
+  assert.equal(canOverhear(deck, economy, hold), false, 'one end off the manifest is enough to close it');
+  assert.equal(canOverhear(economy, hold, economy), false);
 });
 
 check('outranks is strictly forward', () => {

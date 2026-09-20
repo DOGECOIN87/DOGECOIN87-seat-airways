@@ -459,6 +459,28 @@ await check('and never aft', async () => {
   );
 });
 
+await check('a conversation with the hold is fetched by nobody', async () => {
+  /* `owner` is the wallet from the banner cases: it holds no seat, so it is
+     on no manifest and no roster, and the page could not name it if it tried.
+     A conversation it is part of is not the cabin's business, and — the
+     reason this is a rule rather than a filter — not something the Worker
+     should be reading out of the database to then decline to show. */
+  const stranger = await wallet();
+  const strangerToken =
+    (await (await api('/session', { method: 'POST', body: await signInBody(stranger) })).json()).token;
+  await api('/messages', {
+    method: 'POST', token: strangerToken,
+    body: { to: owner, body: 'Two wallets in the hold, talking.' },
+  });
+
+  const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
+  const heard = await (await api('/messages', { token: captainToken })).json();
+  assert(
+    !heard.overheard.some((m) => m.body === 'Two wallets in the hold, talking.'),
+    'the flight deck was served a conversation between two wallets with no seats',
+  );
+});
+
 await check('the two wallets on a message always read it', async () => {
   const mine = await (await api('/messages', { token: aliceToken })).json();
   assert(mine.sent.some((m) => m.to === bob.address), 'the sender lost their own message');
