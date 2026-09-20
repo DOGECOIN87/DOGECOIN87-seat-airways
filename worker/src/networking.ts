@@ -46,6 +46,16 @@ export interface NetworkingProfile {
   email: string;
   website: string;
   linkedin: string;
+  /**
+   * Whether the contact fields go out to other holders at all.
+   *
+   * The page shows contact details to your own section, and this service
+   * cannot check that: sections come from the seat ladder, which it
+   * deliberately does not know. So the real audience for anything in the
+   * directory is every signed-in holder, and this is the holder saying yes
+   * to that rather than the page implying a smaller room than there is.
+   */
+  shareContact: boolean;
 }
 
 export interface NetworkingMessage {
@@ -57,7 +67,7 @@ export interface NetworkingMessage {
 }
 
 export const EMPTY_PROFILE: NetworkingProfile = {
-  displayName: '', role: '', email: '', website: '', linkedin: '',
+  displayName: '', role: '', email: '', website: '', linkedin: '', shareContact: false,
 };
 
 /** A Solana address is a 32-byte ed25519 key wearing base58. */
@@ -115,6 +125,8 @@ export function readProfileInput(value: unknown): { profile: NetworkingProfile }
     email: field(v.email, FIELD_LIMITS.email),
     website: field(v.website, FIELD_LIMITS.website),
     linkedin: field(v.linkedin, FIELD_LIMITS.linkedin),
+    // Anything other than a plain yes is a no.
+    shareContact: v.shareContact === true,
   };
   if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) {
     return { error: 'That email address does not look like one.' };

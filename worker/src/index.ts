@@ -102,22 +102,23 @@ async function storeImage(
 /**
  * The URL an already-stored image is served from.
  *
- * ── Why there is a version on the end ─────────────────────────────────────
- * The key is the wallet, so replacing an advert overwrites it in place and
- * the URL never changes. That is the right storage shape — one wallet, one
- * advert, nothing to sweep up — and it made publishing look broken.
+ * ── Why the key is the hash of the bytes ──────────────────────────────────
+ * Keyed by wallet, replacing an advert overwrote it in place and the URL
+ * never changed. The bytes are cached, so a holder who put up a second
+ * advert was handed the URL their browser had cached for the first: the page
+ * showed the *old* picture immediately after a publish they had just signed
+ * for. Nothing had failed, and there was no way for the browser to know.
+ * They would try again, hit the cooldown, and be told to slow down.
  *
- * The bytes are served with `max-age=300`. A holder who put up a second
- * advert got back the URL their browser had cached five minutes ago, so the
- * page showed the *old* picture, on the seat, immediately after a successful
- * publish they had just signed for. Nothing had failed; there was simply no
- * way for the browser to know the image behind that URL had changed. So they
- * would try again, hit the sixty-second cooldown, and be told to slow down.
+ * Addressing an image by its own content settles that at the storage layer
+ * rather than with a query string bolted on the end. Different artwork is a
+ * different URL because it is a different image; the same artwork is the
+ * same URL, so a re-upload costs nothing and there is no cache to bust. It
+ * is also what makes `immutable` honest on the read path: that URL cannot
+ * ever mean different bytes.
  *
- * The record already carries the time it was written, and that is exactly
- * the fact a cache needs: same advert, same URL, and a new advert is a URL
- * no cache has seen. Both storage backends ignore the query string when
- * looking the bytes up, and both cache on the whole URL including it.
+ * `updated` therefore only reaches records written before this — keys that
+ * are not hash-shaped, which still need the version to be re-read.
  */
 function imageUrl(env: Env, request: Request, key: string, updated?: string): string {
   const base = usingR2(env)
@@ -282,6 +283,7 @@ interface ProfileRow {
   email: string;
   website: string;
   linkedin: string;
+  share_contact: number;
   updated_at: string;
 }
 
@@ -293,15 +295,29 @@ interface MessageRow {
   sent_at: string;
 }
 
-const asProfile = (row: ProfileRow) => ({
-  address: row.address,
-  displayName: row.display_name,
-  role: row.role,
-  email: row.email,
-  website: row.website,
-  linkedin: row.linkedin,
-  updated: row.updated_at,
-});
+/**
+ * A card as the asking wallet is allowed to see it.
+ *
+ * Name and role are what the roster is for and go to everyone. The contact
+ * fields are withheld unless their owner has said to share them — with your
+ * own card the exception, since a holder editing their own is not a stranger
+ * reading it. `sharesContact` goes out either way, so the page can say
+ * "not shared" rather than showing a blank and implying there is nothing
+ * there.
+ */
+const asProfile = (row: ProfileRow, viewer: string) => {
+  const open = row.share_contact === 1 || row.address === viewer;
+  return {
+    address: row.address,
+    displayName: row.display_name,
+    role: row.role,
+    email: open ? row.email : '',
+    website: open ? row.website : '',
+    linkedin: open ? row.linkedin : '',
+    sharesContact: row.share_contact === 1,
+    updated: row.updated_at,
+  };
+};
 
 const asMessage = (row: MessageRow) => ({
   id: row.id,
@@ -442,12 +458,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (request.method === 'GET' && url.pathname === '/directory') {
         const { results } = await db
           .prepare(
-            'SELECT address, display_name, role, email, website, linkedin, updated_at' +
+            'SELECT address, display_name, role, email, website, linkedin, share_contact, updated_at' +
             ' FROM profiles ORDER BY updated_at DESC LIMIT 500',
           )
           .all<ProfileRow>();
         const out: Record<string, ReturnType<typeof asProfile>> = {};
-        for (const row of results ?? []) out[row.address] = asProfile(row);
+        for (const row of results ?? []) out[row.address] = asProfile(row, me);
         return json(out, 200, priv);
       }
 
@@ -465,16 +481,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
         const { profile } = parsed;
         await db
           .prepare(
-            'INSERT INTO profiles (address, display_name, role, email, website, linkedin, updated_at)' +
-            ' VALUES (?, ?, ?, ?, ?, ?, ?)' +
+            'INSERT INTO profiles (address, display_name, role, email, website, linkedin, share_contact, updated_at)' +
+            ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)' +
             ' ON CONFLICT(address) DO UPDATE SET display_name = excluded.display_name,' +
             ' role = excluded.role, email = excluded.email, website = excluded.website,' +
-            ' linkedin = excluded.linkedin, updated_at = excluded.updated_at',
+            ' linkedin = excluded.linkedin, share_contact = excluded.share_contact,' +
+            ' updated_at = excluded.updated_at',
           )
-          .bind(me, profile.displayName, profile.role, profile.email, profile.website, profile.linkedin, updated)
+          .bind(
+            me, profile.displayName, profile.role, profile.email, profile.website, profile.linkedin,
+            profile.shareContact ? 1 : 0, updated,
+          )
           .run();
 
-        return json({ ...profile, address: me, updated }, 200, priv);
+        return json({ ...profile, address: me, sharesContact: profile.shareContact, updated }, 200, priv);
       }
 
       if (request.method === 'GET' && url.pathname === '/messages') {

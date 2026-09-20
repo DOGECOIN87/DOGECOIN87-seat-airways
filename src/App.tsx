@@ -781,7 +781,7 @@ export default function App() {
       <footer className="sa-footer">
         <div className="mx-auto max-w-[94rem] px-5 sm:px-8">
           <div className="sa-close">
-            <Mark size={34} background="none" color="#0087EA" />
+            <Mark size={40} variant="badge" />
             <p className="sa-close__line">Hold more. Fly higher.</p>
             <a href="#wall" className="sa-cta sa-shine mt-2" onMouseEnter={prefetchSeatMap} onFocus={prefetchSeatMap}>
               Claim a seat <span aria-hidden>→</span>

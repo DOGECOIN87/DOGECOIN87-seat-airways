@@ -97,7 +97,8 @@ await check('a genuine signed advert is accepted and stored', async () => {
   const res = await post(await signedBody());
   const body = await res.json();
   assert(res.status === 200, `status ${res.status}: ${JSON.stringify(body)}`);
-  assert(typeof body.image === 'string' && body.image.includes(owner), 'no image url back');
+  assert(typeof body.image === 'string' && /\/banners\/[0-9a-f]{32}\.jpg/.test(body.image),
+    `no image url back: ${body.image}`);
 });
 
 await check('the stored advert appears on the wall', async () => {
@@ -118,11 +119,12 @@ await check('the artwork is addressable, and served correctly in KV mode', async
      Fetching it would be testing Cloudflare's CDN, not this code. */
   const wall = await (await fetch(`${BASE}/banners`, { headers: { origin: ORIGIN } })).json();
   const url = wall[owner].image;
-  assert(typeof url === 'string' && url.includes(owner), 'image url does not name the owner');
+  assert(typeof url === 'string' && /\/banners\/[0-9a-f]{32}\.(jpg|png|webp)$/.test(url),
+    `image url is not addressed by its content: ${url}`);
 
   const servedByWorker = url.startsWith(BASE);
   if (!servedByWorker) {
-    assert(/^https:\/\/.+\/banners\/.+\.(jpg|png)\?v=\d+$/.test(url), `malformed R2 url: ${url}`);
+    assert(/^https:\/\/.+\/banners\/[0-9a-f]{32}\.(jpg|png|webp)$/.test(url), `malformed R2 url: ${url}`);
     return;
   }
 
@@ -159,29 +161,33 @@ await check('the artwork is readable as a WebGL texture', async () => {
   assert(head.headers.get('content-type') === 'image/jpeg', `HEAD type ${head.headers.get('content-type')}`);
 });
 
-await check('the image URL is versioned, so a replacement is not read from cache', async () => {
-  /* Adverts are keyed by wallet and overwritten in place, so without this the
-     second advert a holder publishes lives at the URL their browser cached
-     five minutes ago for the first one — the publish succeeds, the seat keeps
-     showing the old picture, and it looks like nothing saved.
+await check('the image URL is the image, so a replacement cannot be read from cache', async () => {
+  /* The failure this pins: an advert overwritten in place keeps its URL, so
+     the holder who publishes a second one is handed the URL their browser
+     cached for the first. The publish succeeds, the seat keeps showing the
+     old picture, and it looks like nothing saved.
 
-     Replacing one for real is not exercised here: the cooldown is a minute
-     and an e2e suite should not sit through it. What is checked instead is
-     the mechanism the fix rests on — the version is the moment the record
-     was written, so a new advert necessarily gets a URL no cache has seen,
-     and carrying a query string does not stop the bytes being found. */
-  const before = Date.now();
+     The key is the hash of the bytes, which settles it at the storage layer
+     rather than with a cache-busting query: different artwork is a different
+     URL because it is a different image, and the same artwork is the same
+     URL, which is why these can then be served immutable for a year.
+
+     Replacing one for real is not exercised here — the cooldown is a minute
+     and an e2e suite should not sit through it. What is checked is the
+     property the whole scheme rests on: the URL is derived from the bytes
+     that were uploaded, and nothing else. */
   const wall = await (await fetch(`${BASE}/banners`, { headers: { origin: ORIGIN } })).json();
   const url = wall[owner].image;
 
-  const version = Number(new URL(url).searchParams.get('v'));
-  assert(Number.isFinite(version) && version > 0, `no version on the image url: ${url}`);
-  assert(version <= before && version > before - 10 * 60_000, `version is not when it was stored: ${version}`);
+  const hash = await sha256Hex(JPEG);
+  assert(url.includes(`banners/${hash.slice(0, 32)}.jpg`), `the url is not this image's hash: ${url}`);
 
   if (!url.startsWith(BASE)) return; // R2 mode: the bucket serves these.
   const res = await fetch(url);
-  assert(res.status === 200, `a versioned url did not serve the bytes: ${res.status}`);
-  assert((await res.arrayBuffer()).byteLength === JPEG.length, 'versioned url served the wrong bytes');
+  assert(res.status === 200, `a content-addressed url did not serve the bytes: ${res.status}`);
+  assert((await res.arrayBuffer()).byteLength === JPEG.length, 'it served the wrong bytes');
+  assert(/immutable/.test(res.headers.get('cache-control') ?? ''),
+    `a url that can only ever mean these bytes was not cacheable: ${res.headers.get('cache-control')}`);
 });
 
 await check('a second publish is rate limited', async () => {
@@ -322,7 +328,8 @@ await check('a card is published and read back', async () => {
   const mine = roster[alice.address];
   assert(mine, 'the published card is not in the directory');
   assert(mine.displayName === 'Aisle Hopper', `the wrong name came back: ${mine.displayName}`);
-  assert(mine.email === card.email, 'the email did not survive the round trip');
+  assert(mine.email === card.email, 'the holder cannot read their own email back');
+  assert(mine.sharesContact === false, 'publishing a card shared the contact details by itself');
 });
 
 await check('a card survives a new session, which localStorage never did', async () => {
@@ -339,8 +346,31 @@ await check('a javascript: contact link is refused', async () => {
   assert(res.status === 400, `status ${res.status}, expected 400`);
 });
 
-await check('an introduction reaches the other wallet', async () => {
+await check('contact details are withheld from other holders until shared', async () => {
   bobToken = (await (await api('/session', { method: 'POST', body: await signInBody(bob) })).json()).token;
+
+  const withheld = (await (await api('/directory', { token: bobToken })).json())[alice.address];
+  assert(withheld, 'the card is missing from another holder’s roster entirely');
+  assert(withheld.displayName === 'Aisle Hopper', 'the name should be on the roster for everyone');
+  assert(withheld.email === '', `another holder read an unshared email: ${withheld.email}`);
+  assert(withheld.website === '', 'another holder read an unshared website');
+  assert(withheld.sharesContact === false, 'the card claims to share what it withholds');
+
+  // Opting in is what hands them over, and nothing else.
+  await api('/profile', {
+    method: 'PUT', token: aliceToken,
+    body: {
+      displayName: 'Aisle Hopper', role: 'Partnerships',
+      email: 'aisle@seat-airlines.space', website: 'https://seat-airlines.space',
+      linkedin: '', shareContact: true,
+    },
+  });
+  const shared = (await (await api('/directory', { token: bobToken })).json())[alice.address];
+  assert(shared.email === 'aisle@seat-airlines.space', 'opting in did not hand the email over');
+  assert(shared.sharesContact === true, 'the shared card does not say so');
+});
+
+await check('an introduction reaches the other wallet', async () => {
 
   const sent = await api('/messages', {
     method: 'POST', token: aliceToken, body: { to: bob.address, body: 'Row 1 here — shall we talk?' },

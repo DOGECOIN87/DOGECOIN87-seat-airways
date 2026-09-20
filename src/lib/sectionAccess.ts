@@ -1,3 +1,17 @@
+/**
+ * What your seat entitles you to see.
+ *
+ * Cards and introductions themselves live in the Worker's database — see
+ * `networkingApi.ts`. What is left here is the part that is nobody's to
+ * store: which of them the page puts in front of you, read off the seat
+ * ladder it has already worked out.
+ *
+ * This is the page's own filter, not the boundary. The server cannot check a
+ * section without a second copy of that ladder, so the rule it does hold is
+ * consent: contact details reach nobody but their owner until that holder
+ * opts in. These two work together — the server decides what may be sent,
+ * this decides what is worth showing.
+ */
 import type { ZoneKey } from '../content/cabin';
 
 /** Same-section contact access is the networking perk for seated holders. */
@@ -43,13 +57,6 @@ export function defaultRole(zone: ZoneKey): string {
 export function shortMember(address: string): string {
   return address.length > 12 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;
 }
-
-/**
- * Cards and introductions themselves live in the Worker's database rather
- * than here — see `networkingApi.ts`. What is left in this module is the part
- * that is nobody's to store: which of them you are allowed to see, which is
- * read off the seat ladder the page has already worked out.
- */
 
 export function isValidExternalUrl(value: string): boolean {
   if (!value) return true;

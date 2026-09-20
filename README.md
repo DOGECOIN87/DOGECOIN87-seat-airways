@@ -262,7 +262,15 @@ cannot mint a second token, and there is a cap on how many introductions a
 wallet can send in an hour. What it cannot enforce is anything that would
 require knowing who sits where — the section perks are the page's reading of
 the manifest, for the same reason adverts are keyed by wallet rather than by
-seat. `worker/README.md` has that argument in full.
+seat.
+
+Which is why **contact details are withheld until their holder opts in.** A
+name and a role are what a roster is for and go out to every signed-in
+holder; an email cannot be promised to one section by a service that cannot
+tell the sections apart. So the card asks, in the words that are true — these
+go to any signed-in holder, not only your section — and nothing leaves until
+the answer is yes. Consent is a thing a server can check; a seat is not.
+`worker/README.md` has that argument in full.
 
 Without `VITE_DIRECTORY_API` (which falls back to `VITE_BANNERS_API`, since
 one Worker serves both), the hub says plainly that no directory is connected

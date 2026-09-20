@@ -125,32 +125,45 @@ Which seat anybody is in — for the same reason the wall does not, and the
 page reads the ladder; this service answers "is this really the wallet it
 claims to be".
 
-So the line this service draws is the one it can actually hold:
+So the lines it draws are the ones it can actually hold:
 
 | | |
 | --- | --- |
-| A card | published to the cabin — any signed-in holder can read it |
+| A name and role | on the roster for any signed-in holder — that is what a roster is |
+| Contact details | withheld from everyone but their owner until that holder opts in |
 | An introduction | readable only by the two wallets named on it |
 
-The finer perks — contacts shown to your own section, introductions between
-First Class members — are the page's reading of the manifest it already holds,
-and they are an interface affordance rather than a server-enforced boundary.
-Anything stronger would mean a second copy of the seat ladder here, drifting
-from the page's copy from the day it was written. Publish into a card only
-what you are content for the cabin to have.
+That middle row exists because the page shows contact details to your own
+section and this service cannot check that claim. Sections come off the seat
+ladder, which it does not know, so the real audience for anything it hands
+out is every signed-in holder. Publishing a card used to mean publishing an
+email address to that whole room by implication. Now the contact fields are
+withheld until somebody ticks a box that says, in those words, who will be
+able to read them — because consent is a thing a server *can* check, and a
+section is not.
+
+The finer perks — contacts surfaced to your own section, introductions
+between First Class members — remain the page's reading of the manifest it
+already holds: an interface affordance, not a boundary. Anything stronger
+would mean a second copy of the seat ladder here, drifting from the page's
+copy from the day it was written.
 
 Abuse is bounded by what does not need the ladder: 20 introductions per wallet
 per hour, 1,000 characters each, and contact links that must be `http(s)`.
 
 ## Serving the artwork
 
-An advert is keyed by the wallet that published it, so replacing one
-overwrites it in place and its URL never changes. Left there, that makes a
-successful publish look like a failure: the bytes are served with
-`max-age=300`, so a holder putting up their second advert is handed a URL
-their browser cached five minutes ago and the seat keeps showing the old
-picture. The URL therefore carries `?v=<the moment it was stored>` — same
-advert, same URL; new advert, a URL no cache has seen.
+A record is keyed by the wallet that published it, but the **artwork is
+keyed by its own hash**. Keyed by wallet, replacing an advert overwrote it in
+place and its URL never changed, which made a successful publish look like a
+failure: the holder putting up their second advert was handed the URL their
+browser had already cached, and the seat kept showing the old picture.
+
+Addressing the bytes by their content settles that where it belongs. New
+artwork is a new URL because it is a new image; the same artwork is the same
+URL, so re-uploading costs nothing. It is also what lets the read path answer
+`immutable` with a straight face — that URL cannot ever mean different bytes,
+so a browser never has to ask about it again.
 
 The `/images/` route answers with `access-control-allow-origin: *`, which the
 API routes deliberately do not. The adverts on the cabin's seat-back screens
