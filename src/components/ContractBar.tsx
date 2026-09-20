@@ -19,18 +19,8 @@ import { PUMP_URL, TOKEN_MINT, hasToken } from '../lib/token';
 /** Stands in until the deployment is pointed at a token. */
 const PLACEHOLDER = 'XXXXXXXXXXXXXXXXXXXXX';
 
-/**
- * The pump.fun capsule.
- *
- * Drawn here rather than fetched: one more network request on the critical
- * path for a 16-pixel glyph is a poor trade, and a remote asset that fails to
- * load leaves a broken image in the header.
- */
 const PumpMark = () => (
-  <svg viewBox="0 0 24 24" aria-hidden className="sa-pump__mark">
-    <rect x="3.4" y="3.4" width="17.2" height="17.2" rx="8.6" transform="rotate(45 12 12)" fill="#4ADE80" />
-    <path d="M6 12 L18 12" stroke="#0F7A3D" strokeWidth="1.6" strokeLinecap="round" transform="rotate(45 12 12)" />
-  </svg>
+  <img src="/pump-logomark.svg" alt="" aria-hidden className="sa-pump__mark" />
 );
 
 const ContractBar = () => {
