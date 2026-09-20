@@ -699,11 +699,12 @@ export default function App() {
               <span className="sa-eyebrow__no">03</span> Section network
             </p>
             <h2 id="network-title" className="sa-display sa-display--2 mt-3">
-              Your section is your network
+              Your seat is how far you can see
             </h2>
             <p className="sa-lead mt-4">
-              Same-section holders can exchange contact links. First Class is the private introduction channel:
-              only First Class members can message one another.
+              Everybody is on the roster. What the seat buys is the view aft: the contact details of your own
+              section and every cabin behind it, and the conversations those cabins are having. Look forward and
+              there is nothing — the rows ahead of you keep their cards and their messages to themselves.
             </p>
           </header>
           <div className="mt-9">
@@ -794,7 +795,7 @@ export default function App() {
               <div className="sa-footer__links">
                 <a href="#top">Outside · the whole aeroplane</a>
                 <a href="#wall">The wall · {MANIFEST_SIZE} seats, {manifest.open} open</a>
-                <a href="#network">Section network · same-section access</a>
+                <a href="#network">Section network · read the cabins behind you</a>
                 <a href="#check-in">Check in · where you sit</a>
               </div>
             </nav>

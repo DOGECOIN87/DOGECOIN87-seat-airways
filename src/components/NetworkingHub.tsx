@@ -32,6 +32,10 @@ function holderName(entry: ManifestEntry): string {
   return `Holder ${entry.address.slice(0, 4)}`;
 }
 
+/** "Business, Exit Row and Economy" — a list a person would read aloud. */
+const list = (items: string[]) =>
+  items.length <= 1 ? items[0] ?? '' : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
 const when = (iso: string) => {
   const at = new Date(iso);
   return Number.isNaN(at.getTime()) ? '' : at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -72,14 +76,16 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
       : EMPTY_PROFILE);
   }, [published, editing]);
 
-  /* Who is seated far enough forward to read what you write here. Empty on
-     the flight deck, which has nobody in front of it. */
-  const overheardBy = useMemo(() => {
-    if (!viewerZone) return '';
+  /* The rule, in the only terms that matter to the person reading it: the
+     names of the cabins on either side of them. Stated rather than left to
+     be worked out from a card that will not open. */
+  const sections = useMemo(() => {
+    if (!viewerZone) return null;
     const ahead = CABIN_ZONES.filter((zone) => outranks(zone.key, viewerZone)).map((zone) => sectionLabel(zone.key));
-    if (!ahead.length) return '';
-    return ahead.length === 1 ? ahead[0] : `${ahead.slice(0, -1).join(', ')} and ${ahead[ahead.length - 1]}`;
+    const behind = CABIN_ZONES.filter((zone) => outranks(viewerZone, zone.key)).map((zone) => sectionLabel(zone.key));
+    return { ahead: list(ahead), aheadCount: ahead.length, behind: list([...behind, 'the hold']) };
   }, [viewerZone]);
+  const overheardBy = sections?.ahead ?? '';
 
   const senders = useMemo(() => {
     const byAddress = new Map(manifest.entries.map((entry) => [entry.address, entry] as const));
@@ -115,8 +121,9 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
       <Shell>
         <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The cabin network opens at boarding</h3>
         <p className="mt-2 max-w-[58ch] text-[13px] leading-relaxed text-ui-soft">
-          Connect a wallet to see the live section roster. Contact links are a same-section perk, while First
-          Class members get the private introduction channel.
+          Connect a wallet to see the live roster. Where you sit decides what you can read: the contact details of
+          your own section and every cabin behind it, and the conversations happening back there. The rows in front
+          of you are closed, which is what makes the next seat up worth taking.
         </p>
       </Shell>
     );
@@ -143,10 +150,22 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Section network</p>
-            <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The people in your section</h3>
+            <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The cabin, from your seat</h3>
             <p className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-ui-soft">
-              Your seat is more than placement. It is an access tier for meeting builders, advertisers, and partners
-              who are flying at the same level.
+              {sections ? (
+                <>
+                  From <strong className="text-ui-ink">{sectionLabel(viewerZone as ZoneKey)}</strong> you read your own
+                  section and everything behind it — {sections.behind}.{' '}
+                  {sections.aheadCount
+                    ? <>{sections.ahead} {sections.aheadCount === 1 ? 'reads' : 'read'} you, and you cannot read them.</>
+                    : <>Nothing is ahead of you. The whole aircraft is yours to read.</>}
+                </>
+              ) : (
+                <>
+                  Every holder is on the roster. Claim a seat and it decides how far up the aircraft you can read:
+                  your own section and every cabin behind it, and none of the ones in front.
+                </>
+              )}
             </p>
           </div>
           <div className="rounded-full border border-[#FFB300]/40 bg-[#FFF9E8] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8A5A00]">
@@ -155,12 +174,13 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
         </div>
         <div className="mt-5 grid gap-2 text-[11px] leading-relaxed text-ui-soft sm:grid-cols-2">
           <p className="rounded-xl border border-ui-line bg-ui-bg px-3 py-2.5">
-            <strong className="text-ui-ink">Contacts:</strong> your own section and every cabin behind it. What is
-            forward of you stays forward of you.
+            <strong className="text-ui-ink">Names</strong> are the roster and belong to everyone.{' '}
+            <strong className="text-ui-ink">Contact details</strong> go to the holder's own section and every cabin
+            behind it — an email you publish is read by the rows ahead of you, never by the ones behind.
           </p>
           <p className="rounded-xl border border-ui-line bg-ui-bg px-3 py-2.5">
-            <strong className="text-ui-ink">Messages:</strong> First Class introduces itself to First Class — and
-            every section reads the conversations of the sections behind it.
+            <strong className="text-ui-ink">Conversations</strong> are readable by the two wallets on them and by any
+            section ahead of both — so the flight deck hears the aircraft, and your own section never hears you.
           </p>
         </div>
       </header>
@@ -262,8 +282,8 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
           ) : !directory.session ? (
             <div className="mt-4 space-y-3 text-[12px] leading-relaxed text-ui-soft">
               <p>
-                Sign a one-line message to open the directory. It proves the wallet is yours, lasts a day, and
-                authorises no transaction.
+                Sign a one-line message to open the directory: the roster, the cards your seat lets you read, and
+                your introductions. It proves the wallet is yours, lasts a day, and authorises no transaction.
               </p>
               <button type="button" onClick={() => void directory.signIn()} disabled={directory.signingIn} className="sa-cta w-full justify-center disabled:opacity-60">
                 {directory.signingIn ? 'Check your wallet…' : 'Sign in to the directory'} <span aria-hidden>→</span>
