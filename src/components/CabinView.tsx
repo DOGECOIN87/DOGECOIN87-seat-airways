@@ -253,28 +253,6 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
           <ellipse cx={f.cx + f.rx * 1.7} cy={f.cy + 60} rx={f.rx * 2.2} ry={f.ry * 1.1} fill="url(#cv-daylight)" opacity="0.6" />
         </g>
 
-        {/* The first-class bulkhead: row 1 faces the sealed flight-deck door,
-            not an unexplained empty wall. It sits behind the seat-back so the
-            door reads as the boundary ahead of the suite without hiding the
-            passenger's own screen. */}
-        {cockpitDoor && (
-          <g>
-            <path d="M382 208 Q600 176 818 208 L856 410 Q600 438 344 410 Z" fill="#24231F" stroke="#7C7566" strokeWidth="3" />
-            <rect x="438" y="222" width="324" height="194" rx="10" fill="#35332D" stroke="#9C9484" strokeWidth="2" />
-            <rect x="466" y="247" width="268" height="74" rx="5" fill="#0B0C0F" stroke="#6E685C" strokeWidth="2" />
-            <path d="M486 304 H714" stroke="#3F4B56" strokeWidth="3" opacity="0.8" />
-            <circle cx="600" cy="278" r="8" fill="#172330" stroke={CYAN} strokeWidth="1.5" />
-            <rect x="706" y="337" width="16" height="44" rx="6" fill="#BFB8A8" />
-            <rect x="490" y="347" width="220" height="27" rx="3" fill="#0B0C0F" stroke={AMBER} strokeWidth="1.4" />
-            <text x="600" y="366" textAnchor="middle" fill={AMBER} fontSize="12" fontWeight="700" letterSpacing="2.6" fontFamily={MONO}>
-              FLIGHT DECK
-            </text>
-            <text x="600" y="402" textAnchor="middle" fill="#BFB8A8" fontSize="10" letterSpacing="1.8" fontFamily={MONO}>
-              CREW ONLY · KEEP CLOSED
-            </text>
-          </g>
-        )}
-
         {/* ══ THE ROW AHEAD ═════════════════════════════════════════════ */}
         {lavatory ? (
           <g>
@@ -395,6 +373,52 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
                 </g>
                 <ellipse cx={seatL + 34} cy={seatTop + 168} rx="17" ry="7" fill="#BFB8A8" opacity="0.5" />
                 <path d={`M${seatL + 21} ${seatTop + 168} l 4 30 h 18 l 4 -30 Z`} fill="#DDE6F2" opacity="0.35" />
+              </g>
+            )}
+
+            {/* A real aisle runs between the two seat banks. It starts beneath
+                the seat-back screen and widens toward the camera, giving the
+                cabin a floor path instead of making the middle read as a
+                solid wall of seats. */}
+            <g>
+              <path d="M548 650 L652 650 L808 800 H392 Z" fill="#11161D" stroke="#5E594E" strokeWidth="3" />
+              <path d="M560 662 L640 662 L760 800" fill="none" stroke="#39414F" strokeWidth="3" opacity="0.9" />
+              <path d="M440 800 L560 662" fill="none" stroke="#39414F" strokeWidth="3" opacity="0.9" />
+              {!cockpitDoor && (
+                <g transform="translate(600 680)">
+                  <path d="M-42 18 L-31 -6 H31 L42 18 Z" fill="#9C9484" stroke="#DDE6F2" strokeWidth="2" />
+                  <rect x="-34" y="-35" width="68" height="29" rx="4" fill="#3E4A63" stroke="#BFB8A8" strokeWidth="2" />
+                  <rect x="-25" y="-28" width="50" height="13" rx="2" fill="#0B0C0F" />
+                  <path d="M-29 -35 V-52 M29 -35 V-52" stroke="#BFB8A8" strokeWidth="3" />
+                  <circle cx="-25" cy="25" r="7" fill="#0B0C0F" stroke="#BFB8A8" strokeWidth="2" />
+                  <circle cx="25" cy="25" r="7" fill="#0B0C0F" stroke="#BFB8A8" strokeWidth="2" />
+                  <text x="0" y="-18" textAnchor="middle" fill={CYAN} fontSize="7" fontWeight="700" letterSpacing="1.2" fontFamily={MONO}>SERVICE</text>
+                </g>
+              )}
+            </g>
+
+            {/* Row 1 faces a real cockpit entrance. This is deliberately drawn
+                in the foreground: a dark opening inside a thick bulkhead,
+                with the hinged door leaf, threshold, handle and crew sign all
+                visible instead of reading as a flat wall panel. */}
+            {cockpitDoor && (
+              <g>
+                <path d="M318 800 V274 Q318 214 378 194 Q600 144 822 194 Q882 214 882 274 V800 Z" fill="#17191D" stroke="#9C9484" strokeWidth="7" />
+                <path d="M356 800 V286 Q356 248 398 234 Q600 190 802 234 Q844 248 844 286 V800" fill="#05070B" stroke="#5E594E" strokeWidth="3" />
+                <path d="M402 800 V300 Q402 270 432 258 Q600 224 768 258 Q798 270 798 300 V800 Z" fill="#302E2A" stroke="#BFB8A8" strokeWidth="3" />
+                <rect x="466" y="300" width="268" height="96" rx="6" fill="#09121C" stroke="#6E685C" strokeWidth="2" />
+                <path d="M480 368 Q600 338 720 368" fill="none" stroke="#3F4B56" strokeWidth="3" />
+                <circle cx="600" cy="331" r="8" fill="#172330" stroke={CYAN} strokeWidth="1.5" />
+                <rect x="754" y="444" width="16" height="58" rx="7" fill="#DDE6F2" />
+                <rect x="484" y="438" width="232" height="32" rx="3" fill="#0B0C0F" stroke={AMBER} strokeWidth="1.6" />
+                <text x="600" y="460" textAnchor="middle" fill={AMBER} fontSize="13" fontWeight="700" letterSpacing="2.8" fontFamily={MONO}>
+                  FLIGHT DECK
+                </text>
+                <text x="600" y="506" textAnchor="middle" fill="#BFB8A8" fontSize="11" letterSpacing="1.8" fontFamily={MONO}>
+                  CREW ONLY · KEEP CLOSED
+                </text>
+                <path d="M350 760 H850" stroke="#BFB8A8" strokeWidth="8" opacity="0.6" />
+                <path d="M418 784 H782" stroke={AMBER} strokeWidth="2" strokeDasharray="9 8" opacity="0.9" />
               </g>
             )}
 
