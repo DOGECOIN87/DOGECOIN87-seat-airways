@@ -59,6 +59,7 @@ const CheckIn = lazy(() => import('./components/CheckIn'));
 const BoardingLadder = lazy(() => import('./components/BoardingLadder'));
 const SeatMap = lazy(loadSeatMap);
 const BoardingPass = lazy(() => import('./components/BoardingPass'));
+const NetworkingHub = lazy(() => import('./components/NetworkingHub'));
 const RadioLog = lazy(() => import('./components/RadioLog'));
 const prefetchFlightDeck = () => { void loadFlightDeck(); };
 const prefetchSeatMap = () => { void loadSeatMap(); };
@@ -690,7 +691,30 @@ export default function App() {
         </section>
 
         {/* ══════════════════════════════════════════════════════════════
-            03 · Your pass
+            03 · Section network
+            ══════════════════════════════════════════════════════════════ */}
+        <section id="network" className="sa-section scroll-mt-24" aria-labelledby="network-title">
+          <header className="sa-section-head">
+            <p className="sa-eyebrow">
+              <span className="sa-eyebrow__no">03</span> Section network
+            </p>
+            <h2 id="network-title" className="sa-display sa-display--2 mt-3">
+              Your section is your network
+            </h2>
+            <p className="sa-lead mt-4">
+              Same-section holders can exchange contact links. First Class is the private introduction channel:
+              only First Class members can message one another.
+            </p>
+          </header>
+          <div className="mt-9">
+            <Deferred minHeight="32rem">
+              <NetworkingHub manifest={manifest} address={seatKey} viewerZone={claimedSeat?.zone ?? null} />
+            </Deferred>
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════════════════════════════
+            04 · Your pass
             ══════════════════════════════════════════════════════════════ */}
         <section id="check-in" className="sa-section scroll-mt-24" aria-labelledby="pass-title">
           <header className="sa-section-head">
@@ -767,9 +791,10 @@ export default function App() {
           <div className="sa-footer__grid">
             <nav aria-labelledby="foot-aircraft">
               <p className="sa-footer__h" id="foot-aircraft">The aircraft</p>
-              <div className="sa-footer__list">
+              <div className="sa-footer__links">
                 <a href="#top">Outside · the whole aeroplane</a>
                 <a href="#wall">The wall · {MANIFEST_SIZE} seats, {manifest.open} open</a>
+                <a href="#network">Section network · same-section access</a>
                 <a href="#check-in">Check in · where you sit</a>
               </div>
             </nav>
