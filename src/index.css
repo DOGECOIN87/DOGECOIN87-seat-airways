@@ -159,19 +159,19 @@ html {
     url('/seat-airlines-mark-pattern.svg');
   background-repeat: repeat;
   background-size: 18rem 18rem;
-  background-position: 18rem 18rem, 27rem 27rem;
-  opacity: 0.9;
+  background-position: 0 0, 9rem 9rem;
+  opacity: 0.95;
   mask-image: linear-gradient(to bottom, transparent 0, black 10rem, black calc(100% - 10rem), transparent 100%);
-  animation: sa-logo-drift 16s ease-in-out infinite alternate;
-  will-change: background-position;
+  animation: sa-logo-drift 10s ease-in-out infinite alternate;
+  will-change: transform;
 }
 /* A barely perceptible cabin-at-cruise drift: the two vector layers move
    together, preserving the stagger while giving the background a living,
    airborne quality. The long duration keeps it atmospheric rather than
    attention-seeking. */
 @keyframes sa-logo-drift {
-  from { background-position: 18rem 18rem, 27rem 27rem; }
-  to { background-position: -2rem -2rem, 7rem 7rem; }
+  from { transform: translate3d(18rem, 18rem, 0); }
+  to { transform: translate3d(-18rem, -18rem, 0); }
 }
 /* The dark theme's grid and scanlines do not survive the move to a
    light panel — a panel face is a panel face, not a CRT. */
