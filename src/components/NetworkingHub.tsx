@@ -1,24 +1,23 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Manifest, ManifestEntry } from '../lib/manifest';
-import type { ZoneKey } from '../content/cabin';
+import { CABIN_ZONES, type ZoneKey } from '../content/cabin';
 import {
   canMessage,
   canViewContact,
   defaultRole,
   isValidExternalUrl,
-  readMessages,
-  readProfile,
+  outranks,
   sectionLabel,
   shortMember,
-  writeMessage,
-  writeProfile,
-  type NetworkingProfile,
 } from '../lib/sectionAccess';
+import { EMPTY_PROFILE, type NetworkingProfile } from '../lib/networkingApi';
+import { useDirectory } from '../lib/useDirectory';
 
 interface NetworkingHubProps {
   manifest: Manifest;
   address: string | null;
   viewerZone: ZoneKey | null;
+  sign: (message: string) => Promise<string>;
 }
 
 const zoneAccent: Record<ZoneKey, string> = {
@@ -29,62 +28,133 @@ const zoneAccent: Record<ZoneKey, string> = {
   economy: 'border-[#00A8D1] bg-[#EFFBFE]',
 };
 
-function displayName(entry: ManifestEntry): string {
+function holderName(entry: ManifestEntry): string {
   return `Holder ${entry.address.slice(0, 4)}`;
 }
 
-const NetworkingHub = ({ manifest, address, viewerZone }: NetworkingHubProps) => {
+/** "Business, Exit Row and Economy" — a list a person would read aloud. */
+const list = (items: string[]) =>
+  items.length <= 1 ? items[0] ?? '' : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
+const when = (iso: string) => {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? '' : at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+const Shell = ({ children }: { children: React.ReactNode }) => (
+  <section className="ui-card" aria-label="Section networking">
+    <div className="px-5 py-6 sm:px-7">
+      <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Section network</p>
+      {children}
+    </div>
+  </section>
+);
+
+const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubProps) => {
+  const directory = useDirectory(address, sign);
   const [selected, setSelected] = useState<string | null>(null);
-  const [profile, setProfile] = useState<NetworkingProfile>(() => readProfile(address));
   const [draft, setDraft] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const messages = useMemo(() => readMessages(address), [address, notice]);
+  const [form, setForm] = useState<NetworkingProfile>(EMPTY_PROFILE);
+  const [invalid, setInvalid] = useState<string | null>(null);
+
+  const published = address ? directory.profiles[address] : undefined;
   const currentEntry = manifest.entries.find((entry) => entry.address === address) ?? null;
 
-  const saveProfile = () => {
-    if (!address) return;
-    if (![profile.website, profile.linkedin].every(isValidExternalUrl)) {
-      setNotice('Use a full http:// or https:// link for contact URLs.');
+  // The card the server holds is what the editor opens on. Re-synced when it
+  // arrives, and left alone once somebody is typing into it.
+  useEffect(() => {
+    if (editing) return;
+    setForm(published
+      ? {
+        displayName: published.displayName,
+        role: published.role,
+        email: published.email,
+        website: published.website,
+        linkedin: published.linkedin,
+      }
+      : EMPTY_PROFILE);
+  }, [published, editing]);
+
+  /* The rule, in the only terms that matter to the person reading it: the
+     names of the cabins on either side of them. Stated rather than left to
+     be worked out from a card that will not open. */
+  const sections = useMemo(() => {
+    if (!viewerZone) return null;
+    /* Cabins with somebody in them, not cabins the aircraft has.
+       Seats fill strictly by rank, so at the default manifest size the last
+       one taken is the back of business and the two cabins behind it are
+       empty — naming them would promise a reader thirty-eight rows of people
+       who are not there. The hold is not a cabin at all: no manifest, no
+       roster, no name to put to anybody in it. */
+    const occupied = new Set(manifest.entries.map((entry) => entry.seat.zone));
+    const ahead = CABIN_ZONES.filter((zone) => outranks(zone.key, viewerZone) && occupied.has(zone.key));
+    const behind = CABIN_ZONES.filter((zone) => outranks(viewerZone, zone.key) && occupied.has(zone.key));
+    return {
+      ahead: list(ahead.map((zone) => sectionLabel(zone.key))),
+      aheadCount: ahead.length,
+      behind: list(behind.map((zone) => sectionLabel(zone.key))),
+      behindCount: behind.length,
+    };
+  }, [viewerZone, manifest.entries]);
+  const overheardBy = sections?.ahead ?? '';
+
+  const senders = useMemo(() => {
+    const byAddress = new Map(manifest.entries.map((entry) => [entry.address, entry] as const));
+    return (from: string) => {
+      const entry = byAddress.get(from);
+      const name = directory.profiles[from]?.displayName;
+      return name || (entry ? holderName(entry) : shortMember(from));
+    };
+  }, [manifest.entries, directory.profiles]);
+
+  const saveCard = async () => {
+    if (![form.website, form.linkedin].every(isValidExternalUrl)) {
+      setInvalid('Use a full http:// or https:// link for contact URLs.');
       return;
     }
-    writeProfile(address, profile);
-    setEditing(false);
-    setNotice('Your same-section card is updated.');
+    setInvalid(null);
+    if (await directory.save(form)) setEditing(false);
   };
 
-  const sendMessage = (target: ManifestEntry) => {
+  const submitMessage = async (target: ManifestEntry) => {
     if (!address || !canMessage(viewerZone, target.seat.zone, address, target.address)) return;
     const body = draft.trim();
     if (!body) {
-      setNotice('Write a short introduction before sending.');
+      setInvalid('Write a short introduction before sending.');
       return;
     }
-    writeMessage({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      from: address,
-      to: target.address,
-      body,
-      sentAt: new Date().toISOString(),
-    });
-    setDraft('');
-    setNotice(`Message queued for ${displayName(target)} in this browser.`);
+    setInvalid(null);
+    if (await directory.send(target.address, body)) setDraft('');
   };
 
   if (!manifest.entries.length) {
     return (
-      <section className="ui-card" aria-label="Section networking">
-        <div className="px-5 py-6 sm:px-7">
-          <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Section network</p>
-          <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The cabin network opens at boarding</h3>
-          <p className="mt-2 max-w-[58ch] text-[13px] leading-relaxed text-ui-soft">
-            Connect a wallet to see the live section roster. Contact links are a same-section perk, while First
-            Class members get the private introduction channel.
-          </p>
-        </div>
-      </section>
+      <Shell>
+        <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The cabin network opens at boarding</h3>
+        <p className="mt-2 max-w-[58ch] text-[13px] leading-relaxed text-ui-soft">
+          Connect a wallet to see the live roster. Where you sit decides what you can read: the contact details of
+          your own section and every cabin behind it, and the conversations happening back there. The rows in front
+          of you are closed, which is what makes the next seat up worth taking.
+        </p>
+      </Shell>
     );
   }
+
+  if (!directory.available) {
+    return (
+      <Shell>
+        <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The directory is not connected</h3>
+        <p className="mt-2 max-w-[58ch] text-[13px] leading-relaxed text-ui-soft">
+          This deployment has no directory service configured, so cards and introductions have nowhere to live.
+          Set <code className="font-mono text-[12px]">VITE_DIRECTORY_API</code> to a Worker with its database bound.
+        </p>
+      </Shell>
+    );
+  }
+
+  const status = directory.error ?? invalid ?? directory.notice;
+  const statusIsError = Boolean(directory.error ?? invalid);
 
   return (
     <section className="ui-card" aria-label="Section networking">
@@ -92,10 +162,22 @@ const NetworkingHub = ({ manifest, address, viewerZone }: NetworkingHubProps) =>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Section network</p>
-            <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The people in your section</h3>
+            <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The cabin, from your seat</h3>
             <p className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-ui-soft">
-              Your seat is more than placement. It is an access tier for meeting builders, advertisers, and partners
-              who are flying at the same level.
+              {sections ? (
+                <>
+                  From <strong className="text-ui-ink">{sectionLabel(viewerZone as ZoneKey)}</strong> you read your own
+                  section{sections.behindCount ? <> and everything behind it — {sections.behind}</> : <>, and nobody is seated behind you</>}.{' '}
+                  {sections.aheadCount
+                    ? <>{sections.ahead} {sections.aheadCount === 1 ? 'reads' : 'read'} you, and you cannot read them.</>
+                    : <>Nothing is ahead of you. The whole aircraft is yours to read.</>}
+                </>
+              ) : (
+                <>
+                  Every holder is on the roster. Claim a seat and it decides how far up the aircraft you can read:
+                  your own section and every cabin behind it, and none of the ones in front.
+                </>
+              )}
             </p>
           </div>
           <div className="rounded-full border border-[#FFB300]/40 bg-[#FFF9E8] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8A5A00]">
@@ -104,10 +186,13 @@ const NetworkingHub = ({ manifest, address, viewerZone }: NetworkingHubProps) =>
         </div>
         <div className="mt-5 grid gap-2 text-[11px] leading-relaxed text-ui-soft sm:grid-cols-2">
           <p className="rounded-xl border border-ui-line bg-ui-bg px-3 py-2.5">
-            <strong className="text-ui-ink">Contacts:</strong> visible only between members assigned to the same section.
+            <strong className="text-ui-ink">Names</strong> are the roster and belong to everyone.{' '}
+            <strong className="text-ui-ink">Contact details</strong> go to the holder's own section and every cabin
+            behind it — an email you publish is read by the rows ahead of you, never by the ones behind.
           </p>
           <p className="rounded-xl border border-ui-line bg-ui-bg px-3 py-2.5">
-            <strong className="text-ui-ink">Messages:</strong> First Class members can message other First Class members.
+            <strong className="text-ui-ink">Conversations</strong> are readable by the two wallets on them and by any
+            section ahead of both — so the flight deck hears the aircraft, and your own section never hears you.
           </p>
         </div>
       </header>
@@ -118,6 +203,7 @@ const NetworkingHub = ({ manifest, address, viewerZone }: NetworkingHubProps) =>
             const sameSection = canViewContact(viewerZone, entry.seat.zone);
             const messageable = canMessage(viewerZone, entry.seat.zone, address, entry.address);
             const active = selected === entry.address;
+            const card = directory.profiles[entry.address];
             return (
               <article key={entry.address} className={`rounded-2xl border p-4 transition-colors ${zoneAccent[entry.seat.zone]}`}>
                 <button
@@ -128,11 +214,11 @@ const NetworkingHub = ({ manifest, address, viewerZone }: NetworkingHubProps) =>
                 >
                   <span className="min-w-0">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="font-heading text-lg text-ui-ink">{displayName(entry)}</span>
+                      <span className="font-heading text-lg text-ui-ink">{card?.displayName || holderName(entry)}</span>
                       {entry.address === address && <span className="rounded-full bg-ui-ink px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-white">You</span>}
                     </span>
                     <span className="mt-1 block text-[11px] uppercase tracking-[0.14em] text-ui-soft">
-                      {sectionLabel(entry.seat.zone)} · seat {entry.seat.id} · {defaultRole(entry.seat.zone)}
+                      {sectionLabel(entry.seat.zone)} · seat {entry.seat.id} · {card?.role || defaultRole(entry.seat.zone)}
                     </span>
                   </span>
                   <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-ui-deep">{active ? 'Close' : 'Open'}</span>
@@ -142,26 +228,45 @@ const NetworkingHub = ({ manifest, address, viewerZone }: NetworkingHubProps) =>
                   <div className="mt-4 border-t border-black/10 pt-4">
                     {sameSection ? (
                       <div className="space-y-2 text-[12px] text-ui-soft">
-                        <p className="font-semibold text-ui-ink">Same-section contact card</p>
+                        <p className="font-semibold text-ui-ink">
+                          {entry.seat.zone === viewerZone ? 'Same-section contact card' : `${sectionLabel(entry.seat.zone)} contact card`}
+                        </p>
                         {entry.address === address ? (
-                          <p>Your links are private to fellow {sectionLabel(entry.seat.zone)} members.</p>
-                        ) : (
-                          <p>Contact details are unlocked because you share the {sectionLabel(entry.seat.zone)} section.</p>
-                        )}
-                        {entry.address === address ? (
-                          <button type="button" onClick={() => setEditing((value) => !value)} className="sa-cta mt-2">{editing ? 'Close editor' : 'Edit your card'} <span aria-hidden>→</span></button>
-                        ) : (
+                          <>
+                            <p>Your card is shown to {sectionLabel(entry.seat.zone)} and to every cabin ahead of it.</p>
+                            <button type="button" onClick={() => setEditing((value) => !value)} className="sa-cta mt-2">{editing ? 'Close editor' : 'Edit your card'} <span aria-hidden>→</span></button>
+                          </>
+                        ) : !directory.session ? (
+                          <p>Sign in to the directory to read contact details.</p>
+                        ) : !card ? (
+                          <p>This holder has not published a card yet.</p>
+                        ) : card.readable ? (
                           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
-                            <span>Email: {readProfile(entry.address).email || 'Not shared'}</span>
-                            {readProfile(entry.address).website && <a className="underline" href={readProfile(entry.address).website} target="_blank" rel="noreferrer">Website</a>}
-                            {readProfile(entry.address).linkedin && <a className="underline" href={readProfile(entry.address).linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
+                            <span>Email: {card.email || 'Not given'}</span>
+                            {card.website && <a className="underline" href={card.website} target="_blank" rel="noreferrer">Website</a>}
+                            {card.linkedin && <a className="underline" href={card.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
                           </div>
+                        ) : (
+                          /* The page thinks this card is level with you or
+                             behind you and the server disagrees, so the two
+                             are reading different seating — a directory with
+                             no holder feed, or one still holding a minute-old
+                             copy of it. Saying "forward of you" here would be
+                             a confident wrong answer. */
+                          <p>Their links are not being shown: the directory and the page disagree about where you are sitting.</p>
                         )}
-                        {messageable && (
+                        {messageable && directory.session && (
                           <div className="mt-4 rounded-xl border border-[#FF668F]/30 bg-white/70 p-3">
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B3265E]">First Class introduction</p>
-                            <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Introduce your company, campaign, or partnership idea…" rows={3} className="mt-2 w-full resize-none rounded-lg border border-ui-line bg-white px-3 py-2 text-[12px] text-ui-ink outline-none focus:border-[#FF668F]" />
-                            <button type="button" onClick={() => sendMessage(entry)} className="sa-cta mt-2">Send message <span aria-hidden>→</span></button>
+                            {/* Nobody should learn this from the seat in front
+                                quoting them. It is the first thing the box says. */}
+                            <p className="mt-1.5 text-[11px] leading-relaxed text-ui-soft">
+                              {overheardBy
+                                ? `Readable by ${overheardBy}, as well as by the two of you.`
+                                : 'Readable by the two of you. Nobody is seated ahead of this conversation.'}
+                            </p>
+                            <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Introduce your company, campaign, or partnership idea…" rows={3} maxLength={1000} className="mt-2 w-full resize-none rounded-lg border border-ui-line bg-white px-3 py-2 text-[12px] text-ui-ink outline-none focus:border-[#FF668F]" />
+                            <button type="button" onClick={() => void submitMessage(entry)} disabled={directory.saving} className="sa-cta mt-2 disabled:opacity-60">{directory.saving ? 'Sending…' : 'Send message'} <span aria-hidden>→</span></button>
                           </div>
                         )}
                         {!messageable && entry.address !== address && (
@@ -169,7 +274,10 @@ const NetworkingHub = ({ manifest, address, viewerZone }: NetworkingHubProps) =>
                         )}
                       </div>
                     ) : (
-                      <p className="text-[12px] leading-relaxed text-ui-soft">Contact details are private to members of the same section. Your current access does not include this card.</p>
+                      <p className="text-[12px] leading-relaxed text-ui-soft">
+                        This card is in a cabin ahead of yours. You can read your own section and everything behind
+                        it — the view forward is what the next seat up buys.
+                      </p>
                     )}
                   </div>
                 )}
@@ -180,36 +288,117 @@ const NetworkingHub = ({ manifest, address, viewerZone }: NetworkingHubProps) =>
 
         <aside className="rounded-2xl border border-ui-line bg-ui-bg p-4 sm:p-5">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-ui-deep">Your networking card</p>
-          {currentEntry ? (
-            editing ? (
-              <div className="mt-4 space-y-3">
-                {([
-                  ['displayName', 'Name or company'],
-                  ['role', 'Role / what you are building'],
-                  ['email', 'Email'],
-                  ['website', 'Website URL'],
-                  ['linkedin', 'LinkedIn URL'],
-                ] as const).map(([key, label]) => (
-                  <label key={key} className="block text-[10px] font-bold uppercase tracking-[0.14em] text-ui-faint">
-                    {label}
-                    <input value={profile[key]} onChange={(event) => setProfile((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-ui-line bg-white px-3 py-2 text-[12px] font-normal normal-case tracking-normal text-ui-ink outline-none focus:border-ui-blue" />
-                  </label>
-                ))}
-                <button type="button" onClick={saveProfile} className="sa-cta w-full justify-center">Save private card <span aria-hidden>→</span></button>
-              </div>
-            ) : (
-              <div className="mt-4 space-y-2 text-[12px] text-ui-soft">
-                <p className="font-heading text-xl text-ui-ink">{profile.displayName || shortMember(address ?? '')}</p>
-                <p>{profile.role || defaultRole(currentEntry.seat.zone)} · {sectionLabel(currentEntry.seat.zone)}</p>
-                <p className="pt-2 text-[11px] leading-relaxed">Only members in your section can see these contact details. They are stored in this browser until a profile service is connected.</p>
-                <button type="button" onClick={() => setEditing(true)} className="sa-cta mt-2">Edit card <span aria-hidden>→</span></button>
-              </div>
-            )
+
+          {!address ? (
+            <p className="mt-4 text-[12px] leading-relaxed text-ui-soft">Connect a wallet and claim a seat to publish a networking card.</p>
+          ) : !directory.session ? (
+            <div className="mt-4 space-y-3 text-[12px] leading-relaxed text-ui-soft">
+              <p>
+                Sign a one-line message to open the directory: the roster, the cards your seat lets you read, and
+                your introductions. It proves the wallet is yours, lasts a day, and authorises no transaction.
+              </p>
+              <button type="button" onClick={() => void directory.signIn()} disabled={directory.signingIn} className="sa-cta w-full justify-center disabled:opacity-60">
+                {directory.signingIn ? 'Check your wallet…' : 'Sign in to the directory'} <span aria-hidden>→</span>
+              </button>
+            </div>
+          ) : !currentEntry ? (
+            <p className="mt-4 text-[12px] leading-relaxed text-ui-soft">Claim a seat to publish a networking card. You can still read introductions sent to you.</p>
+          ) : editing ? (
+            <div className="mt-4 space-y-3">
+              {([
+                ['displayName', 'Name or company'],
+                ['role', 'Role / what you are building'],
+                ['email', 'Email'],
+                ['website', 'Website URL'],
+                ['linkedin', 'LinkedIn URL'],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="block text-[10px] font-bold uppercase tracking-[0.14em] text-ui-faint">
+                  {label}
+                  <input value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-ui-line bg-white px-3 py-2 text-[12px] font-normal normal-case tracking-normal text-ui-ink outline-none focus:border-ui-blue" />
+                </label>
+              ))}
+
+              <p className="rounded-lg border border-ui-line bg-white px-3 py-2.5 text-[11px] leading-relaxed text-ui-soft">
+                Your card is read by holders, and only by holders: the directory opens to a wallet that holds the
+                token and to nobody else. The page puts your contact details in front of your own section.
+              </p>
+              <button type="button" onClick={() => void saveCard()} disabled={directory.saving} className="sa-cta w-full justify-center disabled:opacity-60">
+                {directory.saving ? 'Publishing…' : 'Publish card'} <span aria-hidden>→</span>
+              </button>
+            </div>
           ) : (
-            <p className="mt-4 text-[12px] leading-relaxed text-ui-soft">Connect a wallet and claim a seat to publish a private networking card.</p>
+            <div className="mt-4 space-y-2 text-[12px] text-ui-soft">
+              <p className="font-heading text-xl text-ui-ink">{form.displayName || shortMember(address)}</p>
+              <p>{form.role || defaultRole(currentEntry.seat.zone)} · {sectionLabel(currentEntry.seat.zone)}</p>
+              <p className="pt-2 text-[11px] leading-relaxed">
+                {published
+                  ? `Published ${when(published.updated)}, to holders only. It is stored against your wallet, so it follows you to any browser.`
+                  : 'Nothing published yet. A card is stored against your wallet, so it follows you to any browser.'}
+              </p>
+              <button type="button" onClick={() => setEditing(true)} className="sa-cta mt-2">{published ? 'Edit card' : 'Publish a card'} <span aria-hidden>→</span></button>
+            </div>
           )}
-          {messages.length > 0 && <p className="mt-5 border-t border-ui-line pt-4 text-[11px] text-ui-soft">{messages.length} introduction{messages.length === 1 ? '' : 's'} queued from this browser.</p>}
-          {notice && <p role="status" className="mt-4 rounded-lg bg-[#E8F7EF] px-3 py-2 text-[11px] font-semibold text-[#17683B]">{notice}</p>}
+
+          {directory.session && (
+            <div className="mt-5 border-t border-ui-line pt-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-ui-deep">Introductions</p>
+              {directory.loading ? (
+                <p className="mt-3 text-[11px] text-ui-soft">Reading your inbox…</p>
+              ) : directory.inbox.length ? (
+                <ul className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                  {directory.inbox.map((message) => (
+                    <li key={message.id} className="rounded-xl border border-ui-line bg-white px-3 py-2.5">
+                      <p className="text-[11px] font-semibold text-ui-ink">{senders(message.from)}</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-ui-soft">{message.body}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-[11px] text-ui-soft">No introductions yet.</p>
+              )}
+              {directory.sent.length > 0 && (
+                <p className="mt-3 text-[11px] text-ui-soft">{directory.sent.length} sent from this wallet.</p>
+              )}
+
+              {/* The other half of the rule: what carries forward from the
+                  cabins behind you, because your seat is ahead of both ends
+                  of it. */}
+              {directory.overheard.length > 0 && (
+                <div className="mt-5 border-t border-ui-line pt-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-ui-deep">From behind you</p>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-ui-soft">
+                    Conversations between wallets seated aft of {sectionLabel(viewerZone as ZoneKey)}. They cannot
+                    read yours.
+                  </p>
+                  <ul className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                    {directory.overheard.map((message) => (
+                      <li key={message.id} className="rounded-xl border border-ui-line bg-white/60 px-3 py-2.5">
+                        <p className="text-[11px] font-semibold text-ui-ink">
+                          {senders(message.from)} <span className="font-normal text-ui-faint">to</span> {senders(message.to)}
+                        </p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-ui-soft">{message.body}</p>
+                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <button type="button" onClick={() => void directory.signOut()} className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep underline">
+                Sign out of the directory
+              </button>
+            </div>
+          )}
+
+          {status && (
+            <p
+              role="status"
+              onClick={directory.dismiss}
+              className={`mt-4 rounded-lg px-3 py-2 text-[11px] font-semibold ${statusIsError ? 'bg-[#FDECEC] text-[#96201F]' : 'bg-[#E8F7EF] text-[#17683B]'}`}
+            >
+              {status}
+            </p>
+          )}
         </aside>
       </div>
     </section>

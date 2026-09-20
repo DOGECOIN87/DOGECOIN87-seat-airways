@@ -176,6 +176,7 @@ mode it is in rather than dressing a simulation up as a live reading.
 | `VITE_RPC_URL` | balances and the seat ladder come off the chain |
 | `VITE_HOLDERS_URL` | the manifest seats real holders |
 | `VITE_BANNERS_API` | holders publish their own adverts, signed |
+| `VITE_DIRECTORY_API` | the cabin directory: holder cards and introductions, in a database |
 
 See `.env.example`, which documents all of them.
 
@@ -231,6 +232,70 @@ authorise any artwork for that wallet forever.
 
 With no advert server configured, an upload stays in the uploader's browser and
 the dialog says so.
+
+### The cabin directory
+
+The seat is an access tier: holders publish a card, read the cards of their
+own section and everything behind it, and First Class introduces itself to
+First Class. All of that used to be `localStorage`, which made both halves of
+it fictions — a card existed only in the browser that typed it, so nobody in
+your section could ever read one, and a sent introduction was written to the
+*sender's* own storage and delivered to nobody. The interface said "queued in
+this browser", which was true and was the whole problem.
+
+Cards and messages are rows in a database now, in the same Worker as the wall:
+Cloudflare **D1**, with the schema in `worker/migrations/`. A card is stored
+against the wallet, so it follows its holder to any browser and up and down
+the seat ladder, exactly as an advert does.
+
+**Reading the directory takes a signature, but only one.** The wall signs
+every publish, because a publish is rare and pins one exact image. The
+directory is read and written constantly, and a wallet popup per action would
+be unusable — worse, it teaches people to approve things unread. So the wallet
+signs one plain-text line to open a session, and what comes back is a bearer
+token good for a day. The token is the only thing the page keeps in storage;
+the server keeps nothing but a hash of it.
+
+**The directory is a room for holders.** A session is opened only by a wallet
+that has proved its key and holds the token — the same check the wall makes
+before storing an advert — so nothing inside is ever handed to somebody who
+has not bought their way into the cabin.
+
+**Inside it, the aircraft is transparent looking aft and opaque looking
+forward.** A name and a role are the roster and belong to everyone. Contact
+details reach your own section and every cabin behind it. A conversation is
+readable by the two wallets on it and by any section seated ahead of *both* —
+so the flight deck reads everything and economy, with no cabin behind it,
+reads nothing. No section can read its own peers either, because a chat with
+one end level with you is not behind you.
+
+**The hold is not a cabin.** Everything above is scoped to the manifest: a
+wallet that did not get a seat is on no roster, has no name the page could
+put to it, and is not somebody the aircraft can see. So its cards are not
+served and its conversations are not read out of the database to then be
+withheld — the queries ask for the seats, which are at most a cabinful, and
+never for the rest. The seat stopped being a placement and became how far forward
+you can see, which is the seat ladder's own argument applied to people rather
+than to legroom.
+
+That is enforced where the rows are, not in the browser. Which meant the
+Worker had to learn the seating it spent its life refusing to learn — and the
+refusal was always about a second *copy* drifting, so there is not one: the
+ladder lives in `src/lib/seating.ts`, with no browser and no Cloudflare in it,
+and the page and the Worker import the same file. The Worker reads the same
+holder feed the page does (`HOLDERS_URL`, which should be your
+`VITE_HOLDERS_URL`) and caches the seating for a minute. Unset, it fails
+closed: contact details go nowhere but to their owner, and nobody overhears
+anything.
+
+The rest of what the server holds: sign-in signatures are spent on use so a
+captured one cannot mint a second token, and a wallet may send twenty
+introductions an hour. `worker/README.md` has the full argument, including
+what the holder check does when the RPC cannot answer.
+
+Without `VITE_DIRECTORY_API` (which falls back to `VITE_BANNERS_API`, since
+one Worker serves both), the hub says plainly that no directory is connected
+rather than pretending to store anything.
 
 ## Deploying
 
@@ -326,6 +391,11 @@ src/
 │   ├── manifest.ts           who is seated where, by rank
 │   ├── useAttitude.ts        one rAF loop, shared by every view
 │   ├── sky.ts                solar position, weather, palettes
+│   ├── seating.ts            the seat ladder, and who it lets you see — shared
+│   │                         with the Worker, which enforces it
+│   ├── networkingApi.ts      the cabin directory, over the wire
+│   ├── useDirectory.ts       the session, the roster and the inbox, as state
+│   ├── sectionAccess.ts      which cards and messages your seat entitles you to
 │   └── passenger.ts          the name on the boarding pass
 ├── three/
 │   ├── WorldScene.ts         the scene: sky, sun, stars, ground, limb, bands
@@ -340,6 +410,7 @@ src/
     ├── CargoHold.tsx         below the floor
     ├── SeatMap.tsx           the wall
     ├── AdvertDialog.tsx      putting an image on a seat you hold
+    ├── NetworkingHub.tsx     the section roster, your card, your introductions
     ├── BoardingPass.tsx      the screenshot
     ├── Annunciators.tsx      the overhead panel, as text
     └── RadioLog.tsx          the PA

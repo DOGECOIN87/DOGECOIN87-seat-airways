@@ -1,9 +1,27 @@
+/**
+ * What your seat entitles you to see.
+ *
+ * Cards and introductions themselves live in the Worker's database — see
+ * `networkingApi.ts`. What is left here is the part that is nobody's to
+ * store: which of them the page puts in front of you, read off the seat
+ * ladder it has already worked out.
+ *
+ * This is the page's own filter, not the boundary. The server cannot check a
+ * section without a second copy of that ladder; the rule it does hold is that
+ * the directory opens only to a wallet holding the token, so everything in it
+ * is a holders' room to begin with. The two work together — the server
+ * decides who is let in, this decides what is worth showing them.
+ */
 import type { ZoneKey } from '../content/cabin';
 
-/** Same-section contact access is the networking perk for seated holders. */
-export function canViewContact(viewerZone: ZoneKey | null, memberZone: ZoneKey): boolean {
-  return viewerZone !== null && viewerZone === memberZone;
-}
+/**
+ * Who may read a card, and who may read a conversation.
+ *
+ * Both now live in `seating.ts`, because the Worker enforces them and the two
+ * must be the same rule rather than two readings of it. Re-exported here so
+ * the cabin components keep asking the module that is about access.
+ */
+export { canViewContact, canOverhear, outranks, zoneRank } from './seating';
 
 /** First-class messaging is intentionally narrower than contact visibility. */
 export function canMessage(
@@ -42,64 +60,6 @@ export function defaultRole(zone: ZoneKey): string {
 
 export function shortMember(address: string): string {
   return address.length > 12 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;
-}
-
-export interface NetworkingProfile {
-  displayName: string;
-  role: string;
-  email: string;
-  website: string;
-  linkedin: string;
-}
-
-const PROFILE_KEY = 'seat_airlines_networking_profile';
-const MESSAGE_KEY = 'seat_airlines_networking_messages';
-
-export interface NetworkingMessage {
-  id: string;
-  from: string;
-  to: string;
-  body: string;
-  sentAt: string;
-}
-
-export function readProfile(address: string | null): NetworkingProfile {
-  const empty: NetworkingProfile = { displayName: '', role: '', email: '', website: '', linkedin: '' };
-  if (!address || typeof window === 'undefined') return empty;
-  try {
-    const raw = window.localStorage.getItem(`${PROFILE_KEY}:${address}`);
-    return raw ? { ...empty, ...JSON.parse(raw) } : empty;
-  } catch {
-    return empty;
-  }
-}
-
-export function writeProfile(address: string, profile: NetworkingProfile): void {
-  try {
-    window.localStorage.setItem(`${PROFILE_KEY}:${address}`, JSON.stringify(profile));
-  } catch {
-    // A blocked storage environment should not stop the rest of the cabin UI.
-  }
-}
-
-export function readMessages(address: string | null): NetworkingMessage[] {
-  if (!address || typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(`${MESSAGE_KEY}:${address}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function writeMessage(message: NetworkingMessage): void {
-  try {
-    const key = `${MESSAGE_KEY}:${message.from}`;
-    const current = readMessages(message.from);
-    window.localStorage.setItem(key, JSON.stringify([message, ...current].slice(0, 30)));
-  } catch {
-    // The UI still acknowledges the action when storage is unavailable.
-  }
 }
 
 export function isValidExternalUrl(value: string): boolean {

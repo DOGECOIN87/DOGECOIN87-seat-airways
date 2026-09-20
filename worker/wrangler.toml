@@ -12,6 +12,20 @@ id = "0767939f209a41ab9692f2b1b1550c05"
 binding = "IMAGES"
 bucket_name = "seat-airlines-banners"
 
+# The cabin directory: holder cards and the introductions between them.
+#
+# The database exists and `migrations/0001_networking.sql` has been applied to
+# it, so this binding is live: deploying with it wired up turns the directory
+# on. Until this deploy lands, the routes answer 503 saying there is none.
+#
+# A binding naming a database that does not exist fails the deploy outright,
+# and this file is what CI deploys on every push — so if you ever point it at
+# a fresh database, create that database first.
+[[d1_databases]]
+binding = "DIRECTORY"
+database_name = "seat-airlines-directory"
+database_id = "a8e4747a-ef46-4689-ac75-c50f7f428b83"
+
 [vars]
 # The Worker uses R2 only when this is set as well as the binding above, and
 # falls back to serving images out of KV when it is not. That is deliberate:
@@ -28,6 +42,20 @@ bucket_name = "seat-airlines-banners"
 # The origins allowed to call this. Left empty the Worker echoes whatever
 # origin asks, which is fine locally and careless in production.
 ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
+
+# The holder list, for the directory's section rules: who may read whose card,
+# and whose conversations carry forward. **Point this at the same feed as the
+# page's VITE_HOLDERS_URL** — one feed is what keeps one seating chart, and
+# two would be the drift this service spent its life avoiding.
+#
+# Unset, the directory still works and simply cannot tell one cabin from
+# another, so it withholds every card's contact details from everybody but
+# their owner and shows nobody another wallet's conversations. That is the
+# safe direction to fail in, and `GET /health` says which state it is in.
+#
+# MANIFEST_SIZE must match the page's VITE_MANIFEST_SIZE; both default to 40.
+# HOLDERS_URL = "https://…"
+# MANIFEST_SIZE = "40"
 
 # The token. Together with the RPC_URL secret below, lets the Worker refuse
 # adverts from wallets that do not hold it; without that secret the check is

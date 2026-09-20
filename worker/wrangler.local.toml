@@ -6,5 +6,21 @@ compatibility_date = "2025-09-01"
 binding = "BANNERS"
 id = "local-test"
 
+# Miniflare's own SQLite. The id never reaches Cloudflare; apply the schema to
+# it with:
+#   npx wrangler d1 migrations apply seat-airlines-directory --local --config wrangler.local.toml
+[[d1_databases]]
+binding = "DIRECTORY"
+database_name = "seat-airlines-directory"
+database_id = "local-test"
+
 [vars]
 ALLOWED_ORIGINS = "http://localhost:3000"
+
+# The e2e suite serves its own holder list here and seats the wallets it just
+# generated, which is how the section rules can be exercised at all: the
+# Worker has to believe somebody is on the flight deck and somebody else is in
+# business. A second of cache rather than the default minute, so a run is not
+# reading the seating from the run before it.
+HOLDERS_URL = "http://127.0.0.1:8788/holders"
+LADDER_CACHE_MS = "1000"

@@ -1,10 +1,19 @@
 /**
- * The advert server.
+ * The advert server, and the cabin directory.
  *
- * Two routes, and a deliberately small job:
+ * The wall, keyed by wallet:
  *
  *   GET  /banners   the published wall, keyed by wallet
  *   POST /banner    put an advert up, if you can prove the wallet is yours
+ *
+ * The directory, behind a session that same wallet signature opens:
+ *
+ *   POST   /session    prove the key, get a bearer token for a day
+ *   DELETE /session    hand it back
+ *   GET    /directory  every published card
+ *   PUT    /profile    publish or amend your own
+ *   GET    /messages   your introductions, both directions
+ *   POST   /messages   send one
  *
  * ── What this service does not do ─────────────────────────────────────────
  * It does not know which seat anybody is in, and it must not learn. Working
@@ -23,9 +32,24 @@ import {
   challenge, decodeDataUrl, imageType, readStoredBanner, sha256Hex, verifySignature,
   MAX_AGE_MS, MAX_IMAGE_BYTES, COOLDOWN_SECONDS, type StoredBanner,
 } from './verify';
+import {
+  bearerToken, isAddress, messageId, mintToken, readMessageBody, readProfileInput,
+  signInChallenge, tokenHash,
+  MESSAGES_PER_HOUR, MESSAGE_PAGE, SESSION_TTL_MS, SIGNIN_MAX_AGE_MS,
+} from './networking';
+import { readLadder } from './ladder';
+import { canViewContact, zoneRank } from '../../src/lib/seating';
 
 export interface Env {
   BANNERS: KVNamespace;
+  /**
+   * The cabin directory: profiles, introductions, sessions. Optional.
+   *
+   * Unbound, the wall works exactly as before and the directory routes say
+   * plainly that this deployment has none rather than failing as if the
+   * request were wrong. Bind it and apply `migrations/` to turn it on.
+   */
+  DIRECTORY?: D1Database;
   /**
    * Object storage for the artwork. Optional.
    *
@@ -44,6 +68,19 @@ export interface Env {
   IMAGES?: R2Bucket;
   /** Public base URL images are served from. Only needed with R2. */
   PUBLIC_IMAGE_BASE?: string;
+  /**
+   * The holder list, as JSON: `[{ address, balance }, …]`.
+   *
+   * The same feed the page reads, and pointing both at one URL is what keeps
+   * the two seating charts identical. Without it the directory cannot tell
+   * one cabin from another, so it withholds contact details from everybody
+   * but their owner and shows nobody another wallet's conversations.
+   */
+  HOLDERS_URL?: string;
+  /** Must match the page's `VITE_MANIFEST_SIZE`. Defaults to 40, as it does. */
+  MANIFEST_SIZE?: string;
+  /** How long seating is cached, in milliseconds. Defaults to a minute. */
+  LADDER_CACHE_MS?: string;
   /** Solana RPC, used only to check the publisher holds the token at all. */
   RPC_URL?: string;
   /** The token this aircraft is flying. */
@@ -80,22 +117,23 @@ async function storeImage(
 /**
  * The URL an already-stored image is served from.
  *
- * ── Why there is a version on the end ─────────────────────────────────────
- * The key is the wallet, so replacing an advert overwrites it in place and
- * the URL never changes. That is the right storage shape — one wallet, one
- * advert, nothing to sweep up — and it made publishing look broken.
+ * ── Why the key is the hash of the bytes ──────────────────────────────────
+ * Keyed by wallet, replacing an advert overwrote it in place and the URL
+ * never changed. The bytes are cached, so a holder who put up a second
+ * advert was handed the URL their browser had cached for the first: the page
+ * showed the *old* picture immediately after a publish they had just signed
+ * for. Nothing had failed, and there was no way for the browser to know.
+ * They would try again, hit the cooldown, and be told to slow down.
  *
- * The bytes are served with `max-age=300`. A holder who put up a second
- * advert got back the URL their browser had cached five minutes ago, so the
- * page showed the *old* picture, on the seat, immediately after a successful
- * publish they had just signed for. Nothing had failed; there was simply no
- * way for the browser to know the image behind that URL had changed. So they
- * would try again, hit the sixty-second cooldown, and be told to slow down.
+ * Addressing an image by its own content settles that at the storage layer
+ * rather than with a query string bolted on the end. Different artwork is a
+ * different URL because it is a different image; the same artwork is the
+ * same URL, so a re-upload costs nothing and there is no cache to bust. It
+ * is also what makes `immutable` honest on the read path: that URL cannot
+ * ever mean different bytes.
  *
- * The record already carries the time it was written, and that is exactly
- * the fact a cache needs: same advert, same URL, and a new advert is a URL
- * no cache has seen. Both storage backends ignore the query string when
- * looking the bytes up, and both cache on the whole URL including it.
+ * `updated` therefore only reaches records written before this — keys that
+ * are not hash-shaped, which still need the version to be re-read.
  */
 function imageUrl(env: Env, request: Request, key: string, updated?: string): string {
   const base = usingR2(env)
@@ -165,8 +203,8 @@ function corsHeaders(env: Env, origin: string | null): Record<string, string> {
   const ok = origin && (allowed.length === 0 || allowed.includes(origin));
   return {
     'access-control-allow-origin': ok && origin ? origin : allowed[0] ?? '*',
-    'access-control-allow-methods': 'GET,HEAD,POST,OPTIONS',
-    'access-control-allow-headers': 'content-type',
+    'access-control-allow-methods': 'GET,HEAD,POST,PUT,DELETE,OPTIONS',
+    'access-control-allow-headers': 'content-type,authorization',
     'access-control-max-age': '86400',
     vary: 'Origin',
   };
@@ -240,6 +278,87 @@ function wallEtag(wall: Wall): string {
   return `"${Object.keys(wall).length}-${newest}"`;
 }
 
+/* ── The cabin directory ────────────────────────────────────────────────────
+   Profiles and introductions, in SQL, because they are rows: one card per
+   wallet, and messages read back by recipient and by sender.
+
+   What this service still does not know is which seat anybody is in. The page
+   decides that, as it does for adverts, and the section perks — contacts
+   surfaced to your own section, introductions between First Class members —
+   are the page's reading of the manifest it already holds.
+
+   The lines this service does draw are the two it can hold on its own:
+
+     · Nothing here is readable without a session, and a session is only
+       opened by a wallet that proved its key *and* holds the token. The
+       directory is a room for holders because a non-holder never gets a
+       token to ask with. (`holdsToken` stands aside when it cannot reach the
+       RPC to find out — see its own note on why that is the honest failure.)
+     · Inside that room the cabin decides the rest, and it is transparent
+       looking aft and opaque looking forward: contact details go to your own
+       section and everything behind it, conversations are readable by the
+       two wallets on them and by any section ahead of both. `ladder.ts` says
+       how this side comes to know which is which without keeping a second
+       copy of the seating. */
+
+interface ProfileRow {
+  address: string;
+  display_name: string;
+  role: string;
+  email: string;
+  website: string;
+  linkedin: string;
+  updated_at: string;
+}
+
+interface MessageRow {
+  id: string;
+  sender: string;
+  recipient: string;
+  body: string;
+  sent_at: string;
+}
+
+/**
+ * A card as the asking wallet is allowed to see it.
+ *
+ * Name and role are the roster, and the roster is the whole cabin's. The
+ * contact details are the perk, and they go no further forward than the
+ * person asking: your own section and everything behind it. `readable` says
+ * which of the two this is, so the page can tell "nothing to show" from
+ * "not yours to see".
+ */
+const asProfile = (row: ProfileRow, readable: boolean) => ({
+  address: row.address,
+  displayName: row.display_name,
+  role: row.role,
+  email: readable ? row.email : '',
+  website: readable ? row.website : '',
+  linkedin: readable ? row.linkedin : '',
+  readable,
+  updated: row.updated_at,
+});
+
+const asMessage = (row: MessageRow) => ({
+  id: row.id,
+  from: row.sender,
+  to: row.recipient,
+  body: row.body,
+  sentAt: row.sent_at,
+});
+
+/** The wallet behind a bearer token, or null if there is not one. */
+async function sessionAddress(db: D1Database, request: Request): Promise<string | null> {
+  const token = bearerToken(request.headers.get('authorization'));
+  if (!token) return null;
+  const row = await db
+    .prepare('SELECT address, expires_at FROM sessions WHERE token_hash = ?')
+    .bind(await tokenHash(token))
+    .first<{ address: string; expires_at: number }>();
+  if (!row || row.expires_at < Date.now()) return null;
+  return row.address;
+}
+
 /* ── Routes ─────────────────────────────────────────────────────────────── */
 
 export default {
@@ -266,7 +385,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
     // client sends a compressed 384px image, so this is intentionally well
     // above the 512 KiB stored-image limit while still bounding an abuse case.
     const contentLength = Number(request.headers.get('content-length'));
-    if (request.method === 'POST' && Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
+    const writes = request.method === 'POST' || request.method === 'PUT';
+    if (writes && Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
       return json({ error: 'That request is too large.' }, 413, cors);
     }
 
@@ -275,7 +395,226 @@ async function handle(request: Request, env: Env): Promise<Response> {
         ok: true,
         service: 'seat-airlines-banners',
         storage: usingR2(env) ? 'r2' : 'kv',
+        directory: Boolean(env.DIRECTORY),
+        // Whether this deployment can tell one cabin from another at all.
+        sections: Boolean(env.HOLDERS_URL),
       }, 200, { ...cors, 'cache-control': 'no-store' });
+    }
+
+    /* ── The directory ──────────────────────────────────────────────────
+       Nothing below is cacheable: every response is either a credential or
+       somebody's private correspondence. */
+    const directoryRoute = ['/session', '/directory', '/profile', '/messages'].includes(url.pathname);
+    if (directoryRoute) {
+      const db = env.DIRECTORY;
+      if (!db) {
+        return json({ error: 'This deployment has no cabin directory configured.' }, 503, cors);
+      }
+      const priv = { ...cors, 'cache-control': 'no-store' };
+
+      /* Opening a session. The one route here that a signature reaches; every
+         other one is the token it hands back. */
+      if (request.method === 'POST' && url.pathname === '/session') {
+        let body: { address?: unknown; issued?: unknown; signature?: unknown };
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+
+        const address = isAddress(body.address) ? body.address : '';
+        const issued = typeof body.issued === 'string' ? body.issued : '';
+        const signature = typeof body.signature === 'string' ? body.signature : '';
+        if (!address || !issued || !signature) {
+          return json({ error: 'That sign-in was missing something.' }, 400, priv);
+        }
+
+        const at = Date.parse(issued);
+        if (!Number.isFinite(at) || Math.abs(Date.now() - at) > SIGNIN_MAX_AGE_MS) {
+          return json({ error: 'That signature has expired. Try again.' }, 400, priv);
+        }
+
+        if (!(await verifySignature(address, signInChallenge(address, issued), signature))) {
+          return json({ error: 'That signature does not match the wallet.' }, 401, priv);
+        }
+
+        /* Spend the signature. It stays valid for five minutes, so without
+           this a captured one is a second token for somebody else. */
+        const spent = await db
+          .prepare('INSERT OR IGNORE INTO signins (address, issued, expires_at) VALUES (?, ?, ?)')
+          .bind(address, issued, at + SIGNIN_MAX_AGE_MS)
+          .run();
+        if (!spent.meta.changes) {
+          return json({ error: 'That sign-in has already been used. Try again.' }, 401, priv);
+        }
+
+        if (!(await holdsToken(env, address))) {
+          return json({ error: 'That wallet does not hold the token.' }, 403, priv);
+        }
+
+        const token = mintToken();
+        const expires = Date.now() + SESSION_TTL_MS;
+        await db.batch([
+          db.prepare('INSERT INTO sessions (token_hash, address, expires_at) VALUES (?, ?, ?)')
+            .bind(await tokenHash(token), address, expires),
+          // Nothing else sweeps these up, and a sign-in is the moment there is
+          // already a write in flight.
+          db.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(Date.now()),
+          db.prepare('DELETE FROM signins WHERE expires_at < ?').bind(Date.now()),
+        ]);
+
+        return json({ token, address, expires }, 200, priv);
+      }
+
+      if (request.method === 'DELETE' && url.pathname === '/session') {
+        const token = bearerToken(request.headers.get('authorization'));
+        if (token) {
+          await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await tokenHash(token)).run();
+        }
+        return json({ ok: true }, 200, priv);
+      }
+
+      const me = await sessionAddress(db, request);
+      if (!me) return json({ error: 'Sign in to read the cabin directory.' }, 401, priv);
+
+      if (request.method === 'GET' && url.pathname === '/directory') {
+        const ladder = await readLadder(env);
+        const mine = ladder.zoneOf(me);
+
+        /* Only the aircraft, and only ever the aircraft.
+
+           The roster the page draws is the manifest, so a card belonging to a
+           wallet that has dropped off it is one nobody can see — and a row
+           nobody can see is a row not worth reading out of the database. This
+           used to be the last 500 cards written, which fetched the hold's
+           and then quietly declined to show them. Your own card is always in
+           the list, seated or not, because you are allowed to edit it after
+           being out-held. */
+        const wanted = [...new Set([...ladder.seated(), me])];
+        const holes = wanted.map(() => '?').join(',');
+        const { results } = await db
+          .prepare(
+            'SELECT address, display_name, role, email, website, linkedin, updated_at' +
+            ` FROM profiles WHERE address IN (${holes}) ORDER BY updated_at DESC`,
+          )
+          .bind(...wanted)
+          .all<ProfileRow>();
+
+        const out: Record<string, ReturnType<typeof asProfile>> = {};
+        for (const row of results ?? []) {
+          const readable = row.address === me
+            || (ladder.live && canViewContact(mine, ladder.zoneOf(row.address)));
+          out[row.address] = asProfile(row, readable);
+        }
+        return json(out, 200, priv);
+      }
+
+      if (request.method === 'PUT' && url.pathname === '/profile') {
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+        const parsed = readProfileInput(body);
+        if ('error' in parsed) return json({ error: parsed.error }, 400, priv);
+
+        const updated = new Date().toISOString();
+        const { profile } = parsed;
+        await db
+          .prepare(
+            'INSERT INTO profiles (address, display_name, role, email, website, linkedin, updated_at)' +
+            ' VALUES (?, ?, ?, ?, ?, ?, ?)' +
+            ' ON CONFLICT(address) DO UPDATE SET display_name = excluded.display_name,' +
+            ' role = excluded.role, email = excluded.email, website = excluded.website,' +
+            ' linkedin = excluded.linkedin, updated_at = excluded.updated_at',
+          )
+          .bind(me, profile.displayName, profile.role, profile.email, profile.website, profile.linkedin, updated)
+          .run();
+
+        return json({ ...profile, address: me, updated }, 200, priv);
+      }
+
+      if (request.method === 'GET' && url.pathname === '/messages') {
+        const columns = 'SELECT id, sender, recipient, body, sent_at FROM messages';
+        const [inbox, sent] = await db.batch<MessageRow>([
+          db.prepare(`${columns} WHERE recipient = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
+          db.prepare(`${columns} WHERE sender = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
+        ]);
+
+        /* What carries forward from further aft.
+
+           The cabin is transparent looking backwards and opaque looking
+           forwards: a holder reads the conversations of every section behind
+           them, and none of the one they are in or ahead of it.
+
+           Named as the people it covers rather than as everybody it does not.
+           "Neither end is in front of me" would also sweep in the hold, whose
+           wallets are on no manifest and no roster and have no name the page
+           could put to them — two strangers the reader cannot see, talking.
+           Nobody is owed that, and it is a table scan to fetch it. So the
+           question asked is the small one: both ends seated, both behind me.
+
+           Unseated yourself, you overhear nothing. */
+        let overheard: MessageRow[] = [];
+        const ladder = await readLadder(env);
+        const mine = ladder.zoneOf(me);
+        if (ladder.live && mine) {
+          const behind = ladder.seatedBehind(mine);
+          if (behind.length) {
+            const holes = behind.map(() => '?').join(',');
+            const rows = await db
+              .prepare(
+                `${columns} WHERE sender IN (${holes}) AND recipient IN (${holes})` +
+                ' ORDER BY sent_at DESC LIMIT ?',
+              )
+              .bind(...behind, ...behind, MESSAGE_PAGE)
+              .all<MessageRow>();
+            overheard = rows.results ?? [];
+          }
+        }
+
+        return json({
+          inbox: (inbox.results ?? []).map(asMessage),
+          sent: (sent.results ?? []).map(asMessage),
+          overheard: overheard.map(asMessage),
+        }, 200, priv);
+      }
+
+      if (request.method === 'POST' && url.pathname === '/messages') {
+        let body: { to?: unknown; body?: unknown };
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+
+        const to = isAddress(body.to) ? body.to : '';
+        if (!to) return json({ error: 'That is not a wallet address.' }, 400, priv);
+        if (to === me) return json({ error: 'That message is addressed to you.' }, 400, priv);
+
+        const parsed = readMessageBody(body.body);
+        if ('error' in parsed) return json({ error: parsed.error }, 400, priv);
+
+        const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const recent = await db
+          .prepare('SELECT COUNT(*) AS sent FROM messages WHERE sender = ? AND sent_at > ?')
+          .bind(me, hourAgo)
+          .first<{ sent: number }>();
+        if ((recent?.sent ?? 0) >= MESSAGES_PER_HOUR) {
+          return json({ error: 'That is enough introductions for one hour.' }, 429, priv);
+        }
+
+        const message = { id: messageId(), from: me, to, body: parsed.body, sentAt: new Date().toISOString() };
+        await db
+          .prepare('INSERT INTO messages (id, sender, recipient, body, sent_at) VALUES (?, ?, ?, ?, ?)')
+          .bind(message.id, message.from, message.to, message.body, message.sentAt)
+          .run();
+
+        return json(message, 200, priv);
+      }
+
+      return json({ error: `${request.method} is not allowed on ${url.pathname}.` }, 405, priv);
     }
 
     if (request.method === 'GET' && url.pathname === '/banners') {

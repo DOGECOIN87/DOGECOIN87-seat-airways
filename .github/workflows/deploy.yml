@@ -54,6 +54,7 @@ jobs:
           VITE_MARKET_URL: ${{ vars.VITE_MARKET_URL }}
           VITE_BANNERS_API: ${{ vars.VITE_BANNERS_API }}
           VITE_BANNERS_URL: ${{ vars.VITE_BANNERS_URL }}
+          VITE_DIRECTORY_API: ${{ vars.VITE_DIRECTORY_API }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

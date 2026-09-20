@@ -410,7 +410,7 @@ export default function App() {
       <header className="sa-topbar sticky top-0 z-40">
         <div className="mx-auto flex max-w-[94rem] flex-wrap items-center gap-x-7 gap-y-2 px-5 py-2.5 sm:px-8">
           <a href="#top" className="flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-blue">
-            <Mark size={30} background="none" color="#0087EA" title="SEAT AIRLINES" />
+            <Mark size={34} variant="badge" title="SEAT AIRLINES" />
             <span className="whitespace-nowrap font-heading text-lg leading-none text-ui-ink">Seat Airlines</span>
             <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-ui-faint sm:inline">
               SA350 · Nonstop
@@ -699,16 +699,17 @@ export default function App() {
               <span className="sa-eyebrow__no">03</span> Section network
             </p>
             <h2 id="network-title" className="sa-display sa-display--2 mt-3">
-              Your section is your network
+              Your seat is how far you can see
             </h2>
             <p className="sa-lead mt-4">
-              Same-section holders can exchange contact links. First Class is the private introduction channel:
-              only First Class members can message one another.
+              Everybody is on the roster. What the seat buys is the view aft: the contact details of your own
+              section and every cabin behind it, and the conversations those cabins are having. Look forward and
+              there is nothing — the rows ahead of you keep their cards and their messages to themselves.
             </p>
           </header>
           <div className="mt-9">
             <Deferred minHeight="32rem">
-              <NetworkingHub manifest={manifest} address={seatKey} viewerZone={claimedSeat?.zone ?? null} />
+              <NetworkingHub manifest={manifest} address={seatKey} viewerZone={claimedSeat?.zone ?? null} sign={wallet.signMessage} />
             </Deferred>
           </div>
         </section>
@@ -781,7 +782,7 @@ export default function App() {
       <footer className="sa-footer">
         <div className="mx-auto max-w-[94rem] px-5 sm:px-8">
           <div className="sa-close">
-            <Mark size={34} background="none" color="#0087EA" />
+            <Mark size={40} variant="badge" />
             <p className="sa-close__line">Hold more. Fly higher.</p>
             <a href="#wall" className="sa-cta sa-shine mt-2" onMouseEnter={prefetchSeatMap} onFocus={prefetchSeatMap}>
               Claim a seat <span aria-hidden>→</span>
@@ -794,7 +795,7 @@ export default function App() {
               <div className="sa-footer__links">
                 <a href="#top">Outside · the whole aeroplane</a>
                 <a href="#wall">The wall · {MANIFEST_SIZE} seats, {manifest.open} open</a>
-                <a href="#network">Section network · same-section access</a>
+                <a href="#network">Section network · read the cabins behind you</a>
                 <a href="#check-in">Check in · where you sit</a>
               </div>
             </nav>
