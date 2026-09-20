@@ -162,6 +162,16 @@ html {
   background-position: 0 4rem, 22.5rem 26.5rem;
   opacity: 0.58;
   mask-image: linear-gradient(to bottom, transparent 0, black 10rem, black calc(100% - 10rem), transparent 100%);
+  animation: sa-logo-drift 42s ease-in-out infinite alternate;
+  will-change: background-position;
+}
+/* A barely perceptible cabin-at-cruise drift: the two vector layers move
+   together, preserving the stagger while giving the background a living,
+   airborne quality. The long duration keeps it atmospheric rather than
+   attention-seeking. */
+@keyframes sa-logo-drift {
+  from { background-position: 0 4rem, 22.5rem 26.5rem; }
+  to { background-position: 3rem 1rem, 25.5rem 23.5rem; }
 }
 /* The dark theme's grid and scanlines do not survive the move to a
    light panel — a panel face is a panel face, not a CRT. */
@@ -979,7 +989,7 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .sd-shake, .sa-pulse-glow, .sa-shine::after, .sa-sweep, .sa-view-loading__mark { animation: none !important; }
+  .sd-shake, .sa-pulse-glow, .sa-shine::after, .sa-sweep, .sa-logo-drift, .sa-ground::after, .sa-view-loading__mark { animation: none !important; }
 }
 
 /* ============================================================
