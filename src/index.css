@@ -1668,3 +1668,138 @@ html {
   .sa-lamp__label { font-size: 10px; letter-spacing: 0.12em; }
   .sa-lamp__detail { font-size: 9px; letter-spacing: 0.09em; }
 }
+
+
+/* ============================================================
+   Typography pass
+   ────────────────────────────────────────────────────────────
+   One readable body measure, one display rhythm, and consistent
+   baselines for the small instrument labels. This sits at the end
+   of the sheet so the page's component-specific rules remain the
+   visual vocabulary while these rules unify their type behavior.
+   ============================================================ */
+
+body {
+  font-size: var(--t-base);
+  line-height: 1.55;
+}
+
+p,
+dl,
+ol,
+ul { margin-block: 0; }
+
+p { text-wrap: pretty; }
+
+.sa-topbar__fig dt,
+.sa-topbar__fig dd {
+  margin: 0;
+}
+.sa-topbar__fig dt {
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.sa-topbar__fig dd {
+  margin-top: 0.18rem;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.sa-eyebrow {
+  min-height: 1.9rem;
+  line-height: 1.15;
+}
+.sa-eyebrow__no { line-height: 1.15; }
+.sa-eyebrow__live {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sa-display {
+  line-height: 0.92;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.sa-display--2 { line-height: 0.98; }
+
+.sa-lead {
+  max-width: 43rem;
+  font-size: clamp(0.96rem, 1.05vw, 1.05rem);
+  line-height: 1.62;
+  text-wrap: pretty;
+}
+.sa-section-head > .sa-lead { max-width: 42rem; }
+
+.sa-cta,
+.sa-ghost,
+.sa-chip,
+.ui-pill,
+.ui-round {
+  line-height: 1;
+}
+.sa-strip-label { line-height: 1.2; }
+
+.sa-flight-summary dt,
+.sa-flight-summary dd { margin: 0; }
+.sa-flight-summary dd:first-of-type { margin-top: 0.35rem; }
+.sa-flight-summary dd:last-of-type { margin-top: 0.2rem; }
+.sa-progress { line-height: 1.2; }
+
+.sa-steps {
+  grid-auto-rows: 1fr;
+}
+.sa-step {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  align-content: start;
+}
+.sa-step__h { line-height: 1.05; }
+.sa-step__b {
+  max-width: 34ch;
+  line-height: 1.58;
+  text-wrap: pretty;
+}
+
+.sa-zone-head h3,
+.sa-zone-head__visual,
+.sa-zone-head__note,
+.sa-map__label,
+.sa-map__unsold,
+.sa-map__facts dt,
+.sa-map__legend,
+.sa-map__advertise,
+.sa-lamp__label,
+.sa-lamp__detail {
+  line-height: 1.25;
+}
+.sa-zone-head h3 { line-height: 1.1; }
+.sa-zone-head__visual { line-height: 1.25; }
+.sa-map__seat { line-height: 1; }
+.sa-map__note,
+.sa-map__alt { line-height: 1.6; }
+
+.sa-footer__grid {
+  align-items: stretch;
+}
+.sa-footer__grid > * {
+  display: flex;
+  flex-direction: column;
+}
+.sa-footer__h { line-height: 1.2; }
+.sa-footer__list {
+  line-height: 1.5;
+}
+.sa-footer__list > div {
+  min-height: 1.8rem;
+  line-height: 1.35;
+}
+.sa-footer__bar {
+  line-height: 1.4;
+}
+
+@media (max-width: 639px) {
+  .sa-display { letter-spacing: -0.028em; }
+  .sa-lead { font-size: 0.96rem; line-height: 1.58; }
+  .sa-eyebrow { min-height: 1.7rem; }
+  .sa-eyebrow__live { margin-left: 0; }
+}
