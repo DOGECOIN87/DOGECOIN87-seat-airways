@@ -1803,3 +1803,93 @@ p { text-wrap: pretty; }
   .sa-eyebrow { min-height: 1.7rem; }
   .sa-eyebrow__live { margin-left: 0; }
 }
+
+
+/* Live wallet activity in the selected-seat inspector. */
+.sa-activity {
+  margin-top: 1.15rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 -1px 0 rgba(163, 167, 180, 0.24);
+}
+.sa-activity__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.sa-activity__status {
+  color: var(--accent-deep);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.sa-activity__status::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 0.35rem 1px 0;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(0, 135, 234, 0.12);
+}
+.sa-activity__status--quiet { color: var(--ui-faint); }
+.sa-activity__list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.sa-activity__row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.sa-activity__dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 135, 234, 0.12);
+}
+.sa-activity__dot--failed { background: #c74444; box-shadow: 0 0 0 3px rgba(199, 68, 68, 0.12); }
+.sa-activity__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+.sa-activity__signature {
+  overflow: hidden;
+  color: var(--accent-deep);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sa-activity__meta,
+.sa-activity__updated {
+  color: var(--ui-faint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.sa-activity__empty {
+  margin-top: 0.7rem;
+  color: var(--ui-soft);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.sa-activity__updated {
+  margin-top: 0.7rem;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  letter-spacing: 0.03em;
+}

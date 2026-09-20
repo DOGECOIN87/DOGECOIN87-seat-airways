@@ -3,6 +3,7 @@ import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, type CabinRow, type ZoneKey } 
 import { safeHref, type Banner, type BannerSet } from '../lib/banners';
 import { shortAddress, type Manifest, type ManifestEntry } from '../lib/manifest';
 import { formatShare, formatTokens } from '../lib/seatLadder';
+import { formatActivityTime, shortSignature, transactionStatus, useWalletActivity } from '../lib/transactions';
 
 /**
  * The cabin, from above.
@@ -33,10 +34,11 @@ interface SeatProps {
   banner: Banner | null;
   mine: boolean;
   onVisit: (id: string, zone: ZoneKey) => void;
+  onSelect: (id: string) => void;
   onInspect: (id: string | null) => void;
 }
 
-const Seat = ({ id, zone, entry, banner, mine, onVisit, onInspect }: SeatProps) => {
+const Seat = ({ id, zone, entry, banner, mine, onVisit, onSelect, onInspect }: SeatProps) => {
   const lavatory = (LAVATORY_SEATS as readonly string[]).includes(id);
   const sold = entry !== null;
 
@@ -61,7 +63,7 @@ const Seat = ({ id, zone, entry, banner, mine, onVisit, onInspect }: SeatProps) 
       type="button"
       aria-pressed={mine}
       aria-label={label}
-      onClick={() => onVisit(id, zone)}
+      onClick={() => { onSelect(id); onVisit(id, zone); }}
       onMouseEnter={() => onInspect(id)}
       onFocus={() => onInspect(id)}
       onMouseLeave={() => onInspect(null)}
@@ -109,6 +111,7 @@ interface SeatMapProps {
 
 const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, onVisit, onAdvertise }: SeatMapProps) {
   const [inspecting, setInspecting] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
   /* How full each zone is.
@@ -178,11 +181,12 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
   /* With nothing under the cursor the panel falls back to the best seat on
      the aircraft rather than to an empty square: the front of the wall is
      what the section is selling, so that is what it shows at rest. */
-  const shown = inspecting ?? mine ?? manifest.entries[0]?.seat.id ?? null;
-  const resting = !inspecting && !mine;
+  const shown = selected ?? inspecting ?? mine ?? manifest.entries[0]?.seat.id ?? null;
+  const resting = !selected && !inspecting && !mine;
   const entry = shown ? manifest.bySeat.get(shown) ?? null : null;
   const banner = shown ? banners[shown] ?? null : null;
   const link = safeHref(banner?.href);
+  const activity = useWalletActivity(entry?.address ?? null);
 
   return (
     <div
@@ -261,6 +265,7 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
                                   banner={banners[id] ?? null}
                                   mine={mine === id}
                                   onVisit={onVisit}
+                                  onSelect={setSelected}
                                   onInspect={setInspecting}
                                 />
                               );
@@ -333,6 +338,7 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
                 )}
               </p>
               {entry ? (
+                <>
                 <dl className="sa-map__facts">
                   <div>
                     <dt>Holder</dt>
@@ -347,6 +353,46 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
                     <dd className="tabular-nums">{formatShare(entry.share)}</dd>
                   </div>
                 </dl>
+                <section className="sa-activity" aria-labelledby="seat-activity-title">
+                  <div className="sa-activity__head">
+                    <p id="seat-activity-title" className="sa-map__label">Recent wallet activity</p>
+                    <span className={`sa-activity__status ${activity.failed ? 'sa-activity__status--quiet' : ''}`}>
+                      {activity.loading ? 'Updating' : activity.configured ? 'Live' : 'RPC not set'}
+                    </span>
+                  </div>
+                  {!activity.configured ? (
+                    <p className="sa-activity__empty">Connect a Solana RPC endpoint to read confirmed transactions for this holder.</p>
+                  ) : activity.loading && !activity.rows.length ? (
+                    <p className="sa-activity__empty">Reading the chain…</p>
+                  ) : activity.failed ? (
+                    <p className="sa-activity__empty">Transaction history is temporarily unavailable. The wallet holder above is still live.</p>
+                  ) : activity.rows.length ? (
+                    <ul className="sa-activity__list">
+                      {activity.rows.map((transaction) => (
+                        <li key={transaction.signature} className="sa-activity__row">
+                          <span className={`sa-activity__dot ${transaction.err ? 'sa-activity__dot--failed' : ''}`} aria-hidden />
+                          <span className="sa-activity__copy">
+                            <a
+                              href={`https://solscan.io/tx/${transaction.signature}`}
+                              target="_blank"
+                              rel="noopener noreferrer nofollow"
+                              className="sa-activity__signature"
+                            >
+                              {shortSignature(transaction.signature)}
+                            </a>
+                            <span className="sa-activity__meta">{formatActivityTime(transaction.blockTime)} · {transactionStatus(transaction)}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="sa-activity__empty">No recent signatures found for this wallet.</p>
+                  )}
+                  {activity.refreshedAt && !activity.loading && (
+                    <p className="sa-activity__updated">Updated {formatActivityTime(Math.floor(activity.refreshedAt / 1000))}</p>
+                  )}
+                </section>
+                </>
               ) : (
                 <p className="sa-map__note">
                   Nobody holds this seat. Out-hold #{manifest.entries.length || 1} and it is yours.
