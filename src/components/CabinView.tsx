@@ -77,6 +77,7 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
   const premium = zone.key === 'first' || zone.key === 'business';
   /* First gets a shell, a divider and a lamp. Business is simply wide. */
   const suite = zone.key === 'first';
+  const cockpitDoor = suite && seat.row === 1;
   const exitRow = zone.key === 'exit';
   /* Above the atmosphere there is no daylight to spill into the cabin — the
      window goes black and the reading lights become the only light in shot. */
@@ -251,6 +252,28 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
           {/* Daylight thrown across the wall and onto the seat */}
           <ellipse cx={f.cx + f.rx * 1.7} cy={f.cy + 60} rx={f.rx * 2.2} ry={f.ry * 1.1} fill="url(#cv-daylight)" opacity="0.6" />
         </g>
+
+        {/* The first-class bulkhead: row 1 faces the sealed flight-deck door,
+            not an unexplained empty wall. It sits behind the seat-back so the
+            door reads as the boundary ahead of the suite without hiding the
+            passenger's own screen. */}
+        {cockpitDoor && (
+          <g>
+            <path d="M382 208 Q600 176 818 208 L856 410 Q600 438 344 410 Z" fill="#24231F" stroke="#7C7566" strokeWidth="3" />
+            <rect x="438" y="222" width="324" height="194" rx="10" fill="#35332D" stroke="#9C9484" strokeWidth="2" />
+            <rect x="466" y="247" width="268" height="74" rx="5" fill="#0B0C0F" stroke="#6E685C" strokeWidth="2" />
+            <path d="M486 304 H714" stroke="#3F4B56" strokeWidth="3" opacity="0.8" />
+            <circle cx="600" cy="278" r="8" fill="#172330" stroke={CYAN} strokeWidth="1.5" />
+            <rect x="706" y="337" width="16" height="44" rx="6" fill="#BFB8A8" />
+            <rect x="490" y="347" width="220" height="27" rx="3" fill="#0B0C0F" stroke={AMBER} strokeWidth="1.4" />
+            <text x="600" y="366" textAnchor="middle" fill={AMBER} fontSize="12" fontWeight="700" letterSpacing="2.6" fontFamily={MONO}>
+              FLIGHT DECK
+            </text>
+            <text x="600" y="402" textAnchor="middle" fill="#BFB8A8" fontSize="10" letterSpacing="1.8" fontFamily={MONO}>
+              CREW ONLY · KEEP CLOSED
+            </text>
+          </g>
+        )}
 
         {/* ══ THE ROW AHEAD ═════════════════════════════════════════════ */}
         {lavatory ? (
