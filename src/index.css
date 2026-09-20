@@ -141,9 +141,9 @@ html {
    are lit by the same lamp. */
 .sa-ground {
   background:
-    radial-gradient(1400px 900px at 18% -10%, rgba(255, 255, 255, 0.85), transparent 62%),
-    radial-gradient(1100px 700px at 88% 8%, rgba(0, 201, 241, 0.07), transparent 66%),
-    linear-gradient(165deg, #E6E7EB 0%, #DCDDE2 48%, #D4D5DB 100%);
+    radial-gradient(1400px 900px at 18% -10%, rgba(45, 58, 82, 0.95), transparent 62%),
+    radial-gradient(1100px 700px at 88% 8%, rgba(0, 201, 241, 0.15), transparent 66%),
+    linear-gradient(165deg, #182131 0%, #0F1725 48%, #080D17 100%);
 }
 /* The supplied mark stays vector-sharp here, but is deliberately scaled down
    and faded into the panel ground. Two offset repeat layers create staggered
@@ -158,11 +158,11 @@ html {
     url('/seat-airlines-mark-pattern.svg'),
     url('/seat-airlines-mark-pattern.svg');
   background-repeat: repeat;
-  background-size: 28rem 28rem;
-  background-position: 28rem 28rem, 42rem 42rem;
+  background-size: 18rem 18rem;
+  background-position: 18rem 18rem, 27rem 27rem;
   opacity: 0.9;
   mask-image: linear-gradient(to bottom, transparent 0, black 10rem, black calc(100% - 10rem), transparent 100%);
-  animation: sa-logo-drift 42s ease-in-out infinite alternate;
+  animation: sa-logo-drift 16s ease-in-out infinite alternate;
   will-change: background-position;
 }
 /* A barely perceptible cabin-at-cruise drift: the two vector layers move
@@ -170,12 +170,23 @@ html {
    airborne quality. The long duration keeps it atmospheric rather than
    attention-seeking. */
 @keyframes sa-logo-drift {
-  from { background-position: 28rem 28rem, 42rem 42rem; }
-  to { background-position: -2rem -2rem, 12rem 12rem; }
+  from { background-position: 18rem 18rem, 27rem 27rem; }
+  to { background-position: -2rem -2rem, 7rem 7rem; }
 }
 /* The dark theme's grid and scanlines do not survive the move to a
    light panel — a panel face is a panel face, not a CRT. */
 .sa-scanlines { display: none; }
+
+/* The hero and check-in sections sit directly over the inverted ground. Keep
+   their display type and prose light, while the raised cards retain their
+   existing instrument-panel palette. */
+.sa-hero .sa-display,
+.sa-section .sa-display { color: #F5F8FC; }
+.sa-hero .sa-lead,
+.sa-section .sa-lead { color: #D1DCEB; }
+.sa-hero .sa-eyebrow,
+.sa-section .sa-eyebrow { color: #7FE3F7; }
+.sa-section-head::before { background: linear-gradient(90deg, rgba(127, 227, 247, 0.5), rgba(127, 227, 247, 0.08) 62%, transparent); }
 
 .sa-skip {
   position: absolute;
