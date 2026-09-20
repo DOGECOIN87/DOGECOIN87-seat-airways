@@ -1,10 +1,19 @@
 /**
- * The advert server.
+ * The advert server, and the cabin directory.
  *
- * Two routes, and a deliberately small job:
+ * The wall, keyed by wallet:
  *
  *   GET  /banners   the published wall, keyed by wallet
  *   POST /banner    put an advert up, if you can prove the wallet is yours
+ *
+ * The directory, behind a session that same wallet signature opens:
+ *
+ *   POST   /session    prove the key, get a bearer token for a day
+ *   DELETE /session    hand it back
+ *   GET    /directory  every published card
+ *   PUT    /profile    publish or amend your own
+ *   GET    /messages   your introductions, both directions
+ *   POST   /messages   send one
  *
  * ── What this service does not do ─────────────────────────────────────────
  * It does not know which seat anybody is in, and it must not learn. Working
@@ -23,9 +32,22 @@ import {
   challenge, decodeDataUrl, imageType, readStoredBanner, sha256Hex, verifySignature,
   MAX_AGE_MS, MAX_IMAGE_BYTES, COOLDOWN_SECONDS, type StoredBanner,
 } from './verify';
+import {
+  bearerToken, isAddress, messageId, mintToken, readMessageBody, readProfileInput,
+  signInChallenge, tokenHash,
+  MESSAGES_PER_HOUR, MESSAGE_PAGE, SESSION_TTL_MS, SIGNIN_MAX_AGE_MS,
+} from './networking';
 
 export interface Env {
   BANNERS: KVNamespace;
+  /**
+   * The cabin directory: profiles, introductions, sessions. Optional.
+   *
+   * Unbound, the wall works exactly as before and the directory routes say
+   * plainly that this deployment has none rather than failing as if the
+   * request were wrong. Bind it and apply `migrations/` to turn it on.
+   */
+  DIRECTORY?: D1Database;
   /**
    * Object storage for the artwork. Optional.
    *
@@ -165,8 +187,8 @@ function corsHeaders(env: Env, origin: string | null): Record<string, string> {
   const ok = origin && (allowed.length === 0 || allowed.includes(origin));
   return {
     'access-control-allow-origin': ok && origin ? origin : allowed[0] ?? '*',
-    'access-control-allow-methods': 'GET,HEAD,POST,OPTIONS',
-    'access-control-allow-headers': 'content-type',
+    'access-control-allow-methods': 'GET,HEAD,POST,PUT,DELETE,OPTIONS',
+    'access-control-allow-headers': 'content-type,authorization',
     'access-control-max-age': '86400',
     vary: 'Origin',
   };
@@ -240,6 +262,67 @@ function wallEtag(wall: Wall): string {
   return `"${Object.keys(wall).length}-${newest}"`;
 }
 
+/* ── The cabin directory ────────────────────────────────────────────────────
+   Profiles and introductions, in SQL, because they are rows: one card per
+   wallet, and messages read back by recipient and by sender.
+
+   What this service still does not know is which seat anybody is in. The page
+   decides that, as it does for adverts, and the same rule follows from it —
+   the directory answers "is this really the wallet it claims to be", and the
+   section perks (contacts to your own section, introductions between First
+   Class members) are the page's reading of the manifest it already holds.
+
+   The line this service does draw is the one it can: a card is published to
+   the cabin, and an introduction is readable only by the two wallets on it. */
+
+interface ProfileRow {
+  address: string;
+  display_name: string;
+  role: string;
+  email: string;
+  website: string;
+  linkedin: string;
+  updated_at: string;
+}
+
+interface MessageRow {
+  id: string;
+  sender: string;
+  recipient: string;
+  body: string;
+  sent_at: string;
+}
+
+const asProfile = (row: ProfileRow) => ({
+  address: row.address,
+  displayName: row.display_name,
+  role: row.role,
+  email: row.email,
+  website: row.website,
+  linkedin: row.linkedin,
+  updated: row.updated_at,
+});
+
+const asMessage = (row: MessageRow) => ({
+  id: row.id,
+  from: row.sender,
+  to: row.recipient,
+  body: row.body,
+  sentAt: row.sent_at,
+});
+
+/** The wallet behind a bearer token, or null if there is not one. */
+async function sessionAddress(db: D1Database, request: Request): Promise<string | null> {
+  const token = bearerToken(request.headers.get('authorization'));
+  if (!token) return null;
+  const row = await db
+    .prepare('SELECT address, expires_at FROM sessions WHERE token_hash = ?')
+    .bind(await tokenHash(token))
+    .first<{ address: string; expires_at: number }>();
+  if (!row || row.expires_at < Date.now()) return null;
+  return row.address;
+}
+
 /* ── Routes ─────────────────────────────────────────────────────────────── */
 
 export default {
@@ -266,7 +349,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
     // client sends a compressed 384px image, so this is intentionally well
     // above the 512 KiB stored-image limit while still bounding an abuse case.
     const contentLength = Number(request.headers.get('content-length'));
-    if (request.method === 'POST' && Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
+    const writes = request.method === 'POST' || request.method === 'PUT';
+    if (writes && Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
       return json({ error: 'That request is too large.' }, 413, cors);
     }
 
@@ -275,7 +359,170 @@ async function handle(request: Request, env: Env): Promise<Response> {
         ok: true,
         service: 'seat-airlines-banners',
         storage: usingR2(env) ? 'r2' : 'kv',
+        directory: Boolean(env.DIRECTORY),
       }, 200, { ...cors, 'cache-control': 'no-store' });
+    }
+
+    /* ── The directory ──────────────────────────────────────────────────
+       Nothing below is cacheable: every response is either a credential or
+       somebody's private correspondence. */
+    const directoryRoute = ['/session', '/directory', '/profile', '/messages'].includes(url.pathname);
+    if (directoryRoute) {
+      const db = env.DIRECTORY;
+      if (!db) {
+        return json({ error: 'This deployment has no cabin directory configured.' }, 503, cors);
+      }
+      const priv = { ...cors, 'cache-control': 'no-store' };
+
+      /* Opening a session. The one route here that a signature reaches; every
+         other one is the token it hands back. */
+      if (request.method === 'POST' && url.pathname === '/session') {
+        let body: { address?: unknown; issued?: unknown; signature?: unknown };
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+
+        const address = isAddress(body.address) ? body.address : '';
+        const issued = typeof body.issued === 'string' ? body.issued : '';
+        const signature = typeof body.signature === 'string' ? body.signature : '';
+        if (!address || !issued || !signature) {
+          return json({ error: 'That sign-in was missing something.' }, 400, priv);
+        }
+
+        const at = Date.parse(issued);
+        if (!Number.isFinite(at) || Math.abs(Date.now() - at) > SIGNIN_MAX_AGE_MS) {
+          return json({ error: 'That signature has expired. Try again.' }, 400, priv);
+        }
+
+        if (!(await verifySignature(address, signInChallenge(address, issued), signature))) {
+          return json({ error: 'That signature does not match the wallet.' }, 401, priv);
+        }
+
+        /* Spend the signature. It stays valid for five minutes, so without
+           this a captured one is a second token for somebody else. */
+        const spent = await db
+          .prepare('INSERT OR IGNORE INTO signins (address, issued, expires_at) VALUES (?, ?, ?)')
+          .bind(address, issued, at + SIGNIN_MAX_AGE_MS)
+          .run();
+        if (!spent.meta.changes) {
+          return json({ error: 'That sign-in has already been used. Try again.' }, 401, priv);
+        }
+
+        if (!(await holdsToken(env, address))) {
+          return json({ error: 'That wallet does not hold the token.' }, 403, priv);
+        }
+
+        const token = mintToken();
+        const expires = Date.now() + SESSION_TTL_MS;
+        await db.batch([
+          db.prepare('INSERT INTO sessions (token_hash, address, expires_at) VALUES (?, ?, ?)')
+            .bind(await tokenHash(token), address, expires),
+          // Nothing else sweeps these up, and a sign-in is the moment there is
+          // already a write in flight.
+          db.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(Date.now()),
+          db.prepare('DELETE FROM signins WHERE expires_at < ?').bind(Date.now()),
+        ]);
+
+        return json({ token, address, expires }, 200, priv);
+      }
+
+      if (request.method === 'DELETE' && url.pathname === '/session') {
+        const token = bearerToken(request.headers.get('authorization'));
+        if (token) {
+          await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await tokenHash(token)).run();
+        }
+        return json({ ok: true }, 200, priv);
+      }
+
+      const me = await sessionAddress(db, request);
+      if (!me) return json({ error: 'Sign in to read the cabin directory.' }, 401, priv);
+
+      if (request.method === 'GET' && url.pathname === '/directory') {
+        const { results } = await db
+          .prepare(
+            'SELECT address, display_name, role, email, website, linkedin, updated_at' +
+            ' FROM profiles ORDER BY updated_at DESC LIMIT 500',
+          )
+          .all<ProfileRow>();
+        const out: Record<string, ReturnType<typeof asProfile>> = {};
+        for (const row of results ?? []) out[row.address] = asProfile(row);
+        return json(out, 200, priv);
+      }
+
+      if (request.method === 'PUT' && url.pathname === '/profile') {
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+        const parsed = readProfileInput(body);
+        if ('error' in parsed) return json({ error: parsed.error }, 400, priv);
+
+        const updated = new Date().toISOString();
+        const { profile } = parsed;
+        await db
+          .prepare(
+            'INSERT INTO profiles (address, display_name, role, email, website, linkedin, updated_at)' +
+            ' VALUES (?, ?, ?, ?, ?, ?, ?)' +
+            ' ON CONFLICT(address) DO UPDATE SET display_name = excluded.display_name,' +
+            ' role = excluded.role, email = excluded.email, website = excluded.website,' +
+            ' linkedin = excluded.linkedin, updated_at = excluded.updated_at',
+          )
+          .bind(me, profile.displayName, profile.role, profile.email, profile.website, profile.linkedin, updated)
+          .run();
+
+        return json({ ...profile, address: me, updated }, 200, priv);
+      }
+
+      if (request.method === 'GET' && url.pathname === '/messages') {
+        const columns = 'SELECT id, sender, recipient, body, sent_at FROM messages';
+        const [inbox, sent] = await db.batch<MessageRow>([
+          db.prepare(`${columns} WHERE recipient = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
+          db.prepare(`${columns} WHERE sender = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
+        ]);
+        return json({
+          inbox: (inbox.results ?? []).map(asMessage),
+          sent: (sent.results ?? []).map(asMessage),
+        }, 200, priv);
+      }
+
+      if (request.method === 'POST' && url.pathname === '/messages') {
+        let body: { to?: unknown; body?: unknown };
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+
+        const to = isAddress(body.to) ? body.to : '';
+        if (!to) return json({ error: 'That is not a wallet address.' }, 400, priv);
+        if (to === me) return json({ error: 'That message is addressed to you.' }, 400, priv);
+
+        const parsed = readMessageBody(body.body);
+        if ('error' in parsed) return json({ error: parsed.error }, 400, priv);
+
+        const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const recent = await db
+          .prepare('SELECT COUNT(*) AS sent FROM messages WHERE sender = ? AND sent_at > ?')
+          .bind(me, hourAgo)
+          .first<{ sent: number }>();
+        if ((recent?.sent ?? 0) >= MESSAGES_PER_HOUR) {
+          return json({ error: 'That is enough introductions for one hour.' }, 429, priv);
+        }
+
+        const message = { id: messageId(), from: me, to, body: parsed.body, sentAt: new Date().toISOString() };
+        await db
+          .prepare('INSERT INTO messages (id, sender, recipient, body, sent_at) VALUES (?, ?, ?, ?, ?)')
+          .bind(message.id, message.from, message.to, message.body, message.sentAt)
+          .run();
+
+        return json(message, 200, priv);
+      }
+
+      return json({ error: `${request.method} is not allowed on ${url.pathname}.` }, 405, priv);
     }
 
     if (request.method === 'GET' && url.pathname === '/banners') {

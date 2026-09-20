@@ -44,63 +44,12 @@ export function shortMember(address: string): string {
   return address.length > 12 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;
 }
 
-export interface NetworkingProfile {
-  displayName: string;
-  role: string;
-  email: string;
-  website: string;
-  linkedin: string;
-}
-
-const PROFILE_KEY = 'seat_airlines_networking_profile';
-const MESSAGE_KEY = 'seat_airlines_networking_messages';
-
-export interface NetworkingMessage {
-  id: string;
-  from: string;
-  to: string;
-  body: string;
-  sentAt: string;
-}
-
-export function readProfile(address: string | null): NetworkingProfile {
-  const empty: NetworkingProfile = { displayName: '', role: '', email: '', website: '', linkedin: '' };
-  if (!address || typeof window === 'undefined') return empty;
-  try {
-    const raw = window.localStorage.getItem(`${PROFILE_KEY}:${address}`);
-    return raw ? { ...empty, ...JSON.parse(raw) } : empty;
-  } catch {
-    return empty;
-  }
-}
-
-export function writeProfile(address: string, profile: NetworkingProfile): void {
-  try {
-    window.localStorage.setItem(`${PROFILE_KEY}:${address}`, JSON.stringify(profile));
-  } catch {
-    // A blocked storage environment should not stop the rest of the cabin UI.
-  }
-}
-
-export function readMessages(address: string | null): NetworkingMessage[] {
-  if (!address || typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(`${MESSAGE_KEY}:${address}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function writeMessage(message: NetworkingMessage): void {
-  try {
-    const key = `${MESSAGE_KEY}:${message.from}`;
-    const current = readMessages(message.from);
-    window.localStorage.setItem(key, JSON.stringify([message, ...current].slice(0, 30)));
-  } catch {
-    // The UI still acknowledges the action when storage is unavailable.
-  }
-}
+/**
+ * Cards and introductions themselves live in the Worker's database rather
+ * than here — see `networkingApi.ts`. What is left in this module is the part
+ * that is nobody's to store: which of them you are allowed to see, which is
+ * read off the seat ladder the page has already worked out.
+ */
 
 export function isValidExternalUrl(value: string): boolean {
   if (!value) return true;

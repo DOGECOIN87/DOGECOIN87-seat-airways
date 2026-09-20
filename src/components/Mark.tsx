@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 /**
  * The SEAT AIRLINES mark: a seat, seen from the side, inside a ring.
  *
@@ -13,29 +15,121 @@ export const MARK_PATH =
 /** The brand navy the mark is supplied on. */
 export const MARK_NAVY = '#002663';
 
+/**
+ * The seat on its own, without the ring around it.
+ *
+ * `MARK_PATH` is five subpaths: the armrest, the base, the seat back, and
+ * then the two that draw the ring. The badge below puts the seat on a disc of
+ * its own, so a second outline inside that disc is one ring too many — this
+ * is the same artwork cut at the subpath where the ring begins.
+ */
+const RING_START = 'M 752.00,112.00';
+export const SEAT_PATH = MARK_PATH.slice(0, MARK_PATH.indexOf(RING_START)).trim();
+
 interface MarkProps {
   size?: number;
   /** The seat and its ring. Defaults to the white it is drawn in. */
   color?: string;
   /** Plate behind it. Pass 'none' for the mark alone. */
   background?: string;
+  /**
+   * `glyph` is the flat mark, which is what the aircraft wears and what tints
+   * to whatever it sits on. `badge` is the moulded version: the seat raised in
+   * white off a navy disc, lit from the upper left.
+   */
+  variant?: 'glyph' | 'badge';
   className?: string;
   title?: string;
 }
 
-const Mark = ({ size = 40, color = '#FFFFFF', background = MARK_NAVY, className, title }: MarkProps) => (
-  <svg
-    viewBox="0 0 1536 1536"
-    width={size}
-    height={size}
-    className={className}
-    role={title ? 'img' : undefined}
-    aria-label={title}
-    aria-hidden={title ? undefined : true}
-  >
-    {background !== 'none' && <rect width="1536" height="1536" fill={background} />}
-    <path d={MARK_PATH} fill={color} fillRule="evenodd" />
-  </svg>
-);
+const Mark = ({
+  size = 40, color = '#FFFFFF', background = MARK_NAVY, variant = 'glyph', className, title,
+}: MarkProps) => {
+  /* Gradients are referenced by id, and the page carries more than one mark,
+     so the ids have to be per-instance or the second one paints with the
+     first one's fill. */
+  const id = useId().replace(/:/g, '');
+  const shared = {
+    viewBox: '0 0 1536 1536',
+    width: size,
+    height: size,
+    className,
+    role: title ? ('img' as const) : undefined,
+    'aria-label': title,
+    'aria-hidden': title ? undefined : true,
+  };
+
+  if (variant === 'badge') {
+    return (
+      <svg {...shared}>
+        <defs>
+          {/* The disc, lit from the upper left and turning away to the rim. */}
+          <radialGradient id={`${id}-face`} cx="38%" cy="30%" r="80%">
+            <stop offset="0" stopColor="#2B55A6" />
+            <stop offset="0.38" stopColor="#1B4193" />
+            <stop offset="0.74" stopColor="#0A2A6E" />
+            <stop offset="1" stopColor="#04143C" />
+          </radialGradient>
+          {/* The gloss: a cap of light over the top, gone by the middle. */}
+          <linearGradient id={`${id}-gloss`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.42" />
+            <stop offset="0.5" stopColor="#FFFFFF" stopOpacity="0.08" />
+            <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+          </linearGradient>
+          {/* Light bouncing back up into the bottom of the dome. */}
+          <linearGradient id={`${id}-bounce`} x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stopColor="#7FA6E8" stopOpacity="0.40" />
+            <stop offset="1" stopColor="#7FA6E8" stopOpacity="0" />
+          </linearGradient>
+          {/* White that is moulded rather than printed: brighter where the
+              light is, falling to grey on the face turning away from it. */}
+          <linearGradient id={`${id}-seat`} x1="0.2" y1="0" x2="0.75" y2="1">
+            <stop offset="0" stopColor="#FFFFFF" />
+            <stop offset="0.6" stopColor="#F7F9FC" />
+            <stop offset="1" stopColor="#E3E8F1" />
+          </linearGradient>
+          <clipPath id={`${id}-disc`}>
+            <circle cx="768" cy="768" r="700" />
+          </clipPath>
+          <filter id={`${id}-lift`} x="-25%" y="-25%" width="150%" height="150%">
+            <feDropShadow dx="6" dy="16" stdDeviation="16" floodColor="#000A20" floodOpacity="0.5" />
+          </filter>
+        </defs>
+
+        <circle cx="768" cy="768" r="700" fill={`url(#${id}-face)`} />
+
+        <g clipPath={`url(#${id}-disc)`}>
+          <ellipse cx="768" cy="700" rx="700" ry="600" fill={`url(#${id}-bounce)`} />
+          {/* The gloss sits inside the rim, as it does on a moulded cap. */}
+          <ellipse cx="768" cy="392" rx="474" ry="268" fill={`url(#${id}-gloss)`} />
+          <ellipse
+            cx="1112" cy="380" rx="58" ry="132" fill="#FFFFFF" opacity="0.45"
+            transform="rotate(-34 1112 380)"
+          />
+        </g>
+
+        {/* The rim: dark where the edge turns away, with the bevel catching
+            the light just inside it. */}
+        <circle cx="768" cy="768" r="690" fill="none" stroke="#00102E" strokeOpacity="0.55" strokeWidth="22" />
+        <circle cx="768" cy="768" r="670" fill="none" stroke="#89AEE8" strokeOpacity="0.30" strokeWidth="7" />
+
+        <g transform="translate(768 762) scale(0.96) translate(-768 -768)" filter={`url(#${id}-lift)`}>
+          <path
+            d={SEAT_PATH}
+            fill={color === '#FFFFFF' ? `url(#${id}-seat)` : color}
+            fillRule="evenodd"
+          />
+        </g>
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...shared}>
+      {background !== 'none' && <rect width="1536" height="1536" fill={background} />}
+      <path d={MARK_PATH} fill={color} fillRule="evenodd" />
+    </svg>
+  );
+};
 
 export default Mark;

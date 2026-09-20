@@ -6,5 +6,13 @@ compatibility_date = "2025-09-01"
 binding = "BANNERS"
 id = "local-test"
 
+# Miniflare's own SQLite. The id never reaches Cloudflare; apply the schema to
+# it with:
+#   npx wrangler d1 migrations apply seat-airlines-directory --local --config wrangler.local.toml
+[[d1_databases]]
+binding = "DIRECTORY"
+database_name = "seat-airlines-directory"
+database_id = "local-test"
+
 [vars]
 ALLOWED_ORIGINS = "http://localhost:3000"

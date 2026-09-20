@@ -176,6 +176,7 @@ mode it is in rather than dressing a simulation up as a live reading.
 | `VITE_RPC_URL` | balances and the seat ladder come off the chain |
 | `VITE_HOLDERS_URL` | the manifest seats real holders |
 | `VITE_BANNERS_API` | holders publish their own adverts, signed |
+| `VITE_DIRECTORY_API` | the cabin directory: holder cards and introductions, in a database |
 
 See `.env.example`, which documents all of them.
 
@@ -231,6 +232,41 @@ authorise any artwork for that wallet forever.
 
 With no advert server configured, an upload stays in the uploader's browser and
 the dialog says so.
+
+### The cabin directory
+
+The seat is an access tier: holders publish a card, see the cards of everyone
+in their own section, and First Class introduces itself to First Class. All of
+that used to be `localStorage`, which made both halves of it fictions — a card
+existed only in the browser that typed it, so nobody in your section could
+ever read one, and a sent introduction was written to the *sender's* own
+storage and delivered to nobody. The interface said "queued in this browser",
+which was true and was the whole problem.
+
+Cards and messages are rows in a database now, in the same Worker as the wall:
+Cloudflare **D1**, with the schema in `worker/migrations/`. A card is stored
+against the wallet, so it follows its holder to any browser and up and down
+the seat ladder, exactly as an advert does.
+
+**Reading the directory takes a signature, but only one.** The wall signs
+every publish, because a publish is rare and pins one exact image. The
+directory is read and written constantly, and a wallet popup per action would
+be unusable — worse, it teaches people to approve things unread. So the wallet
+signs one plain-text line to open a session, and what comes back is a bearer
+token good for a day. The token is the only thing the page keeps in storage;
+the server keeps nothing but a hash of it.
+
+What the server can enforce, it does: an introduction is readable only by the
+two wallets named on it, sign-in signatures are spent on use so a captured one
+cannot mint a second token, and there is a cap on how many introductions a
+wallet can send in an hour. What it cannot enforce is anything that would
+require knowing who sits where — the section perks are the page's reading of
+the manifest, for the same reason adverts are keyed by wallet rather than by
+seat. `worker/README.md` has that argument in full.
+
+Without `VITE_DIRECTORY_API` (which falls back to `VITE_BANNERS_API`, since
+one Worker serves both), the hub says plainly that no directory is connected
+rather than pretending to store anything.
 
 ## Deploying
 
@@ -326,6 +362,9 @@ src/
 │   ├── manifest.ts           who is seated where, by rank
 │   ├── useAttitude.ts        one rAF loop, shared by every view
 │   ├── sky.ts                solar position, weather, palettes
+│   ├── networkingApi.ts      the cabin directory, over the wire
+│   ├── useDirectory.ts       the session, the roster and the inbox, as state
+│   ├── sectionAccess.ts      which cards and messages your seat entitles you to
 │   └── passenger.ts          the name on the boarding pass
 ├── three/
 │   ├── WorldScene.ts         the scene: sky, sun, stars, ground, limb, bands
@@ -340,6 +379,7 @@ src/
     ├── CargoHold.tsx         below the floor
     ├── SeatMap.tsx           the wall
     ├── AdvertDialog.tsx      putting an image on a seat you hold
+    ├── NetworkingHub.tsx     the section roster, your card, your introductions
     ├── BoardingPass.tsx      the screenshot
     ├── Annunciators.tsx      the overhead panel, as text
     └── RadioLog.tsx          the PA

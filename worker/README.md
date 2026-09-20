@@ -1,8 +1,9 @@
-# The advert server
+# The advert server, and the cabin directory
 
-Holders put images on their own seats. This is what stores them.
+Holders put images on their own seats, publish a card, and introduce
+themselves to the section in front of them. This is what stores all of it.
 
-Two routes, and one that only exists in KV mode:
+The wall:
 
 | | |
 | --- | --- |
@@ -10,6 +11,17 @@ Two routes, and one that only exists in KV mode:
 | `POST /banner` | put an advert up, if you can prove the wallet is yours |
 | `GET /health` | a no-store liveness response for monitoring and smoke tests |
 | `GET /images/…` | the artwork, when it is kept in KV rather than R2 |
+
+The directory, every route of which needs a session:
+
+| | |
+| --- | --- |
+| `POST /session` | prove the wallet, get a bearer token good for a day |
+| `DELETE /session` | hand it back |
+| `GET /directory` | every published card |
+| `PUT /profile` | publish or amend your own |
+| `GET /messages` | your introductions, both directions |
+| `POST /messages` | send one |
 
 ## What it deliberately does not know
 
@@ -62,6 +74,74 @@ that wallet, forever — the holder signs "it's me" and whoever caught the
 signature picks the picture. With it, a signature authorises exactly one
 image.
 
+## The cabin directory
+
+Cards and introductions used to live in `localStorage`, which made both of
+them fictions. A card existed only in the browser that typed it, so nobody in
+your section could ever read one; and a sent introduction was written to the
+**sender's** own storage and delivered to nobody. The interface said "queued
+in this browser", which was true and was the whole problem.
+
+They are rows in D1 now — `migrations/0001_networking.sql` is the schema:
+one card per wallet, messages indexed both by recipient and by sender, plus
+the sessions table and the spent sign-in signatures.
+
+### Signing in, rather than signing everything
+
+The wall signs every publish, because a publish is rare and pins one exact
+image. The directory is the opposite shape: a holder saves a card, reads the
+roster, sends a note, reads the replies. A wallet popup per action would be
+unusable, and people asked to sign constantly stop reading what they sign.
+
+So the wallet signs once:
+
+```
+SEAT AIRLINES
+Sign in to the cabin directory.
+
+This lets you publish your card, read your section, and send and
+receive introductions for one day. It authorises no transaction.
+
+wallet: 7xKX…9fQr
+issued: 2026-09-20T00:31:00.000Z
+```
+
+What comes back is a bearer token good for 24 hours. Three things about how
+it is handled are deliberate:
+
+1. **Only a SHA-256 of the token is stored.** A dump of the sessions table is
+   not a way into anybody's account.
+2. **The sign-in signature is spent on use.** It stays valid for five minutes,
+   so without a record of the ones already redeemed a captured signature is a
+   second token inside that window. An advert can afford that risk; a
+   credential cannot.
+3. **Every directory response is `no-store`.** Each one is either a credential
+   or somebody's private correspondence.
+
+### What it still does not know
+
+Which seat anybody is in — for the same reason the wall does not, and the
+[section above](#what-it-deliberately-does-not-know) has the argument. The
+page reads the ladder; this service answers "is this really the wallet it
+claims to be".
+
+So the line this service draws is the one it can actually hold:
+
+| | |
+| --- | --- |
+| A card | published to the cabin — any signed-in holder can read it |
+| An introduction | readable only by the two wallets named on it |
+
+The finer perks — contacts shown to your own section, introductions between
+First Class members — are the page's reading of the manifest it already holds,
+and they are an interface affordance rather than a server-enforced boundary.
+Anything stronger would mean a second copy of the seat ladder here, drifting
+from the page's copy from the day it was written. Publish into a card only
+what you are content for the cabin to have.
+
+Abuse is bounded by what does not need the ladder: 20 introductions per wallet
+per hour, 1,000 characters each, and contact links that must be `http(s)`.
+
 ## Serving the artwork
 
 An advert is keyed by the wallet that published it, so replacing one
@@ -98,7 +178,25 @@ npm install
 # One KV namespace for the records, one R2 bucket for the artwork.
 npx wrangler kv namespace create BANNERS
 npx wrangler r2 bucket create seat-airlines-banners
+
+# And the database behind the directory.
+npx wrangler d1 create seat-airlines-directory
+npx wrangler d1 migrations apply seat-airlines-directory --remote
 ```
+
+The `[[d1_databases]]` block in `wrangler.toml` is commented out, with the id
+left blank. Uncomment it with the id `d1 create` printed, and redeploy.
+
+It ships that way rather than with a placeholder id because a binding naming a
+database that does not exist fails the deploy outright, and that file is what
+CI deploys on every push. Unbound, the wall works exactly as before and the
+directory routes answer `503` saying there is no directory here — so the
+Worker is deployable before anybody has created one, and `GET /health` reports
+which of the two states it is in.
+
+**The migration is not run by the deploy.** `wrangler deploy` ships code, not
+schema, so a new migration is applied by hand (or by a step you add to the
+workflow) before the code that depends on it goes out.
 
 Put the KV id from that first command into `wrangler.toml`, then give the R2
 bucket public access — either an `r2.dev` URL or, better, a custom domain —
@@ -150,6 +248,7 @@ things are Cloudflare-shaped, and each has an obvious counterpart elsewhere:
 | --- | --- |
 | `env.IMAGES` (R2) | S3, Supabase Storage, Vercel Blob |
 | `env.BANNERS` (KV) | Redis, Postgres, DynamoDB |
+| `env.DIRECTORY` (D1) | Postgres, Supabase, any SQLite — the schema is plain SQL |
 | `crypto.subtle` Ed25519 | Node 18+ has the same API; `@noble/ed25519` otherwise |
 
 The verification logic — base58, the challenge text, the magic-byte sniff —
@@ -163,6 +262,13 @@ Two layers, neither of which needs a Cloudflare account.
 npm test          # the checks, in isolation, with a real ed25519 keypair
 ```
 
+`networking.ts` is exercised from the site's own suite (`npm test` in the
+repository root) rather than from here, because the case worth having most is
+one neither side can make alone: the page and the Worker each write out the
+text the wallet signs, and if those two strings differ by a character then
+every sign-in fails with "that signature does not match the wallet" — a
+message that points at the wallet rather than at the typo.
+
 Twelve cases over `verify.ts`: a genuine signature accepted, and a wrong
 wallet, a captured signature reused for other artwork, a moved timestamp,
 malformed base58 and SVG wearing a JPEG label each refused — plus the record
@@ -170,12 +276,29 @@ reader, which must skip a malformed `banner:` value rather than throw. One
 that threw once took the whole wall down with Cloudflare error 1101.
 
 ```bash
-npm run dev:local   # Miniflare, with simulated KV
+npm run dev:local   # Miniflare, with simulated KV and D1
 npm run test:e2e    # in another shell
 ```
 
-Fourteen cases over the routes themselves, on real HTTP against real
-bindings: a signed advert is accepted, stored, and comes back out of
+The local database starts empty, so apply the schema to it once — with the
+Worker stopped — or every directory case fails on a missing table:
+
+```bash
+npx wrangler d1 migrations apply seat-airlines-directory --local --config wrangler.local.toml
+```
+
+The directory cases are the ones that could not exist before: a wallet signs
+in, publishes a card, and sends an introduction — and a **second** wallet,
+with its own session, reads both back. That is the whole point of the change,
+and it is not something `localStorage` could ever have passed. The card is
+then read again through a fresh session, which proves it outlives the browser
+that wrote it. Alongside them: a replayed sign-in mints no second token, a
+forged and a stale one are refused, the roster and an inbox are both closed
+without a session, an invented token is not one, a `javascript:` contact link
+is refused, a message to yourself is refused, signing out revokes the token,
+and the preflight allows `PUT` and `authorization`.
+
+Over the wall itself, on real HTTP against real bindings: a signed advert is accepted, stored, and comes back out of
 `GET /banners`; the artwork is fetched back from the URL it was given and
 checked byte for byte; that URL is readable as a WebGL texture and carries a
 version; a second publish inside the cooldown gets 429; forged, stale,

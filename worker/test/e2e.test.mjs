@@ -218,5 +218,167 @@ await check('an unknown route 404s', async () => {
   assert(res.status === 404, `status ${res.status}`);
 });
 
+/* ── The cabin directory ──────────────────────────────────────────────────
+   Profiles and introductions, which used to be localStorage and so were
+   never read by anybody else. These cases are the proof that they are now:
+   one wallet publishes a card and sends a note, and a *different* wallet,
+   with its own session, reads both back. */
+
+console.log('\ncabin directory');
+
+const signInText = (address, issued) =>
+  [
+    'SEAT AIRLINES',
+    'Sign in to the cabin directory.',
+    '',
+    'This lets you publish your card, read your section, and send and',
+    'receive introductions for one day. It authorises no transaction.',
+    '',
+    `wallet: ${address}`,
+    `issued: ${issued}`,
+  ].join('\n');
+
+const wallet = async () => {
+  const keys = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+  const address = toBase58(new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey)));
+  const signWith = async (msg) =>
+    toBase58(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, keys.privateKey, new TextEncoder().encode(msg))));
+  return { address, sign: signWith };
+};
+
+const signInBody = async (who, issued = new Date().toISOString()) => ({
+  address: who.address,
+  issued,
+  signature: await who.sign(signInText(who.address, issued)),
+});
+
+const api = (path, { method = 'GET', token, body } = {}) =>
+  fetch(`${BASE}${path}`, {
+    method,
+    headers: {
+      origin: ORIGIN,
+      ...(body ? { 'content-type': 'application/json' } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+
+const alice = await wallet();
+const bob = await wallet();
+let aliceToken = '';
+let bobToken = '';
+
+await check('GET /health reports the directory is bound', async () => {
+  const body = await (await fetch(`${BASE}/health`, { headers: { origin: ORIGIN } })).json();
+  assert(body.directory === true, 'the Worker does not see a D1 binding — apply the migrations first');
+});
+
+await check('a signed sign-in opens a session', async () => {
+  const res = await api('/session', { method: 'POST', body: await signInBody(alice) });
+  assert(res.status === 200, `status ${res.status}`);
+  const body = await res.json();
+  assert(typeof body.token === 'string' && body.token.length > 20, 'no token came back');
+  assert(body.address === alice.address, 'the session names the wrong wallet');
+  assert(body.expires > Date.now(), 'the session is already expired');
+  assert(res.headers.get('cache-control') === 'no-store', 'a credential was sent cacheable');
+  aliceToken = body.token;
+});
+
+await check('the same sign-in cannot be replayed', async () => {
+  const issued = new Date().toISOString();
+  const body = await signInBody(alice, issued);
+  assert((await api('/session', { method: 'POST', body })).status === 200, 'a fresh sign-in was refused');
+  const again = await api('/session', { method: 'POST', body });
+  assert(again.status === 401, `a replayed signature minted a second token: ${again.status}`);
+});
+
+await check('a forged sign-in is refused', async () => {
+  const body = await signInBody(alice);
+  body.address = bob.address;
+  assert((await api('/session', { method: 'POST', body })).status === 401, 'a signature from another wallet was accepted');
+});
+
+await check('a stale sign-in is refused', async () => {
+  const stale = new Date(Date.now() - 20 * 60_000).toISOString();
+  const res = await api('/session', { method: 'POST', body: await signInBody(alice, stale) });
+  assert(res.status === 400, `status ${res.status}, expected 400`);
+});
+
+await check('the directory is closed without a session', async () => {
+  assert((await api('/directory')).status === 401, 'the roster was readable unauthenticated');
+  assert((await api('/messages')).status === 401, 'an inbox was readable unauthenticated');
+  assert((await api('/directory', { token: 'not-a-real-token' })).status === 401, 'an invented token was accepted');
+});
+
+await check('a card is published and read back', async () => {
+  const card = {
+    displayName: 'Aisle Hopper', role: 'Partnerships',
+    email: 'aisle@seat-airlines.space', website: 'https://seat-airlines.space', linkedin: '',
+  };
+  const put = await api('/profile', { method: 'PUT', token: aliceToken, body: card });
+  assert(put.status === 200, `publishing the card failed: ${put.status}`);
+
+  const roster = await (await api('/directory', { token: aliceToken })).json();
+  const mine = roster[alice.address];
+  assert(mine, 'the published card is not in the directory');
+  assert(mine.displayName === 'Aisle Hopper', `the wrong name came back: ${mine.displayName}`);
+  assert(mine.email === card.email, 'the email did not survive the round trip');
+});
+
+await check('a card survives a new session, which localStorage never did', async () => {
+  const fresh = await (await api('/session', { method: 'POST', body: await signInBody(alice) })).json();
+  const roster = await (await api('/directory', { token: fresh.token })).json();
+  assert(roster[alice.address]?.displayName === 'Aisle Hopper', 'the card did not outlive the session that wrote it');
+  aliceToken = fresh.token;
+});
+
+await check('a javascript: contact link is refused', async () => {
+  const res = await api('/profile', {
+    method: 'PUT', token: aliceToken, body: { website: 'javascript:alert(1)' },
+  });
+  assert(res.status === 400, `status ${res.status}, expected 400`);
+});
+
+await check('an introduction reaches the other wallet', async () => {
+  bobToken = (await (await api('/session', { method: 'POST', body: await signInBody(bob) })).json()).token;
+
+  const sent = await api('/messages', {
+    method: 'POST', token: aliceToken, body: { to: bob.address, body: 'Row 1 here — shall we talk?' },
+  });
+  assert(sent.status === 200, `sending failed: ${sent.status}`);
+
+  const theirs = await (await api('/messages', { token: bobToken })).json();
+  const received = theirs.inbox.find((m) => m.body === 'Row 1 here — shall we talk?');
+  assert(received, 'the introduction never arrived in the recipient inbox');
+  assert(received.from === alice.address, 'the message names the wrong sender');
+  assert(theirs.sent.length === 0, 'the recipient was credited with sending it');
+
+  const mine = await (await api('/messages', { token: aliceToken })).json();
+  assert(mine.sent.some((m) => m.id === received.id), 'the sender cannot see what they sent');
+  assert(mine.inbox.length === 0, 'the sender received their own introduction');
+});
+
+await check('an empty introduction, and one to yourself, are refused', async () => {
+  const empty = await api('/messages', { method: 'POST', token: aliceToken, body: { to: bob.address, body: '   ' } });
+  assert(empty.status === 400, `an empty message got ${empty.status}`);
+  const self = await api('/messages', { method: 'POST', token: aliceToken, body: { to: alice.address, body: 'hello me' } });
+  assert(self.status === 400, `a message to yourself got ${self.status}`);
+});
+
+await check('signing out revokes the token', async () => {
+  assert((await api('/session', { method: 'DELETE', token: bobToken })).status === 200, 'signing out failed');
+  assert((await api('/messages', { token: bobToken })).status === 401, 'the token still worked after signing out');
+});
+
+await check('the preflight allows the headers the directory needs', async () => {
+  const res = await fetch(`${BASE}/profile`, {
+    method: 'OPTIONS',
+    headers: { origin: ORIGIN, 'access-control-request-method': 'PUT', 'access-control-request-headers': 'authorization' },
+  });
+  assert(res.status === 204, `status ${res.status}`);
+  assert(/PUT/.test(res.headers.get('access-control-allow-methods') ?? ''), 'PUT is not allowed');
+  assert(/authorization/i.test(res.headers.get('access-control-allow-headers') ?? ''), 'authorization is not allowed');
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

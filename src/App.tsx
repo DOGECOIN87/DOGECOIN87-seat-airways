@@ -410,7 +410,7 @@ export default function App() {
       <header className="sa-topbar sticky top-0 z-40">
         <div className="mx-auto flex max-w-[94rem] flex-wrap items-center gap-x-7 gap-y-2 px-5 py-2.5 sm:px-8">
           <a href="#top" className="flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-blue">
-            <Mark size={30} background="none" color="#0087EA" title="SEAT AIRLINES" />
+            <Mark size={34} variant="badge" title="SEAT AIRLINES" />
             <span className="whitespace-nowrap font-heading text-lg leading-none text-ui-ink">Seat Airlines</span>
             <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-ui-faint sm:inline">
               SA350 · Nonstop
@@ -708,7 +708,7 @@ export default function App() {
           </header>
           <div className="mt-9">
             <Deferred minHeight="32rem">
-              <NetworkingHub manifest={manifest} address={seatKey} viewerZone={claimedSeat?.zone ?? null} />
+              <NetworkingHub manifest={manifest} address={seatKey} viewerZone={claimedSeat?.zone ?? null} sign={wallet.signMessage} />
             </Deferred>
           </div>
         </section>

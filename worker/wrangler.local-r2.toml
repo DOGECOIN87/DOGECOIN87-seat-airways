@@ -26,6 +26,11 @@ id = "local-test"
 binding = "IMAGES"
 bucket_name = "seat-airlines-banners"
 
+[[d1_databases]]
+binding = "DIRECTORY"
+database_name = "seat-airlines-directory"
+database_id = "local-test"
+
 [vars]
 PUBLIC_IMAGE_BASE = "https://pub-example.r2.dev"
 ALLOWED_ORIGINS = "http://localhost:3000"
