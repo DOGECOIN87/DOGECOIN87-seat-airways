@@ -10,6 +10,7 @@
  *   npm run test:e2e            # expects the Worker on :8787
  */
 import { webcrypto as crypto } from 'node:crypto';
+import { createServer } from 'node:http';
 
 const BASE = process.env.WORKER_URL || 'http://127.0.0.1:8787';
 const ORIGIN = 'http://localhost:3000';
@@ -271,12 +272,42 @@ const api = (path, { method = 'GET', token, body } = {}) =>
 
 const alice = await wallet();
 const bob = await wallet();
+// Seated ahead of them both, and seated well behind them.
+const captain = await wallet();
+const mabel = await wallet();
 let aliceToken = '';
 let bobToken = '';
+
+/* The holder feed the Worker seats people from.
+
+   The section rules cannot be tested without one: the Worker has to believe
+   somebody is on the flight deck and somebody else is in business before
+   "reads down the aircraft, never up" means anything. So the suite serves the
+   list itself, at the URL wrangler.local.toml points the Worker at, and seats
+   the wallets it has just generated.
+
+   Ranks 1–2 are the flight deck, 3–10 first, 11 onwards business. */
+const filler = await Promise.all(Array.from({ length: 7 }, () => wallet()));
+const holderList = [
+  { address: captain.address, balance: 1_000_000 },
+  { address: filler[0].address, balance: 900_000 },
+  { address: alice.address, balance: 800_000 },
+  { address: bob.address, balance: 700_000 },
+  ...filler.slice(1).map((w, i) => ({ address: w.address, balance: 600_000 - i * 1_000 })),
+  { address: mabel.address, balance: 100_000 },
+];
+
+const holders = createServer((req, res) => {
+  res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(holderList));
+});
+await new Promise((resolve) => holders.listen(8788, '127.0.0.1', resolve));
+// The Worker caches seating for a second locally; let any older one lapse.
+await new Promise((r) => setTimeout(r, 1200));
 
 await check('GET /health reports the directory is bound', async () => {
   const body = await (await fetch(`${BASE}/health`, { headers: { origin: ORIGIN } })).json();
   assert(body.directory === true, 'the Worker does not see a D1 binding — apply the migrations first');
+  assert(body.sections === true, 'the Worker has no holder feed, so it cannot tell the cabins apart');
 });
 
 await check('a signed sign-in opens a session', async () => {
@@ -385,6 +416,60 @@ await check('an empty introduction, and one to yourself, are refused', async () 
   assert(self.status === 400, `a message to yourself got ${self.status}`);
 });
 
+/* ── Reading down the aircraft, and not up ────────────────────────────────
+   alice and bob are both in First. The captain is on the flight deck, ahead
+   of them; mabel is in business, behind them. */
+
+await check('a card in a cabin ahead is name and role only', async () => {
+  const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
+  const card = (await (await api('/directory', { token: hers })).json())[alice.address];
+  assert(card, 'the roster should list everyone, whatever cabin they are in');
+  assert(card.displayName === 'Aisle Hopper', 'the name is the roster and belongs to the whole cabin');
+  assert(card.readable === false, 'business was told it could read a First Class card');
+  assert(card.email === '', `business read an email from the cabin in front: ${card.email}`);
+  assert(card.website === '', 'business read a link from the cabin in front');
+});
+
+await check('a card from behind is readable in full', async () => {
+  await api('/profile', {
+    method: 'PUT', token: bobToken,
+    body: { displayName: 'Middle Seat Ventures', role: 'Growth', email: 'bob@seat-airlines.space' },
+  });
+  const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
+  const card = (await (await api('/directory', { token: captainToken })).json())[bob.address];
+  assert(card.readable === true, 'the flight deck could not read a First Class card');
+  assert(card.email === 'bob@seat-airlines.space', 'the contact details did not carry forward');
+});
+
+await check('a conversation carries forward to the section ahead', async () => {
+  const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
+  const heard = await (await api('/messages', { token: captainToken })).json();
+  const theirs = heard.overheard.find((m) => m.from === alice.address && m.to === bob.address);
+  assert(theirs, 'the flight deck cannot read a First Class conversation it is seated ahead of');
+  assert(heard.inbox.length === 0 && heard.sent.length === 0, 'the captain was credited with somebody else’s post');
+});
+
+await check('and never aft', async () => {
+  const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
+  const heard = await (await api('/messages', { token: hers })).json();
+  assert(Array.isArray(heard.overheard), 'no overheard list came back at all');
+  assert(
+    !heard.overheard.some((m) => m.from === alice.address || m.to === alice.address),
+    'business read a conversation from the cabin in front of it',
+  );
+});
+
+await check('the two wallets on a message always read it', async () => {
+  const mine = await (await api('/messages', { token: aliceToken })).json();
+  assert(mine.sent.some((m) => m.to === bob.address), 'the sender lost their own message');
+  const theirs = await (await api('/messages', { token: bobToken })).json();
+  assert(theirs.inbox.some((m) => m.from === alice.address), 'the recipient lost their own message');
+  assert(
+    !theirs.overheard.some((m) => m.from === alice.address),
+    'a peer’s message was served as something overheard rather than as the inbox',
+  );
+});
+
 await check('signing out revokes the token', async () => {
   assert((await api('/session', { method: 'DELETE', token: bobToken })).status === 200, 'signing out failed');
   assert((await api('/messages', { token: bobToken })).status === 401, 'the token still worked after signing out');
@@ -401,4 +486,5 @@ await check('the preflight allows the headers the directory needs', async () => 
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
+holders.close();
 process.exit(fail ? 1 : 0);

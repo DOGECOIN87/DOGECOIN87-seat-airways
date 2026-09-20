@@ -52,7 +52,22 @@ export const EMPTY_PROFILE: NetworkingProfile = {
 
 export interface PublishedProfile extends NetworkingProfile {
   address: string;
+  /**
+   * False when the contact fields were withheld because this card belongs to
+   * a cabin ahead of yours — as opposed to being empty. The server decides
+   * it; the page only reports what it was told.
+   */
+  readable: boolean;
   updated: string;
+}
+
+export interface Inbox {
+  /** Introductions sent to you. */
+  inbox: NetworkingMessage[];
+  /** Introductions you sent. */
+  sent: NetworkingMessage[];
+  /** Conversations from the cabins behind you, which your seat lets you read. */
+  overheard: NetworkingMessage[];
 }
 
 export interface NetworkingMessage {
@@ -206,9 +221,9 @@ export function saveProfile(session: Session, profile: NetworkingProfile): Promi
   });
 }
 
-/** Your introductions, both directions, newest first. */
-export function fetchMessages(session: Session): Promise<{ inbox: NetworkingMessage[]; sent: NetworkingMessage[] }> {
-  return call<{ inbox: NetworkingMessage[]; sent: NetworkingMessage[] }>('/messages', { token: session.token });
+/** Your introductions, both directions, plus whatever your seat overhears. */
+export function fetchMessages(session: Session): Promise<Inbox> {
+  return call<Inbox>('/messages', { token: session.token });
 }
 
 /** Send one. */

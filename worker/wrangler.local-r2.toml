@@ -34,3 +34,5 @@ database_id = "local-test"
 [vars]
 PUBLIC_IMAGE_BASE = "https://pub-example.r2.dev"
 ALLOWED_ORIGINS = "http://localhost:3000"
+HOLDERS_URL = "http://127.0.0.1:8788/holders"
+LADDER_CACHE_MS = "1000"

@@ -26,6 +26,8 @@ export interface DirectoryState {
   profiles: Record<string, PublishedProfile>;
   inbox: NetworkingMessage[];
   sent: NetworkingMessage[];
+  /** Conversations from the cabins behind you, which your seat lets you read. */
+  overheard: NetworkingMessage[];
   loading: boolean;
   /** True while a signature is being waited on. */
   signingIn: boolean;
@@ -56,6 +58,7 @@ export function useDirectory(
   const [profiles, setProfiles] = useState<Record<string, PublishedProfile>>({});
   const [inbox, setInbox] = useState<NetworkingMessage[]>([]);
   const [sent, setSent] = useState<NetworkingMessage[]>([]);
+  const [overheard, setOverheard] = useState<NetworkingMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -80,6 +83,7 @@ export function useDirectory(
     setProfiles({});
     setInbox([]);
     setSent([]);
+    setOverheard([]);
     setError(null);
     setNotice(null);
   }, [address]);
@@ -92,6 +96,7 @@ export function useDirectory(
       setProfiles(directory);
       setInbox(messages.inbox);
       setSent(messages.sent);
+      setOverheard(messages.overheard ?? []);
       setError(null);
     } catch (e) {
       if (!live.current) return;
@@ -128,6 +133,7 @@ export function useDirectory(
     setProfiles({});
     setInbox([]);
     setSent([]);
+    setOverheard([]);
     setNotice(null);
     await closeSession(current);
   }, [session]);
@@ -183,7 +189,7 @@ export function useDirectory(
 
   return {
     available: hasDirectory,
-    session, profiles, inbox, sent,
+    session, profiles, inbox, sent, overheard,
     loading, signingIn, saving, error, notice,
     signIn, signOut, save, send, dismiss,
   };

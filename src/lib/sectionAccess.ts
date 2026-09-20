@@ -14,10 +14,14 @@
  */
 import type { ZoneKey } from '../content/cabin';
 
-/** Same-section contact access is the networking perk for seated holders. */
-export function canViewContact(viewerZone: ZoneKey | null, memberZone: ZoneKey): boolean {
-  return viewerZone !== null && viewerZone === memberZone;
-}
+/**
+ * Who may read a card, and who may read a conversation.
+ *
+ * Both now live in `seating.ts`, because the Worker enforces them and the two
+ * must be the same rule rather than two readings of it. Re-exported here so
+ * the cabin components keep asking the module that is about access.
+ */
+export { canViewContact, canOverhear, outranks, zoneRank } from './seating';
 
 /** First-class messaging is intentionally narrower than contact visibility. */
 export function canMessage(

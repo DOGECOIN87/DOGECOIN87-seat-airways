@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Manifest, ManifestEntry } from '../lib/manifest';
-import type { ZoneKey } from '../content/cabin';
+import { CABIN_ZONES, type ZoneKey } from '../content/cabin';
 import {
   canMessage,
   canViewContact,
   defaultRole,
   isValidExternalUrl,
+  outranks,
   sectionLabel,
   shortMember,
 } from '../lib/sectionAccess';
@@ -70,6 +71,15 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
       }
       : EMPTY_PROFILE);
   }, [published, editing]);
+
+  /* Who is seated far enough forward to read what you write here. Empty on
+     the flight deck, which has nobody in front of it. */
+  const overheardBy = useMemo(() => {
+    if (!viewerZone) return '';
+    const ahead = CABIN_ZONES.filter((zone) => outranks(zone.key, viewerZone)).map((zone) => sectionLabel(zone.key));
+    if (!ahead.length) return '';
+    return ahead.length === 1 ? ahead[0] : `${ahead.slice(0, -1).join(', ')} and ${ahead[ahead.length - 1]}`;
+  }, [viewerZone]);
 
   const senders = useMemo(() => {
     const byAddress = new Map(manifest.entries.map((entry) => [entry.address, entry] as const));
@@ -145,12 +155,12 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
         </div>
         <div className="mt-5 grid gap-2 text-[11px] leading-relaxed text-ui-soft sm:grid-cols-2">
           <p className="rounded-xl border border-ui-line bg-ui-bg px-3 py-2.5">
-            <strong className="text-ui-ink">Contacts:</strong> holders only — the directory opens to a wallet that
-            holds the token. The page surfaces them to members of your own section.
+            <strong className="text-ui-ink">Contacts:</strong> your own section and every cabin behind it. What is
+            forward of you stays forward of you.
           </p>
           <p className="rounded-xl border border-ui-line bg-ui-bg px-3 py-2.5">
-            <strong className="text-ui-ink">Messages:</strong> First Class members can message other First Class
-            members, and only the two wallets on one can read it.
+            <strong className="text-ui-ink">Messages:</strong> First Class introduces itself to First Class — and
+            every section reads the conversations of the sections behind it.
           </p>
         </div>
       </header>
@@ -196,16 +206,31 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                           <p>Sign in to the directory to read contact details.</p>
                         ) : !card ? (
                           <p>This holder has not published a card yet.</p>
-                        ) : (
+                        ) : card.readable ? (
                           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
                             <span>Email: {card.email || 'Not given'}</span>
                             {card.website && <a className="underline" href={card.website} target="_blank" rel="noreferrer">Website</a>}
                             {card.linkedin && <a className="underline" href={card.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
                           </div>
+                        ) : (
+                          /* The page thinks this card is level with you or
+                             behind you and the server disagrees, so the two
+                             are reading different seating — a directory with
+                             no holder feed, or one still holding a minute-old
+                             copy of it. Saying "forward of you" here would be
+                             a confident wrong answer. */
+                          <p>Their links are not being shown: the directory and the page disagree about where you are sitting.</p>
                         )}
                         {messageable && directory.session && (
                           <div className="mt-4 rounded-xl border border-[#FF668F]/30 bg-white/70 p-3">
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B3265E]">First Class introduction</p>
+                            {/* Nobody should learn this from the seat in front
+                                quoting them. It is the first thing the box says. */}
+                            <p className="mt-1.5 text-[11px] leading-relaxed text-ui-soft">
+                              {overheardBy
+                                ? `Readable by ${overheardBy}, as well as by the two of you.`
+                                : 'Readable by the two of you. Nobody is seated ahead of this conversation.'}
+                            </p>
                             <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Introduce your company, campaign, or partnership idea…" rows={3} maxLength={1000} className="mt-2 w-full resize-none rounded-lg border border-ui-line bg-white px-3 py-2 text-[12px] text-ui-ink outline-none focus:border-[#FF668F]" />
                             <button type="button" onClick={() => void submitMessage(entry)} disabled={directory.saving} className="sa-cta mt-2 disabled:opacity-60">{directory.saving ? 'Sending…' : 'Send message'} <span aria-hidden>→</span></button>
                           </div>
@@ -215,7 +240,10 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                         )}
                       </div>
                     ) : (
-                      <p className="text-[12px] leading-relaxed text-ui-soft">Contact details are private to members of the same section. Your current access does not include this card.</p>
+                      <p className="text-[12px] leading-relaxed text-ui-soft">
+                        This card is in a cabin ahead of yours. You can read your own section and everything behind
+                        it — the view forward is what the next seat up buys.
+                      </p>
                     )}
                   </div>
                 )}
@@ -297,6 +325,30 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
               )}
               {directory.sent.length > 0 && (
                 <p className="mt-3 text-[11px] text-ui-soft">{directory.sent.length} sent from this wallet.</p>
+              )}
+
+              {/* The other half of the rule: what carries forward from the
+                  cabins behind you, because your seat is ahead of both ends
+                  of it. */}
+              {directory.overheard.length > 0 && (
+                <div className="mt-5 border-t border-ui-line pt-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-ui-deep">From behind you</p>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-ui-soft">
+                    Conversations between wallets seated aft of {sectionLabel(viewerZone as ZoneKey)}. They cannot
+                    read yours.
+                  </p>
+                  <ul className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                    {directory.overheard.map((message) => (
+                      <li key={message.id} className="rounded-xl border border-ui-line bg-white/60 px-3 py-2.5">
+                        <p className="text-[11px] font-semibold text-ui-ink">
+                          {senders(message.from)} <span className="font-normal text-ui-faint">to</span> {senders(message.to)}
+                        </p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-ui-soft">{message.body}</p>
+                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
               <button type="button" onClick={() => void directory.signOut()} className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep underline">
                 Sign out of the directory

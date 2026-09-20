@@ -37,6 +37,8 @@ import {
   signInChallenge, tokenHash,
   MESSAGES_PER_HOUR, MESSAGE_PAGE, SESSION_TTL_MS, SIGNIN_MAX_AGE_MS,
 } from './networking';
+import { readLadder } from './ladder';
+import { canViewContact, zoneRank } from '../../src/lib/seating';
 
 export interface Env {
   BANNERS: KVNamespace;
@@ -66,6 +68,19 @@ export interface Env {
   IMAGES?: R2Bucket;
   /** Public base URL images are served from. Only needed with R2. */
   PUBLIC_IMAGE_BASE?: string;
+  /**
+   * The holder list, as JSON: `[{ address, balance }, …]`.
+   *
+   * The same feed the page reads, and pointing both at one URL is what keeps
+   * the two seating charts identical. Without it the directory cannot tell
+   * one cabin from another, so it withholds contact details from everybody
+   * but their owner and shows nobody another wallet's conversations.
+   */
+  HOLDERS_URL?: string;
+  /** Must match the page's `VITE_MANIFEST_SIZE`. Defaults to 40, as it does. */
+  MANIFEST_SIZE?: string;
+  /** How long seating is cached, in milliseconds. Defaults to a minute. */
+  LADDER_CACHE_MS?: string;
   /** Solana RPC, used only to check the publisher holds the token at all. */
   RPC_URL?: string;
   /** The token this aircraft is flying. */
@@ -275,12 +290,16 @@ function wallEtag(wall: Wall): string {
    The lines this service does draw are the two it can hold on its own:
 
      · Nothing here is readable without a session, and a session is only
-       opened by a wallet that proved its key *and* holds the token. Contact
-       details are a holder's perk because a non-holder never gets a token to
-       ask with. (`holdsToken` stands aside when it cannot reach the RPC to
-       find out — see its own note on why that is the honest failure.)
-     · An introduction is readable only by the two wallets named on it,
-       whoever else is signed in. */
+       opened by a wallet that proved its key *and* holds the token. The
+       directory is a room for holders because a non-holder never gets a
+       token to ask with. (`holdsToken` stands aside when it cannot reach the
+       RPC to find out — see its own note on why that is the honest failure.)
+     · Inside that room the cabin decides the rest, and it is transparent
+       looking aft and opaque looking forward: contact details go to your own
+       section and everything behind it, conversations are readable by the
+       two wallets on them and by any section ahead of both. `ladder.ts` says
+       how this side comes to know which is which without keeping a second
+       copy of the seating. */
 
 interface ProfileRow {
   address: string;
@@ -300,13 +319,23 @@ interface MessageRow {
   sent_at: string;
 }
 
-const asProfile = (row: ProfileRow) => ({
+/**
+ * A card as the asking wallet is allowed to see it.
+ *
+ * Name and role are the roster, and the roster is the whole cabin's. The
+ * contact details are the perk, and they go no further forward than the
+ * person asking: your own section and everything behind it. `readable` says
+ * which of the two this is, so the page can tell "nothing to show" from
+ * "not yours to see".
+ */
+const asProfile = (row: ProfileRow, readable: boolean) => ({
   address: row.address,
   displayName: row.display_name,
   role: row.role,
-  email: row.email,
-  website: row.website,
-  linkedin: row.linkedin,
+  email: readable ? row.email : '',
+  website: readable ? row.website : '',
+  linkedin: readable ? row.linkedin : '',
+  readable,
   updated: row.updated_at,
 });
 
@@ -367,6 +396,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
         service: 'seat-airlines-banners',
         storage: usingR2(env) ? 'r2' : 'kv',
         directory: Boolean(env.DIRECTORY),
+        // Whether this deployment can tell one cabin from another at all.
+        sections: Boolean(env.HOLDERS_URL),
       }, 200, { ...cors, 'cache-control': 'no-store' });
     }
 
@@ -447,6 +478,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (!me) return json({ error: 'Sign in to read the cabin directory.' }, 401, priv);
 
       if (request.method === 'GET' && url.pathname === '/directory') {
+        const ladder = await readLadder(env);
+        const mine = ladder.zoneOf(me);
         const { results } = await db
           .prepare(
             'SELECT address, display_name, role, email, website, linkedin, updated_at' +
@@ -454,7 +487,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
           )
           .all<ProfileRow>();
         const out: Record<string, ReturnType<typeof asProfile>> = {};
-        for (const row of results ?? []) out[row.address] = asProfile(row);
+        for (const row of results ?? []) {
+          // Your own card is always yours to read, seated or not.
+          const readable = row.address === me
+            || (ladder.live && canViewContact(mine, ladder.zoneOf(row.address)));
+          out[row.address] = asProfile(row, readable);
+        }
         return json(out, 200, priv);
       }
 
@@ -490,9 +528,40 @@ async function handle(request: Request, env: Env): Promise<Response> {
           db.prepare(`${columns} WHERE recipient = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
           db.prepare(`${columns} WHERE sender = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
         ]);
+
+        /* What carries back from further aft.
+
+           The cabin is transparent looking backwards and opaque looking
+           forwards: a holder reads the conversations of every section behind
+           them, and none of the one they are in or ahead of it. Asked as
+           "neither end is level with me or in front of me", because the
+           people in front are a list of at most a cabinful while the people
+           behind are every wallet that exists.
+
+           Unseated, you overhear nothing: the hold is the bottom of the
+           aircraft, and there is nothing below it to listen to. */
+        let overheard: MessageRow[] = [];
+        const ladder = await readLadder(env);
+        const mine = ladder.zoneOf(me);
+        if (ladder.live && mine) {
+          const shielded = ladder.atOrAbove(mine);
+          if (shielded.length) {
+            const holes = shielded.map(() => '?').join(',');
+            const rows = await db
+              .prepare(
+                `${columns} WHERE sender NOT IN (${holes}) AND recipient NOT IN (${holes})` +
+                ' ORDER BY sent_at DESC LIMIT ?',
+              )
+              .bind(...shielded, ...shielded, MESSAGE_PAGE)
+              .all<MessageRow>();
+            overheard = rows.results ?? [];
+          }
+        }
+
         return json({
           inbox: (inbox.results ?? []).map(asMessage),
           sent: (sent.results ?? []).map(asMessage),
+          overheard: overheard.map(asMessage),
         }, 200, priv);
       }
 

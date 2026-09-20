@@ -118,41 +118,69 @@ it is handled are deliberate:
 3. **Every directory response is `no-store`.** Each one is either a credential
    or somebody's private correspondence.
 
-### What it still does not know
+### The cabin reads backwards
 
-Which seat anybody is in — for the same reason the wall does not, and the
-[section above](#what-it-deliberately-does-not-know) has the argument. The
-page reads the ladder; this service answers "is this really the wallet it
-claims to be".
+Getting in takes a session, and a session is opened only by a wallet that has
+proved its key **and** holds the token — the same check the wall makes before
+storing an advert. So the directory is a room for holders before any other
+rule applies. That check stands aside when it cannot reach the RPC, and with
+no `RPC_URL`/`TOKEN_MINT` there is nothing to check against at all; see
+`holdsToken` on why an unanswered question is "do not know".
 
-So the lines it draws are the two it can actually hold:
+Inside the room, the aircraft decides the rest, and it is transparent looking
+aft and opaque looking forward:
 
 | | |
 | --- | --- |
-| A card, contact details and all | readable by holders, because nothing here is readable without a session |
-| An introduction | readable only by the two wallets named on it, whoever else is signed in |
+| A name and role | the roster, and the roster belongs to the whole cabin |
+| Contact details | your own section and every cabin behind it, never one in front |
+| A conversation | the two wallets on it, plus any section seated ahead of **both** |
 
-The first is the whole reason `POST /session` checks the token: a session is
-opened only by a wallet that has proved its key **and** holds the token, so
-the cards inside — the emails, the links, the lot — are never handed to
-somebody who has not bought their way into the cabin. It is the same check
-the wall makes before storing an advert, and it is enforced in the one place
-that can enforce it rather than being implied by the interface.
+Two consequences worth stating plainly, because they are the point rather
+than side effects. The flight deck reads everything; economy reads only the
+hold. And a section cannot read its *peers* — First Class sees every
+conversation in business and economy, and none of the other First Class ones,
+because a chat with one end level with you is not behind you.
 
-That check stands aside when it cannot reach the RPC to make it, and when no
-`RPC_URL`/`TOKEN_MINT` is configured there is nothing to check against at all
-— see `holdsToken` for why an unanswered question is treated as "do not
-know". A deployment that wants the directory to be a holders' room needs
-those two set, exactly as the wall does.
+So the seat is not just a placement any more. It is how far forward you can
+see, which is the seat ladder's own argument applied to people instead of
+legroom.
 
-The finer perks — contacts surfaced to your own section, introductions
-between First Class members — remain the page's reading of the manifest it
-already holds: an interface affordance, not a boundary, because anything
-stronger would mean a second copy of the seat ladder here, drifting from the
-page's copy from the day it was written.
+### Knowing that without a second ladder
 
-Abuse is bounded by what does not need the ladder: 20 introductions per wallet
-per hour, 1,000 characters each, and contact links that must be `http(s)`.
+This service spent its life refusing to learn who sits where, and that refusal
+was right for the wall: a second copy of the seating would drift from the
+page's, and adverts never needed it.
+
+The argument was always against a second *copy*, though, not against knowing.
+A rule about who may read somebody's email address is a boundary, and a
+boundary enforced only in the browser is not one — it is a suggestion the
+network tab ignores. So the seating moved to `src/lib/seating.ts`, plain
+TypeScript with no browser and no Cloudflare in it, and **the page and this
+Worker import the same file**. One definition of rank, one zone order, one
+place to change them.
+
+What is on this side is only this side's business: `ladder.ts` reads the
+holder list from `HOLDERS_URL`, seats it with that shared module, and caches
+the result for a minute so that reading your own inbox never waits on
+somebody else's indexer.
+
+Two things have to line up, and both are config rather than code:
+
+- **`HOLDERS_URL` should be the feed the page reads** (`VITE_HOLDERS_URL`).
+  One feed is what keeps one seating chart. The page additionally drops
+  accounts owned by a program — a bonding curve is not a passenger — so a
+  feed that lists contracts will seat somebody here who is not seated there.
+- **`MANIFEST_SIZE` must match `VITE_MANIFEST_SIZE`**, or the two disagree
+  about who is on the aircraft at all at the very back.
+
+Unset `HOLDERS_URL` and the directory cannot tell one cabin from another, so
+it fails closed: contact details go to nobody but their owner, and nobody
+overhears anything. `GET /health` reports `sections` so you can see which
+state a deployment is in.
+
+Abuse is bounded separately: 20 introductions per wallet per hour, 1,000
+characters each, and contact links that must be `http(s)`.
 
 ## Serving the artwork
 
@@ -213,6 +241,11 @@ which of the two states it is in.
 **The migration is not run by the deploy.** `wrangler deploy` ships code, not
 schema, so a new migration is applied by hand (or by a step you add to the
 workflow) before the code that depends on it goes out.
+
+**Set `HOLDERS_URL` to the same feed as the page's `VITE_HOLDERS_URL`**, or
+the directory cannot tell one cabin from another and every card keeps its
+contact details to itself. It is a plain var in `wrangler.toml`, alongside
+`MANIFEST_SIZE` if the page sets `VITE_MANIFEST_SIZE`.
 
 Put the KV id from that first command into `wrangler.toml`, then give the R2
 bucket public access — either an `r2.dev` URL or, better, a custom domain —
@@ -313,6 +346,16 @@ forged and a stale one are refused, the roster and an inbox are both closed
 without a session, an invented token is not one, a `javascript:` contact link
 is refused, a message to yourself is refused, signing out revokes the token,
 and the preflight allows `PUT` and `authorization`.
+
+The section cases need an aircraft with people in it, so **the suite serves
+its own holder list** on `127.0.0.1:8788` — the URL `wrangler.local.toml`
+points `HOLDERS_URL` at — and seats the wallets it has just generated: one on
+the flight deck, two in First, one in business. Then: a First Class card is
+name and role only to business; the same card is readable in full from the
+flight deck; a First Class conversation carries forward to the deck and not
+back to business; and the two wallets on a message always read it themselves.
+The local config also sets `LADDER_CACHE_MS = "1000"`, so a run is not judged
+against the seating of the run before it.
 
 Over the wall itself, on real HTTP against real bindings: a signed advert is accepted, stored, and comes back out of
 `GET /banners`; the artwork is fetched back from the URL it was given and

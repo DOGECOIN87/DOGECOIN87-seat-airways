@@ -47,6 +47,20 @@ bucket_name = "seat-airlines-banners"
 # origin asks, which is fine locally and careless in production.
 ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 
+# The holder list, for the directory's section rules: who may read whose card,
+# and whose conversations carry forward. **Point this at the same feed as the
+# page's VITE_HOLDERS_URL** — one feed is what keeps one seating chart, and
+# two would be the drift this service spent its life avoiding.
+#
+# Unset, the directory still works and simply cannot tell one cabin from
+# another, so it withholds every card's contact details from everybody but
+# their owner and shows nobody another wallet's conversations. That is the
+# safe direction to fail in, and `GET /health` says which state it is in.
+#
+# MANIFEST_SIZE must match the page's VITE_MANIFEST_SIZE; both default to 40.
+# HOLDERS_URL = "https://…"
+# MANIFEST_SIZE = "40"
+
 # The token. Together with the RPC_URL secret below, lets the Worker refuse
 # adverts from wallets that do not hold it; without that secret the check is
 # skipped, and adverts from non-holders still never display on the page.
