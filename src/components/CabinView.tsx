@@ -77,6 +77,9 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
   const premium = zone.key === 'first' || zone.key === 'business';
   /* First gets a shell, a divider and a lamp. Business is simply wide. */
   const suite = zone.key === 'first';
+  /* The forward-facing seats in First look directly at the flight-deck
+     bulkhead. Keep the opening tied to the actual first row, including both
+     A/B and E/F seats, rather than leaving a generic wall in front of them. */
   const cockpitDoor = suite && seat.row === 1;
   const exitRow = zone.key === 'exit';
   /* Above the atmosphere there is no daylight to spill into the cabin — the
@@ -397,28 +400,33 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
               )}
             </g>
 
-            {/* Row 1 faces a real cockpit entrance. This is deliberately drawn
-                in the foreground: a dark opening inside a thick bulkhead,
-                with the hinged door leaf, threshold, handle and crew sign all
-                visible instead of reading as a flat wall panel. */}
+            {/* Row 1 faces a real open cockpit entrance. The black opening is
+                intentionally wide and shows the flight deck beyond it; the
+                surrounding bulkhead, door leaf, handle and threshold make the
+                boundary read as a doorway rather than a decorative wall. */}
             {cockpitDoor && (
               <g>
-                <path d="M318 800 V274 Q318 214 378 194 Q600 144 822 194 Q882 214 882 274 V800 Z" fill="#17191D" stroke="#9C9484" strokeWidth="7" />
-                <path d="M356 800 V286 Q356 248 398 234 Q600 190 802 234 Q844 248 844 286 V800" fill="#05070B" stroke="#5E594E" strokeWidth="3" />
-                <path d="M402 800 V300 Q402 270 432 258 Q600 224 768 258 Q798 270 798 300 V800 Z" fill="#302E2A" stroke="#BFB8A8" strokeWidth="3" />
-                <rect x="466" y="300" width="268" height="96" rx="6" fill="#09121C" stroke="#6E685C" strokeWidth="2" />
-                <path d="M480 368 Q600 338 720 368" fill="none" stroke="#3F4B56" strokeWidth="3" />
-                <circle cx="600" cy="331" r="8" fill="#172330" stroke={CYAN} strokeWidth="1.5" />
-                <rect x="754" y="444" width="16" height="58" rx="7" fill="#DDE6F2" />
-                <rect x="484" y="438" width="232" height="32" rx="3" fill="#0B0C0F" stroke={AMBER} strokeWidth="1.6" />
-                <text x="600" y="460" textAnchor="middle" fill={AMBER} fontSize="13" fontWeight="700" letterSpacing="2.8" fontFamily={MONO}>
-                  FLIGHT DECK
+                <path d="M286 800 V246 Q286 190 350 170 Q600 112 850 170 Q914 190 914 246 V800 Z" fill="#1B1D22" stroke="#BFB8A8" strokeWidth="9" />
+                <path d="M330 800 V258 Q330 222 374 208 Q600 156 826 208 Q870 222 870 258 V800" fill="#05070B" stroke="#6E685C" strokeWidth="4" />
+                {/* Cockpit visible beyond the open doorway */}
+                <path d="M390 800 V286 Q390 260 430 246 Q600 204 770 246 Q810 260 810 286 V800 Z" fill="#101F2C" stroke="#DDE6F2" strokeWidth="3" />
+                <path d="M430 324 Q600 282 770 324 V420 Q600 382 430 420 Z" fill="#081019" stroke="#3F4B56" strokeWidth="3" />
+                <path d="M430 420 Q600 382 770 420 V520 Q600 480 430 520 Z" fill="#263746" stroke="#5E594E" strokeWidth="2" />
+                <circle cx="492" cy="372" r="16" fill="#0B0C0F" stroke={CYAN} strokeWidth="3" />
+                <circle cx="708" cy="372" r="16" fill="#0B0C0F" stroke={CYAN} strokeWidth="3" />
+                <path d="M470 520 Q600 478 730 520 V610 H470 Z" fill="#11161D" stroke="#7C7566" strokeWidth="3" />
+                <rect x="746" y="454" width="18" height="72" rx="8" fill="#DDE6F2" />
+                <path d="M342 800 V280" stroke="#FFB300" strokeWidth="3" strokeDasharray="12 10" />
+                <path d="M858 800 V280" stroke="#FFB300" strokeWidth="3" strokeDasharray="12 10" />
+                <rect x="472" y="626" width="256" height="38" rx="3" fill="#0B0C0F" stroke={AMBER} strokeWidth="2" />
+                <text x="600" y="652" textAnchor="middle" fill={AMBER} fontSize="15" fontWeight="700" letterSpacing="3.2" fontFamily={MONO}>
+                  FLIGHT DECK · OPEN
                 </text>
-                <text x="600" y="506" textAnchor="middle" fill="#BFB8A8" fontSize="11" letterSpacing="1.8" fontFamily={MONO}>
-                  CREW ONLY · KEEP CLOSED
+                <text x="600" y="700" textAnchor="middle" fill="#BFB8A8" fontSize="12" letterSpacing="2" fontFamily={MONO}>
+                  CREW ONLY
                 </text>
-                <path d="M350 760 H850" stroke="#BFB8A8" strokeWidth="8" opacity="0.6" />
-                <path d="M418 784 H782" stroke={AMBER} strokeWidth="2" strokeDasharray="9 8" opacity="0.9" />
+                <path d="M312 760 H888" stroke="#BFB8A8" strokeWidth="10" opacity="0.7" />
+                <path d="M390 786 H810" stroke={AMBER} strokeWidth="3" strokeDasharray="11 9" />
               </g>
             )}
 
