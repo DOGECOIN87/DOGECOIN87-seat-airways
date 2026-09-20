@@ -81,12 +81,22 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
      be worked out from a card that will not open. */
   const sections = useMemo(() => {
     if (!viewerZone) return null;
-    const ahead = CABIN_ZONES.filter((zone) => outranks(zone.key, viewerZone)).map((zone) => sectionLabel(zone.key));
-    const behind = CABIN_ZONES.filter((zone) => outranks(viewerZone, zone.key)).map((zone) => sectionLabel(zone.key));
-    // The hold is not a cabin: nobody on the manifest, nobody on the roster,
-    // and so nothing to read back there.
-    return { ahead: list(ahead), aheadCount: ahead.length, behind: list(behind), behindCount: behind.length };
-  }, [viewerZone]);
+    /* Cabins with somebody in them, not cabins the aircraft has.
+       Seats fill strictly by rank, so at the default manifest size the last
+       one taken is the back of business and the two cabins behind it are
+       empty — naming them would promise a reader thirty-eight rows of people
+       who are not there. The hold is not a cabin at all: no manifest, no
+       roster, no name to put to anybody in it. */
+    const occupied = new Set(manifest.entries.map((entry) => entry.seat.zone));
+    const ahead = CABIN_ZONES.filter((zone) => outranks(zone.key, viewerZone) && occupied.has(zone.key));
+    const behind = CABIN_ZONES.filter((zone) => outranks(viewerZone, zone.key) && occupied.has(zone.key));
+    return {
+      ahead: list(ahead.map((zone) => sectionLabel(zone.key))),
+      aheadCount: ahead.length,
+      behind: list(behind.map((zone) => sectionLabel(zone.key))),
+      behindCount: behind.length,
+    };
+  }, [viewerZone, manifest.entries]);
   const overheardBy = sections?.ahead ?? '';
 
   const senders = useMemo(() => {
@@ -157,7 +167,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
               {sections ? (
                 <>
                   From <strong className="text-ui-ink">{sectionLabel(viewerZone as ZoneKey)}</strong> you read your own
-                  section{sections.behindCount ? <> and everything behind it — {sections.behind}</> : <>, and there is no cabin behind you</>}.{' '}
+                  section{sections.behindCount ? <> and everything behind it — {sections.behind}</> : <>, and nobody is seated behind you</>}.{' '}
                   {sections.aheadCount
                     ? <>{sections.ahead} {sections.aheadCount === 1 ? 'reads' : 'read'} you, and you cannot read them.</>
                     : <>Nothing is ahead of you. The whole aircraft is yours to read.</>}
