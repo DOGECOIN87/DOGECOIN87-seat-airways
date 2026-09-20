@@ -320,6 +320,27 @@ If your RPC endpoint carries a key, the only real protection is on the
 provider's side: restrict that key to this domain. Helius, QuickNode and
 Alchemy all support it.
 
+### Changing the token address
+
+The production mint is kept in two deploy-time consumers: the frontend's
+committed fallback in `src/lib/token.ts`, and the Worker's `TOKEN_MINT` value in
+`worker/wrangler.toml`. To rotate them together, run:
+
+```bash
+npm run token:update -- <new-solana-mint-address>
+npm run typecheck
+npm run build
+```
+
+Then commit and push the changed configuration files. The Pages workflow will
+rebuild the frontend, and the Worker workflow will deploy the updated holder
+gate. If repository Actions variables are configured, set `VITE_TOKEN_MINT` to
+the same value as well; it intentionally overrides the committed fallback
+during the Pages build. Update the Worker's `RPC_URL` secret only if the new
+token requires a different RPC provider. Verify both outputs before announcing
+the migration: the site header and market feed must show the new mint, and the
+Worker `/health` endpoint must remain healthy.
+
 ### The domain
 
 `public/CNAME` holds `seat-airlines.space`, and Vite copies it into `dist/`

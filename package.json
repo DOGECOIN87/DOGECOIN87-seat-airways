@@ -11,7 +11,8 @@
     "build:test": "esbuild src/lib/banners.ts src/lib/sectionAccess.ts src/lib/networkingApi.ts --bundle --outdir=dist-test --format=esm --platform=node --define:import.meta.env='{\"VITE_BANNERS_API\":\"https://adverts.test\"}' && esbuild worker/src/networking.ts --bundle --outfile=dist-test/workerNetworking.js --format=esm --platform=node",
     "test": "npm run build:test && node test/banners.test.mjs && node test/sectionAccess.test.mjs && node test/networking.test.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "token:update": "node scripts/update-token.mjs"
   },
   "dependencies": {
     "@types/three": "^0.185.4",
