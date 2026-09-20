@@ -514,12 +514,12 @@ const HOUSE_ADS: HouseAd[] = [
       micro('OUT-HOLD ROW 1', 18, 188, HOUSE_INK.night),
   },
   {
-    line: "One plane. Everyone's in it.",
+    line: 'Hold more. Fly higher.',
     svg:
       `<rect width="200" height="200" fill="${HOUSE_INK.night}"/>` +
       `<circle cx="100" cy="86" r="52" fill="none" stroke="${HOUSE_INK.cyan}" stroke-width="2" opacity="0.4"/>` +
       houseMark(66, 52, 68, HOUSE_INK.cyan) +
-      stack(['ONE PLANE.', "EVERYONE'S IN IT."], {
+      stack(['HOLD MORE.', 'FLY HIGHER.'], {
         x: 100, y: 166, size: 15, fill: HOUSE_INK.bone, anchor: 'middle', spacing: 1.18,
       }),
   },
