@@ -14,21 +14,17 @@ bucket_name = "seat-airlines-banners"
 
 # The cabin directory: holder cards and the introductions between them.
 #
-#   npx wrangler d1 create seat-airlines-directory
-#   npx wrangler d1 migrations apply seat-airlines-directory --remote
+# The database exists and `migrations/0001_networking.sql` has been applied to
+# it, so this binding is live: deploying with it wired up turns the directory
+# on. Until this deploy lands, the routes answer 503 saying there is none.
 #
-# Then uncomment this with the id the first command printed, and redeploy.
-#
-# It is commented out rather than left with a placeholder id on purpose: a
-# binding naming a database that does not exist fails the deploy outright, and
-# this file is what CI deploys on every push. Unbound, the wall works exactly
-# as before and the directory routes answer 503 saying there is none — so the
-# Worker is deployable before anyone has created the database.
-#
-# [[d1_databases]]
-# binding = "DIRECTORY"
-# database_name = "seat-airlines-directory"
-# database_id = "…"
+# A binding naming a database that does not exist fails the deploy outright,
+# and this file is what CI deploys on every push — so if you ever point it at
+# a fresh database, create that database first.
+[[d1_databases]]
+binding = "DIRECTORY"
+database_name = "seat-airlines-directory"
+database_id = "a8e4747a-ef46-4689-ac75-c50f7f428b83"
 
 [vars]
 # The Worker uses R2 only when this is set as well as the binding above, and
