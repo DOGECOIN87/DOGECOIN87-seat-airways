@@ -196,10 +196,12 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                   <div className="mt-4 border-t border-black/10 pt-4">
                     {sameSection ? (
                       <div className="space-y-2 text-[12px] text-ui-soft">
-                        <p className="font-semibold text-ui-ink">Same-section contact card</p>
+                        <p className="font-semibold text-ui-ink">
+                          {entry.seat.zone === viewerZone ? 'Same-section contact card' : `${sectionLabel(entry.seat.zone)} contact card`}
+                        </p>
                         {entry.address === address ? (
                           <>
-                            <p>Your card is shown to fellow {sectionLabel(entry.seat.zone)} members.</p>
+                            <p>Your card is shown to {sectionLabel(entry.seat.zone)} and to every cabin ahead of it.</p>
                             <button type="button" onClick={() => setEditing((value) => !value)} className="sa-cta mt-2">{editing ? 'Close editor' : 'Edit your card'} <span aria-hidden>→</span></button>
                           </>
                         ) : !directory.session ? (
