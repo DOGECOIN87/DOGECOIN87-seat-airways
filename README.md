@@ -341,6 +341,26 @@ token requires a different RPC provider. Verify both outputs before announcing
 the migration: the site header and market feed must show the new mint, and the
 Worker `/health` endpoint must remain healthy.
 
+Changing the mint is the holder reset: the seat ladder and holder count are
+read from the configured token's live chain data, so the new mint starts with
+its own holder set. On startup, the page also detects a mint change and clears
+the old token's browser-only adverts and directory session. It does **not**
+delete server-side adverts, profiles, messages, or images. Those are separate
+records and should only be purged deliberately through a reviewed Cloudflare
+maintenance operation.
+
+For an immediate browser-only reset while testing, run this in the production
+page's DevTools console and reload:
+
+```js
+['seat-airlines.banners.v1', 'seat-airlines.directory.session.v1', 'seat-airlines.active-mint.v1']
+  .forEach((key) => localStorage.removeItem(key));
+location.reload();
+```
+
+Do not use a blanket `localStorage.clear()` in production: it also removes
+unrelated visitor state and makes troubleshooting harder.
+
 ### The domain
 
 `public/CNAME` holds `seat-airlines.space`, and Vite copies it into `dist/`

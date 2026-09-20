@@ -32,6 +32,7 @@ import { holdingsSource, type Holding } from './lib/holdings';
 import { berthFromManifest } from './lib/seatLadder';
 import { useManifest } from './lib/useManifest';
 import { MANIFEST_SIZE } from './lib/manifest';
+import { resetClientStateForToken } from './lib/tokenReset';
 import {
   houseAdverts,
   fetchPublished,
@@ -166,6 +167,8 @@ const SceneLoading = ({ exterior = false }: { exterior?: boolean }) => (
 );
 
 export default function App() {
+
+  resetClientStateForToken();
 
   /* One feed, reading the market. There is no simulator behind it and no
      flight-sim input in front of it: an aircraft that can be flown by hand is
