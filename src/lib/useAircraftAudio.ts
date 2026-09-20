@@ -27,10 +27,12 @@ interface AudioRig {
   master: GainNode;
   recording: AudioBufferSourceNode;
   seatbeltBuffer: AudioBuffer;
+  occasionalSeatbeltBuffer: AudioBuffer;
   intercomBuffers: AudioBuffer[];
   intercomOrder: number[];
   lastIntercomIndex: number | null;
   intercomTimer: number | null;
+  occasionalSeatbeltTimer: number | null;
   activeSources: Set<AudioBufferSourceNode>;
   stopped: boolean;
 }
@@ -84,6 +86,16 @@ const scheduleIntercom = (rig: AudioRig, first = false) => {
   }, delay);
 };
 
+const scheduleOccasionalSeatbelt = (rig: AudioRig) => {
+  if (rig.stopped) return;
+  // Keep this deliberately rare so it adds texture without becoming a second announcement stream.
+  const delay = randomBetween(90000, 180000);
+  rig.occasionalSeatbeltTimer = window.setTimeout(() => {
+    if (rig.stopped) return;
+    playBuffer(rig, rig.occasionalSeatbeltBuffer, 0.62, () => scheduleOccasionalSeatbelt(rig));
+  }, delay);
+};
+
 export function useAircraftAudio(lamps: Annunciators, _change5m: number, band: FlightBand) {
   const [enabled, setEnabled] = useState(false);
   const rig = useRef<AudioRig | null>(null);
@@ -95,6 +107,7 @@ export function useAircraftAudio(lamps: Annunciators, _change5m: number, band: F
     if (!current) return;
     current.stopped = true;
     if (current.intercomTimer !== null) window.clearTimeout(current.intercomTimer);
+    if (current.occasionalSeatbeltTimer !== null) window.clearTimeout(current.occasionalSeatbeltTimer);
     current.recording.stop();
     current.activeSources.forEach(source => source.stop());
     current.master.gain.setTargetAtTime(0.0001, current.ctx.currentTime, 0.12);
@@ -122,6 +135,10 @@ export function useAircraftAudio(lamps: Annunciators, _change5m: number, band: F
     if (!warningResponse.ok) throw new Error('Seat-belt warning sound could not be loaded.');
     const seatbeltBuffer = await ctx.decodeAudioData(await warningResponse.arrayBuffer());
 
+    const occasionalSeatbeltResponse = await fetch('/seatbelt-online-audio-converter.mp3');
+    if (!occasionalSeatbeltResponse.ok) throw new Error('Occasional seat-belt sound could not be loaded.');
+    const occasionalSeatbeltBuffer = await ctx.decodeAudioData(await occasionalSeatbeltResponse.arrayBuffer());
+
     const intercomBuffers = await Promise.all(
       INTERCOM_FILES.map(async file => {
         const response = await fetch(`/intercom/${file}`);
@@ -135,10 +152,12 @@ export function useAircraftAudio(lamps: Annunciators, _change5m: number, band: F
       master,
       recording,
       seatbeltBuffer,
+      occasionalSeatbeltBuffer,
       intercomBuffers,
       intercomOrder: shuffled(intercomBuffers.length),
       lastIntercomIndex: null,
       intercomTimer: null,
+      occasionalSeatbeltTimer: null,
       activeSources: new Set(),
       stopped: false,
     };
@@ -146,6 +165,7 @@ export function useAircraftAudio(lamps: Annunciators, _change5m: number, band: F
     recording.start();
     rig.current = nextRig;
     scheduleIntercom(nextRig, true);
+    scheduleOccasionalSeatbelt(nextRig);
   }, []);
 
   const toggle = useCallback(() => {
