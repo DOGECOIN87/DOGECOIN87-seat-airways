@@ -21,7 +21,8 @@
  * the holder list, caching it, and answering "which cabin is this wallet in".
  */
 
-import { seatHolders, zoneRank, type Holder } from '../../src/lib/seating';
+import { seatHolders, zoneRank } from '../../src/lib/seating';
+import { readHolderList } from '../../src/lib/holderList';
 import type { ZoneKey } from '../../src/content/cabin';
 
 /** How long a holder list is reused before it is read again. */
@@ -30,7 +31,11 @@ const DEFAULT_CACHE_MS = 60_000;
 const DEFAULT_MANIFEST_SIZE = 40;
 
 export interface LadderEnv {
+  /** An indexer, as the page's `VITE_HOLDERS_URL`. The uncapped source. */
   HOLDERS_URL?: string;
+  /** Falls back to the twenty largest accounts, as the page does. */
+  RPC_URL?: string;
+  TOKEN_MINT?: string;
   MANIFEST_SIZE?: string;
   /** How long seating is cached, in milliseconds. Defaults to a minute. */
   LADDER_CACHE_MS?: string;
@@ -62,31 +67,6 @@ const NO_LADDER: Ladder = { live: false, zoneOf: () => null, seated: () => [], s
 let snapshot: { value: Ladder; expiresAt: number } | undefined;
 
 /**
- * The holder list, from the same indexer the page reads.
- *
- * Pointing both at one URL is what keeps the two ladders identical. The page
- * additionally drops accounts owned by a program — a bonding curve is not a
- * passenger — which needs an RPC round trip per read and is the indexer's job
- * to have done already; a feed that lists contracts will seat one here and
- * not there, so use a feed of people.
- */
-async function fetchHolders(url: string): Promise<Holder[] | null> {
-  try {
-    const res = await fetch(url, { cf: { cacheTtl: 30 } } as RequestInit);
-    if (!res.ok) return null;
-    const body: unknown = await res.json();
-    if (!Array.isArray(body)) return null;
-    return body
-      .map((h) => h as { address?: unknown; balance?: unknown })
-      .filter((h): h is { address: string; balance: unknown } => typeof h.address === 'string')
-      .map((h) => ({ address: h.address, balance: Number(h.balance) }))
-      .filter((h) => Number.isFinite(h.balance) && h.balance > 0);
-  } catch {
-    return null;
-  }
-}
-
-/**
  * The current seating, cached per isolate.
  *
  * A stale ladder is the failure worth having here. The alternative is reading
@@ -95,11 +75,18 @@ async function fetchHolders(url: string): Promise<Holder[] | null> {
  * just moved up a cabin waits up to a minute for the view that comes with it.
  */
 export async function readLadder(env: LadderEnv): Promise<Ladder> {
-  if (!env.HOLDERS_URL) return NO_LADDER;
+  // Nothing to read holders with at all: an indexer, or the chain.
+  if (!env.HOLDERS_URL && !(env.RPC_URL && env.TOKEN_MINT)) return NO_LADDER;
   if (snapshot && snapshot.expiresAt > Date.now()) return snapshot.value;
 
-  const holders = await fetchHolders(env.HOLDERS_URL);
-  if (!holders) {
+  const size = Math.max(2, Number(env.MANIFEST_SIZE || DEFAULT_MANIFEST_SIZE));
+  const list = await readHolderList({
+    holdersUrl: env.HOLDERS_URL,
+    rpcUrl: env.RPC_URL,
+    mint: env.TOKEN_MINT,
+    manifestSize: size,
+  });
+  if (!list) {
     /* An unreachable indexer is not evidence that anybody has moved. Keep the
        last good seating until it expires on its own; with nothing cached,
        judge nobody rather than judging everybody to be in the hold — the
@@ -107,8 +94,7 @@ export async function readLadder(env: LadderEnv): Promise<Ladder> {
     return snapshot?.value ?? NO_LADDER;
   }
 
-  const size = Math.max(2, Number(env.MANIFEST_SIZE || DEFAULT_MANIFEST_SIZE));
-  const manifest = seatHolders(holders, 0, true, size);
+  const manifest = seatHolders(list.holders, list.supply, true, size);
   const zones = new Map(manifest.entries.map((e) => [e.address, e.seat.zone] as const));
   const value: Ladder = {
     live: true,

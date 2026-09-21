@@ -48,10 +48,17 @@ ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 # page's VITE_HOLDERS_URL** — one feed is what keeps one seating chart, and
 # two would be the drift this service spent its life avoiding.
 #
-# Unset, the directory still works and simply cannot tell one cabin from
+# Optional in exactly the way it is optional for the page: unset, the ladder
+# falls back to the twenty largest accounts from the RPC_URL secret and the
+# TOKEN_MINT above, which is the same fallback `holderList.ts` gives the page,
+# because it is the same function. Twenty accounts is the flight deck, all of
+# first, and ten business seats — rank 21 back is empty, so the aircraft ends
+# in the middle of row 4 and nobody has anybody behind them to read.
+#
+# With neither an indexer nor an RPC the directory cannot tell one cabin from
 # another, so it withholds every card's contact details from everybody but
 # their owner and shows nobody another wallet's conversations. That is the
-# safe direction to fail in, and `GET /health` says which state it is in.
+# safe direction to fail in, and `GET /health` reports `sections` either way.
 #
 # MANIFEST_SIZE must match the page's VITE_MANIFEST_SIZE; both default to 40.
 # HOLDERS_URL = "https://…"

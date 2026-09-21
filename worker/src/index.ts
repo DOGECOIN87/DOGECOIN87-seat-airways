@@ -72,9 +72,11 @@ export interface Env {
    * The holder list, as JSON: `[{ address, balance }, …]`.
    *
    * The same feed the page reads, and pointing both at one URL is what keeps
-   * the two seating charts identical. Without it the directory cannot tell
-   * one cabin from another, so it withholds contact details from everybody
-   * but their owner and shows nobody another wallet's conversations.
+   * the two seating charts identical. Optional in the same way it is optional
+   * for the page: without it the ladder falls back to the twenty largest
+   * accounts from `RPC_URL`, which fills the front of the aircraft and leaves
+   * the rest empty. With neither, the directory cannot tell one cabin from
+   * another and withholds everything but your own card.
    */
   HOLDERS_URL?: string;
   /** Must match the page's `VITE_MANIFEST_SIZE`. Defaults to 40, as it does. */
@@ -397,7 +399,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
         storage: usingR2(env) ? 'r2' : 'kv',
         directory: Boolean(env.DIRECTORY),
         // Whether this deployment can tell one cabin from another at all.
-        sections: Boolean(env.HOLDERS_URL),
+        sections: Boolean(env.HOLDERS_URL || (env.RPC_URL && env.TOKEN_MINT)),
       }, 200, { ...cors, 'cache-control': 'no-store' });
     }
 

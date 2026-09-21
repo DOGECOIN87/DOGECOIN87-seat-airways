@@ -96,105 +96,25 @@ export const holdingsSource: HoldingsSource = isConfigured
 /* ────────────────────────────────────────────────────────────────────────
    The holder list
    ────────────────────────────────────────────────────────────────────────
-   The manifest seats people by rank, which needs everybody's balance rather
-   than just the caller's. `getTokenLargestAccounts` gives the twenty largest
-   token accounts for a mint in one call — a hard RPC limit, and the reason
-   the seated manifest is small by default. A deployment that wants a longer
-   manifest points VITE_HOLDERS_URL at an indexer returning
-   `[{ address, balance }, …]`, and this falls back to the RPC if that fails. */
+   Read by `holderList.ts`, which the Worker imports too — it seats the same
+   aircraft to decide who may read whose card, and two readings of "who is
+   aboard" would be two aircraft. This is only where the page's own build
+   config is bound to it. */
 
-import { type Holder, MANIFEST_SIZE } from './manifest';
+import { readHolderList, type HolderList } from './holderList';
+import { MANIFEST_SIZE } from './manifest';
 
 const HOLDERS_URL = import.meta.env.VITE_HOLDERS_URL as string | undefined;
 
-export interface HolderList {
-  holders: Holder[];
-  supply: number;
-  live: boolean;
-}
-
-interface LargestAccount { address: string; amount: string; decimals: number; uiAmount: number | null }
-
-/* A seat is for a person. The largest "holder" of a pump.fun token is its
-   bonding curve, holding most of the supply until the token graduates, and
-   after that it is the pool. Both are accounts owned by a program. A person's
-   wallet is either owned by the System Program or does not exist on chain at
-   all (a wallet that has only ever received tokens holds no SOL). Anything
-   else is a contract, and a contract in 1A would be the first thing anybody
-   noticed. Checked by owner program rather than by a list of known addresses,
-   so the next launchpad or AMM is excluded without anybody remembering to. */
-const SYSTEM_PROGRAM = '11111111111111111111111111111111';
-
-/** Keeps the holders that are people. Null if the chain could not be asked. */
-async function peopleOnly(holders: Holder[]): Promise<Holder[] | null> {
-  if (!holders.length) return holders;
-  const res = await rpc<{ value: ({ owner: string } | null)[] }>('getMultipleAccounts', [
-    holders.map((h) => h.address),
-    { encoding: 'base64', dataSlice: { offset: 0, length: 0 } },
-  ]);
-  if (!res) return null;
-  return holders.filter((_, i) => {
-    const account = res.value[i];
-    return account === null || account.owner === SYSTEM_PROGRAM;
-  });
-}
-
-/** Token accounts belong to owners; the manifest names owners, not accounts. */
-async function ownersOf(accounts: string[]): Promise<(string | null)[]> {
-  const res = await rpc<{
-    value: ({ data: { parsed: { info: { owner: string } } } } | null)[];
-  }>('getMultipleAccounts', [accounts, { encoding: 'jsonParsed' }]);
-  if (!res) return accounts.map(() => null);
-  return res.value.map((a) => a?.data?.parsed?.info?.owner ?? null);
-}
-
-async function fromIndexer(): Promise<Holder[] | null> {
-  if (!HOLDERS_URL) return null;
-  try {
-    const res = await fetch(HOLDERS_URL);
-    if (!res.ok) return null;
-    const body: unknown = await res.json();
-    if (!Array.isArray(body)) return null;
-    return body
-      .map((h) => h as { address?: unknown; balance?: unknown })
-      .filter((h) => typeof h.address === 'string' && Number.isFinite(Number(h.balance)))
-      .map((h) => ({ address: String(h.address), balance: Number(h.balance) }));
-  } catch {
-    return null;
-  }
-}
+export type { HolderList };
 
 /** Reads the top holders. Null on any failure; the caller keeps what it had. */
 export async function readHolders(): Promise<HolderList | null> {
   if (!isConfigured) return null;
-
-  const supplyRes = await rpc<{ value: TokenAmount }>('getTokenSupply', [TOKEN_MINT]);
-  if (!supplyRes) return null;
-  const supply = supplyRes.value.uiAmount ?? Number(supplyRes.value.amount) / 10 ** supplyRes.value.decimals;
-
-  const indexed = await fromIndexer();
-  if (indexed && indexed.length) {
-    // Only as many as could be seated, with room for the contracts to drop
-    // out, and inside getMultipleAccounts' limit of 100.
-    const top = [...indexed].sort((a, b) => b.balance - a.balance).slice(0, Math.min(100, MANIFEST_SIZE + 10));
-    const people = await peopleOnly(top);
-    if (people) return { holders: people, supply, live: true };
-  }
-
-  const largest = await rpc<{ value: LargestAccount[] }>('getTokenLargestAccounts', [TOKEN_MINT]);
-  if (!largest) return null;
-
-  const rows = largest.value.slice(0, MANIFEST_SIZE);
-  const owners = await ownersOf(rows.map((r) => r.address));
-  const holders = rows
-    .map((r, i) => ({
-      address: owners[i] ?? r.address,
-      balance: r.uiAmount ?? Number(r.amount) / 10 ** r.decimals,
-    }))
-    .filter((h) => h.balance > 0);
-
-  const people = await peopleOnly(holders);
-  if (!people) return null;
-  return { holders: people, supply, live: true };
+  return readHolderList({
+    holdersUrl: HOLDERS_URL,
+    rpcUrl: RPC_URL,
+    mint: TOKEN_MINT,
+    manifestSize: MANIFEST_SIZE,
+  });
 }
-
