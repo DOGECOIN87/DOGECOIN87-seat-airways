@@ -19,14 +19,22 @@
  * `getTokenLargestAccounts`, which returns **at most twenty** token accounts
  * and is a hard RPC limit. Twenty accounts is not forty seats.
  *
- * So there are two sources, and the indexer is the real one:
+ * There is a way to get the rest of them out of a plain RPC, though, and it
+ * is the one every explorer uses: ask the SPL Token program for every account
+ * it owns whose mint field is this mint. That is the whole holder list, and
+ * it is not capped at twenty. It is only expensive — a scan the RPC has to do
+ * — so some endpoints refuse it and none of them enjoy it.
  *
- *   holdersUrl   JSON `[{ address, balance }, …]` from an indexer, uncapped
- *   rpcUrl+mint  the twenty largest accounts, resolved to their owners
+ * So there are three sources, tried in that order:
  *
- * The RPC path is the fallback, and it fills the front of the aircraft and
- * leaves the rest empty. Both paths then drop accounts owned by a program,
- * because a bonding curve is not a passenger.
+ *   holdersUrl    JSON `[{ address, balance }, …]` from an indexer, uncapped
+ *   rpcUrl+mint   every token account for the mint, summed by owner: the
+ *                 whole aircraft, from the mint alone, no indexer required
+ *   …and failing  the twenty largest accounts, which fills the front of the
+ *   that          aircraft and leaves the rest empty
+ *
+ * All three then drop accounts owned by a program, because a bonding curve is
+ * not a passenger.
  */
 
 import type { Holder } from './seating';
@@ -65,6 +73,63 @@ interface LargestAccount { address: string; amount: string; decimals: number; ui
    noticed. Checked by owner program rather than by a list of known addresses,
    so the next launchpad or AMM is excluded without anybody remembering to. */
 const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+
+/** The SPL Token program, which owns every classic token account there is. */
+const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+
+/**
+ * A token account's layout, in the two fields worth reading.
+ *
+ * 165 bytes: the mint (which this asked for by name), then the owner, then
+ * the balance. Asking for the 40 bytes spanning the last two is the whole
+ * reason this path is affordable — the alternative is `jsonParsed`, which
+ * returns every field of every account of a token that may have tens of
+ * thousands of them, and does it on every cache miss.
+ */
+const OWNER_OFFSET = 32;
+const OWNER_AND_AMOUNT = 40;
+const TOKEN_ACCOUNT_BYTES = 165;
+
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+/**
+ * 32 raw bytes back into the address a person would recognise.
+ *
+ * Needed because the compact read above hands back bytes rather than the
+ * base58 the rest of the aircraft is keyed by — and a wallet has to arrive
+ * here spelled exactly as it arrives from a signature, or the holder who owns
+ * it will not match their own seat.
+ */
+function toBase58(bytes: Uint8Array): string {
+  let zeros = 0;
+  while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  const digits: number[] = [];
+  for (let i = zeros; i < bytes.length; i++) {
+    let carry = bytes[i];
+    for (let j = 0; j < digits.length; j++) {
+      carry += digits[j] << 8;
+      digits[j] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = (carry / 58) | 0;
+    }
+  }
+  return '1'.repeat(zeros) + digits.reverse().map((d) => B58[d]).join('');
+}
+
+/** Base64 to bytes, with `atob` rather than a dependency. */
+function fromBase64(value: string): Uint8Array | null {
+  try {
+    const binary = atob(value);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
 
 function rpcCall(rpcUrl: string) {
   return async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
@@ -143,6 +208,63 @@ async function ownersOf(
   ));
 }
 
+/**
+ * Everybody who holds the mint, read off the chain itself.
+ *
+ * This is what makes "seat the cabin from the mint" true rather than nearly
+ * true. `getTokenLargestAccounts` stops at twenty, which is the flight deck,
+ * all of first and ten business seats — so without an indexer the aeroplane
+ * ended in the middle of row 4 however many holders turned up, and the people
+ * down the back had nobody behind them and nobody to read.
+ *
+ * Asking the token program for its own accounts has no such cap. The filters
+ * are what keep it from being a scan of every token on Solana: the size pins
+ * it to token accounts, and the memcmp pins those to this mint, both of which
+ * the RPC indexes.
+ *
+ * ── What it costs, and why it is third rather than first ──────────────────
+ * The RPC still has to walk that index, and a popular token has a lot of
+ * accounts. So this is asked only when there is no indexer, the answer is
+ * cached by both callers, and the slice above keeps the response to 40 bytes
+ * of account data rather than a parsed object each. Endpoints that refuse the
+ * call outright — several public ones do — return nothing, which reads here
+ * as "could not be asked" and falls through to the twenty.
+ *
+ * Summed by owner, because one wallet can hold the same mint in several token
+ * accounts and a manifest names people, not accounts. A wallet with two bags
+ * has one seat, and it is the seat the total earns.
+ */
+async function fromTokenAccounts(
+  rpc: <T>(method: string, params: unknown[]) => Promise<T | null>,
+  mint: string,
+  decimals: number,
+): Promise<Holder[] | null> {
+  const accounts = await rpc<{ account: { data: [string, string] } }[]>('getProgramAccounts', [
+    TOKEN_PROGRAM,
+    {
+      encoding: 'base64',
+      dataSlice: { offset: OWNER_OFFSET, length: OWNER_AND_AMOUNT },
+      filters: [{ dataSize: TOKEN_ACCOUNT_BYTES }, { memcmp: { offset: 0, bytes: mint } }],
+    },
+  ]);
+  if (!Array.isArray(accounts)) return null;
+
+  const byOwner = new Map<string, number>();
+  for (const entry of accounts) {
+    const bytes = typeof entry?.account?.data?.[0] === 'string' ? fromBase64(entry.account.data[0]) : null;
+    // A short or unreadable account is one account skipped, not a failed read
+    // of the aircraft: `null` here would mean "the chain could not be asked",
+    // which is a different and much louder thing.
+    if (!bytes || bytes.length < OWNER_AND_AMOUNT) continue;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const amount = view.getBigUint64(OWNER_OFFSET, true);
+    if (amount === 0n) continue;
+    const owner = toBase58(bytes.subarray(0, OWNER_OFFSET));
+    byOwner.set(owner, (byOwner.get(owner) ?? 0) + Number(amount) / 10 ** decimals);
+  }
+  return [...byOwner].map(([address, balance]) => ({ address, balance }));
+}
+
 async function fromIndexer(holdersUrl: string | undefined): Promise<Holder[] | null> {
   if (!holdersUrl) return null;
   try {
@@ -171,10 +293,15 @@ export async function readHolderList(source: HolderSource): Promise<HolderList |
   const rpc = rpcUrl ? rpcCall(rpcUrl) : null;
 
   let supply = 0;
+  // Kept rather than discarded: the balances in a raw token account are
+  // integers in the token's smallest unit, and this is what turns them back
+  // into the number a holder recognises as their bag.
+  let decimals = 0;
   if (rpc && mint) {
     const supplyRes = await rpc<{ value: TokenAmount }>('getTokenSupply', [mint]);
     if (supplyRes) {
-      supply = supplyRes.value.uiAmount ?? Number(supplyRes.value.amount) / 10 ** supplyRes.value.decimals;
+      decimals = supplyRes.value.decimals;
+      supply = supplyRes.value.uiAmount ?? Number(supplyRes.value.amount) / 10 ** decimals;
     } else if (!holdersUrl) {
       // No indexer and an RPC that will not answer: nothing to seat anybody by.
       return null;
@@ -192,6 +319,17 @@ export async function readHolderList(source: HolderSource): Promise<HolderList |
   }
 
   if (!rpc || !mint) return null;
+
+  /* The whole aircraft, off the chain. Only as many as could be seated, with
+     room for the contracts that will drop out — the same slice the indexer
+     path takes, and for the same reason: a row nobody can be shown is a row
+     not worth looking up. */
+  const everybody = await fromTokenAccounts(rpc, mint, decimals);
+  if (everybody && everybody.length) {
+    const top = [...everybody].sort((a, b) => b.balance - a.balance).slice(0, manifestSize + 10);
+    const people = await peopleOnly(rpc, top);
+    if (people) return { holders: people, supply, live: true };
+  }
 
   const largest = await rpc<{ value: LargestAccount[] }>('getTokenLargestAccounts', [mint]);
   if (!largest) return null;

@@ -10,6 +10,7 @@ The wall:
 | `GET /banners` | the published wall, keyed by wallet |
 | `POST /banner` | put an advert up, if you can prove the wallet is yours |
 | `GET /health` | a no-store liveness response for monitoring and smoke tests |
+| `GET /holders` | who is aboard, as an indexer would put it — what the page seats from |
 | `GET /images/…` | the artwork, when it is kept in KV rather than R2 |
 
 The directory, every route of which needs a session:
@@ -23,9 +24,9 @@ The directory, every route of which needs a session:
 | `GET /messages` | your introductions, both directions |
 | `POST /messages` | send one, First Class to First Class |
 
-## What it deliberately does not know
+## What the wall deliberately does not know
 
-It has no idea which seat anybody is in, and it must not learn.
+The wall has no idea which seat anybody is in, and it does not need to.
 
 Working that out means the whole seat ladder — ranking, cutoffs, tie-breaks,
 the cargo-hold rule — and a second copy of that logic would drift from the
@@ -33,8 +34,14 @@ page's copy the first time either of them changed. The page already computes
 the ladder, because computing the ladder is what the page *is*.
 
 So adverts are stored against the **wallet** that published them, and the page
-decides where they hang. That leaves this service one question to answer: is
-this request really from the wallet it names?
+decides where they hang. That leaves the wall one question to answer: is this
+request really from the wallet it names?
+
+The directory is the other half of this service and it could not stop there:
+who may read whose contact details is a boundary, not a layout. See
+*Knowing that without a second ladder* below for how it learned the seating
+without keeping a second copy of it — and why the answer was never to
+reimplement the ladder but to import the page's.
 
 It falls out better as product, too. Get out-held and reseated from 3A to 7C
 and your advert moves with you, because it was never attached to 3A. Drop off
@@ -65,8 +72,10 @@ attacker more than it costs us:
    Solana address *is* an ed25519 public key, so this is a plain
    `crypto.subtle.verify` with no dependency.
 4. **The wallet is not in cooldown** (one publish a minute).
-5. **The wallet holds the token**, if `TOKEN_MINT` and `RPC_URL` are set.
-   Storage is not free.
+5. **The wallet holds the token**, if `TOKEN_MINT` is set. Storage is not
+   free. (`RPC_URL` no longer has to be set for this to happen — see
+   *Reading the chain* — which means this check is now on by default rather
+   than quietly skipped on a deployment where nobody set the secret.)
 
 Pinning the image hash inside the signed text matters as much as naming the
 wallet. Without it, one captured signature would authorise *any* artwork for
@@ -185,16 +194,49 @@ Worker import the same file**. One definition of rank, one zone order, one
 place to change them.
 
 What is on this side is only this side's business: `ladder.ts` reads the
-holder list from `HOLDERS_URL`, seats it with that shared module, and caches
-the result for a minute so that reading your own inbox never waits on
-somebody else's indexer.
+holder list, seats it with that shared module, and caches the result for a
+minute so that reading your own inbox never waits on somebody else's indexer.
 
-Two things have to line up, and both are config rather than code:
+### Reading the chain
 
-- **`HOLDERS_URL` should be the feed the page reads** (`VITE_HOLDERS_URL`).
-  One feed is what keeps one seating chart. The page additionally drops
-  accounts owned by a program — a bonding curve is not a passenger — so a
-  feed that lists contracts will seat somebody here who is not seated there.
+Where that holder list comes from is the part that surprises people. Solana
+has no "list the holders of this token" call. `getTokenLargestAccounts`
+returns **at most twenty** accounts, and twenty is the flight deck, all of
+first and ten business seats — so an aircraft of 178 used to end in the
+middle of row 4 unless somebody wired up an indexer.
+
+There is a way to get the rest out of a plain RPC, and it is the one every
+explorer uses: ask the SPL Token program for every account it owns whose mint
+field is this mint. Not capped, and pinned by two indexed filters so it is not
+a scan of every token on Solana. `holderList.ts` tries three sources in order:
+
+1. `HOLDERS_URL`, an indexer. Still the best answer, still uncapped.
+2. Every token account for the mint, summed by owner — the whole aircraft,
+   from the mint alone, no indexer required.
+3. The twenty largest accounts, for endpoints that refuse the scan. Several
+   public ones do.
+
+**`RPC_URL` has a default.** It is a secret rather than a var, because a paid
+endpoint carries its key in the URL, and a secret is set by hand — which
+means a deploy that is right in every other way can land with no way to read
+the chain at all. That failure is silent: the directory opens, lists
+everybody, and withholds every contact detail from everybody. So unset, the
+Worker falls back to Solana's own public endpoint: rate-limited, wrong for
+real traffic, and far better than not knowing who is aboard. **Set
+`RPC_URL`.** This is what happens when you have not.
+
+### Keeping one seating chart
+
+- **`HOLDERS_URL` is optional now**, and if you set one it should be the feed
+  the page reads (`VITE_HOLDERS_URL`). One feed is what keeps one seating
+  chart. The page additionally drops accounts owned by a program — a bonding
+  curve is not a passenger — so a feed that lists contracts will seat
+  somebody here who is not seated there.
+- **The page reads `GET /holders` by default**, which is this Worker handing
+  back the list it has already read and cached. That makes the two agreeing
+  the default rather than something two environment variables have to be kept
+  in step about, and it means the chain is scanned once a minute for the whole
+  site instead of once every ninety seconds per visitor.
 - **`MANIFEST_SIZE` must match `VITE_MANIFEST_SIZE`**, or the two disagree
   about who is on the aircraft at all at the very back.
 
@@ -270,9 +312,12 @@ which of the two states it is in.
 schema, so a new migration is applied by hand (or by a step you add to the
 workflow) before the code that depends on it goes out.
 
-**Set `HOLDERS_URL` to the same feed as the page's `VITE_HOLDERS_URL`**, or
-the directory cannot tell one cabin from another and every card keeps its
-contact details to itself. It is a plain var in `wrangler.toml`, alongside
+**`TOKEN_MINT` is what turns the cabins on.** With it the Worker can read
+holders — from `HOLDERS_URL` if you set one, from the chain if you do not —
+and `GET /health` reports `sections: true`. Without any way to read holders
+the directory cannot tell one cabin from another: every card keeps its
+contact details to itself, nobody overhears anything, and no introduction
+will send. `HOLDERS_URL` is a plain var in `wrangler.toml`, alongside
 `MANIFEST_SIZE` if the page sets `VITE_MANIFEST_SIZE`.
 
 Put the KV id from that first command into `wrangler.toml`, then give the R2
@@ -301,6 +346,8 @@ Then, before going live:
 #   ALLOWED_ORIGINS = "https://your-domain"   in wrangler.toml
 
 # The RPC is a secret, not a var — paid endpoints carry the key in the URL.
+# Optional, and you want it anyway: unset, the Worker uses Solana's public
+# endpoint, which will rate-limit anything resembling traffic.
 npx wrangler secret put RPC_URL
 
 npx wrangler deploy

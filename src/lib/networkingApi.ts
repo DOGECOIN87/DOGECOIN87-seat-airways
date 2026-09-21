@@ -36,6 +36,16 @@ const API = (
 /** True when this deployment has a directory to talk to at all. */
 export const hasDirectory = Boolean(API);
 
+/**
+ * The Worker this deployment talks to, if it has one.
+ *
+ * Exported because the directory is not the only thing that lives there:
+ * `holdings.ts` reads the holder list from the same service, and resolving
+ * the base URL twice is how the two would eventually disagree about which
+ * deployment they are talking to.
+ */
+export const WORKER_API = API;
+
 const SESSION_KEY = 'seat-airlines.directory.session.v1';
 
 export interface NetworkingProfile {

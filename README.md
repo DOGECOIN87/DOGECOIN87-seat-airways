@@ -174,23 +174,37 @@ mode it is in rather than dressing a simulation up as a live reading.
 | --- | --- |
 | `VITE_TOKEN_MINT` | the market feed reads Jupiter instead of the simulator |
 | `VITE_RPC_URL` | balances and the seat ladder come off the chain |
-| `VITE_HOLDERS_URL` | the manifest seats real holders |
+| `VITE_HOLDERS_URL` | the manifest seats from an indexer instead of the Worker's feed |
 | `VITE_BANNERS_API` | holders publish their own adverts, signed |
 | `VITE_DIRECTORY_API` | the cabin directory: holder cards and introductions, in a database |
 
 See `.env.example`, which documents all of them.
 
-**`VITE_HOLDERS_URL` is not really optional.** Without it the code falls back
-to the RPC's `getTokenLargestAccounts`, which returns at most 20 accounts —
-and the cabin seats **178**. The flight deck and first would fill, business
-would get ten of its thirty, and everything from row 4 back would sit empty
-however many holders the token has.
+**Where the holder list comes from**, because the mint alone is famously not
+enough: Solana has no "list the holders of this token" call, and the closest,
+`getTokenLargestAccounts`, returns at most 20 accounts. The cabin seats
+**178**. Twenty fills the flight deck, all of first and ten business seats,
+and leaves everything from row 4 back empty however many holders the token
+has — which is what the aircraft used to do.
 
-An indexer's list is read in batches of a hundred, because
-`getMultipleAccounts` — which is what separates people from bonding curves —
-takes no more than that per call. Over the limit it errors, and an error
-reads as "the chain could not be asked", which would drop the whole aircraft
-back to those twenty accounts without saying so.
+So three sources are tried in order:
+
+1. **`VITE_HOLDERS_URL`**, an indexer. Uncapped, and still the best answer.
+2. **The Worker's `GET /holders`**, which is the default when no indexer is
+   configured. It hands back the list the Worker has already read and cached
+   to decide who may read whose card — so the page and the Worker agree about
+   who is aboard by construction rather than by two variables being kept in
+   step, and the chain is read once a minute for the whole site.
+3. **The chain directly**, asking the SPL Token program for every account it
+   owns for this mint and summing by owner. Uncapped too; it is just a scan,
+   so it is the Worker that pays for it and caches it, and some public
+   endpoints refuse it — in which case the twenty are still there underneath.
+
+Any list is then read in batches of a hundred, because `getMultipleAccounts`
+— which is what separates people from bonding curves — takes no more than
+that per call. Over the limit it errors, and an error reads as "the chain
+could not be asked", which would drop the whole aircraft back to those twenty
+accounts without saying so.
 
 ### The market feed
 
@@ -300,12 +314,15 @@ refusal was always about a second *copy* drifting, so there is not one: the
 ladder lives in `src/lib/seating.ts`, with no browser and no Cloudflare in it,
 and the page and the Worker import the same file. The Worker reads the same
 holder feed the page does (`HOLDERS_URL`, which should be your
-`VITE_HOLDERS_URL`) and caches the seating for a minute; failing that, it
-falls back to the twenty largest accounts from `RPC_URL`, exactly as the page
-does. With neither it fails closed: contact details go nowhere but to their
-owner, nobody overhears anything, and an introduction is refused rather than
-delivered somewhere the Worker cannot place. `GET /health` reports `sections`
-false when a deployment is in that state.
+`VITE_HOLDERS_URL`), or reads the holders off the chain itself, and caches
+the seating for a minute. `TOKEN_MINT` is all it needs — `RPC_URL` falls back
+to Solana's public endpoint, because that secret is set by hand and a deploy
+where nobody remembered used to leave a directory that quietly withheld
+everything from everybody. With no mint at all it fails closed: contact
+details go nowhere but to their owner, nobody overhears anything, and an
+introduction is refused rather than delivered somewhere the Worker cannot
+place. `GET /health` reports `sections` false when a deployment is in that
+state.
 
 The rest of what the server holds: sign-in signatures are spent on use so a
 captured one cannot mint a second token, and a wallet may send twenty

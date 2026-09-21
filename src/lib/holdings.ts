@@ -103,8 +103,29 @@ export const holdingsSource: HoldingsSource = isConfigured
 
 import { readHolderList, type HolderList } from './holderList';
 import { MANIFEST_SIZE } from './manifest';
+import { WORKER_API } from './networkingApi';
 
-const HOLDERS_URL = import.meta.env.VITE_HOLDERS_URL as string | undefined;
+/**
+ * Where the holder list comes from.
+ *
+ * `VITE_HOLDERS_URL` is an indexer, and an indexer is still the best answer.
+ * Unset, this falls back to the Worker's own `/holders`, which is the list it
+ * has already read and cached to decide who may read whose card.
+ *
+ * That default is worth more than the convenience of not configuring one.
+ * The page and the Worker have to agree about who is aboard — two readings
+ * are two aircraft, and this one is a privacy boundary — and pointing the
+ * page at the Worker's answer makes agreement the default rather than
+ * something two environment variables have to be kept in step about.
+ *
+ * It is also the difference between one scan of the chain a minute for the
+ * whole site and one per visitor every ninety seconds: getting the full
+ * holder list out of a plain RPC is a scan, and the Worker has already paid
+ * for it. With no Worker at all this stays undefined and the page reads the
+ * chain itself, which is what it always did.
+ */
+const HOLDERS_URL = (import.meta.env.VITE_HOLDERS_URL as string | undefined)
+  || (WORKER_API ? `${WORKER_API}/holders` : undefined);
 
 export type { HolderList };
 

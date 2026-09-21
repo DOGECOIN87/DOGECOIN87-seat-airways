@@ -21,12 +21,60 @@
  * the holder list, caching it, and answering "which cabin is this wallet in".
  */
 
-import { FULL_CABIN, seatHolders, zoneRank } from '../../src/lib/seating';
+import { FULL_CABIN, seatHolders, zoneRank, type Holder } from '../../src/lib/seating';
 import { readHolderList } from '../../src/lib/holderList';
 import type { ZoneKey } from '../../src/content/cabin';
 
 /** How long a holder list is reused before it is read again. */
 const DEFAULT_CACHE_MS = 60_000;
+
+/**
+ * Where to read the chain when nobody has said where.
+ *
+ * ── Why there is a default at all ─────────────────────────────────────────
+ * `RPC_URL` is a secret rather than a var, because a paid endpoint carries
+ * its key in the URL, and a secret is set out of band — by hand, once, on the
+ * dashboard. CI cannot push it (an unset repository secret would write an
+ * empty string on every deploy and silently turn the gate off), so a deploy
+ * that is correct in every other respect can land with no way to read the
+ * chain. That is not a loud failure. It is a directory that opens, lists
+ * everybody, and withholds every contact detail from everybody, because it
+ * cannot tell one cabin from another — and `sections: false` on `/health` is
+ * the only place it says so.
+ *
+ * A deployment should not depend on somebody having remembered. Solana's own
+ * public endpoint is the answer of last resort: rate-limited, unsuitable for
+ * real traffic, and enormously better than not knowing who is aboard. Every
+ * path that uses it already treats a refusal as "could not be asked" and
+ * keeps whatever it had, so the failure mode of it being busy is the failure
+ * mode that was already handled.
+ *
+ * Set `RPC_URL` to your own endpoint. This is what happens when you have not.
+ */
+const PUBLIC_RPC = 'https://api.mainnet-beta.solana.com';
+
+/**
+ * The endpoint this deployment reads the chain with.
+ *
+ * Exported because `holdsToken` in `index.ts` must ask the same one: a
+ * deployment where the directory can see the seating but the door cannot
+ * check the token is a room with a guest list and no doorman.
+ */
+export function rpcUrl(env: LadderEnv): string | undefined {
+  // No mint means no token to read, so there is nothing to point an RPC at.
+  return env.RPC_URL || (env.TOKEN_MINT ? PUBLIC_RPC : undefined);
+}
+
+/**
+ * Whether this deployment can tell one cabin from another at all.
+ *
+ * What `/health` reports as `sections`, asked of the same function that
+ * decides it, so the two cannot drift.
+ */
+export function canSeat(env: LadderEnv): boolean {
+  return Boolean(env.HOLDERS_URL || env.TOKEN_MINT);
+}
+
 /**
  * The whole aircraft, read from the shared seating rather than written down.
  *
@@ -39,7 +87,11 @@ const DEFAULT_MANIFEST_SIZE = FULL_CABIN;
 export interface LadderEnv {
   /** An indexer, as the page's `VITE_HOLDERS_URL`. The uncapped source. */
   HOLDERS_URL?: string;
-  /** Falls back to the twenty largest accounts, as the page does. */
+  /**
+   * Solana JSON-RPC. Unset, Solana's public endpoint is used — see
+   * `PUBLIC_RPC` on why a deployment should not need this to have been
+   * remembered, and why you should still set it.
+   */
   RPC_URL?: string;
   TOKEN_MINT?: string;
   MANIFEST_SIZE?: string;
@@ -50,6 +102,15 @@ export interface LadderEnv {
 export interface Ladder {
   /** False when no holder feed is configured, so nothing can be judged. */
   live: boolean;
+  /**
+   * The list this seating was built from, in the shape an indexer gives.
+   *
+   * Kept so `GET /holders` can hand it straight back. The page needs the
+   * same list this side is using — one feed is what keeps one seating chart
+   * — and reading it from here means the chain is scanned once a minute for
+   * the whole site rather than once every ninety seconds per visitor.
+   */
+  holders: readonly Holder[];
   /** The cabin a wallet is in, or null when it is in the hold. */
   zoneOf(address: string): ZoneKey | null;
   /** Everybody with a seat, which is everybody the page draws. */
@@ -68,7 +129,9 @@ export interface Ladder {
 }
 
 /** A ladder that knows nothing, and therefore permits nothing. */
-const NO_LADDER: Ladder = { live: false, zoneOf: () => null, seated: () => [], seatedBehind: () => [] };
+const NO_LADDER: Ladder = {
+  live: false, holders: [], zoneOf: () => null, seated: () => [], seatedBehind: () => [],
+};
 
 let snapshot: { value: Ladder; expiresAt: number } | undefined;
 
@@ -82,13 +145,13 @@ let snapshot: { value: Ladder; expiresAt: number } | undefined;
  */
 export async function readLadder(env: LadderEnv): Promise<Ladder> {
   // Nothing to read holders with at all: an indexer, or the chain.
-  if (!env.HOLDERS_URL && !(env.RPC_URL && env.TOKEN_MINT)) return NO_LADDER;
+  if (!canSeat(env)) return NO_LADDER;
   if (snapshot && snapshot.expiresAt > Date.now()) return snapshot.value;
 
   const size = Math.max(2, Number(env.MANIFEST_SIZE || DEFAULT_MANIFEST_SIZE));
   const list = await readHolderList({
     holdersUrl: env.HOLDERS_URL,
-    rpcUrl: env.RPC_URL,
+    rpcUrl: rpcUrl(env),
     mint: env.TOKEN_MINT,
     manifestSize: size,
   });
@@ -104,6 +167,7 @@ export async function readLadder(env: LadderEnv): Promise<Ladder> {
   const zones = new Map(manifest.entries.map((e) => [e.address, e.seat.zone] as const));
   const value: Ladder = {
     live: true,
+    holders: list.holders,
     zoneOf: (address) => zones.get(address) ?? null,
     seated: () => manifest.entries.map((e) => e.address),
     seatedBehind: (zone) => manifest.entries

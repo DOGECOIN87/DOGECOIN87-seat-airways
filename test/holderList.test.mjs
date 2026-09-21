@@ -24,8 +24,27 @@ const SYSTEM = '11111111111111111111111111111111';
 const RPC = 'https://rpc.test';
 const INDEXER = 'https://indexer.test/holders';
 
+/* A token account as `getProgramAccounts` hands it back with the slice this
+   code asks for: 32 bytes of owner, then the balance as a little-endian u64.
+   Built here as bytes on purpose — the point of the case is that the bytes
+   decode to the address a holder would recognise. */
+const account = (owner, amount) => {
+  const bytes = new Uint8Array(40);
+  bytes.set(owner, 0);
+  new DataView(bytes.buffer).setBigUint64(32, BigInt(amount), true);
+  return { account: { data: [Buffer.from(bytes).toString('base64'), 'base64'] } };
+};
+
+/* 31 zero bytes and then n. Base58 writes leading zeros as '1', so such an
+   address is 31 ones and a single digit — which means the address a given
+   owner must decode to can be written down here rather than produced by a
+   second copy of the encoder that could be wrong in the same way. */
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const ownerBytes = (n) => { const b = new Uint8Array(32); b[30] = n >> 8; b[31] = n & 0xff; return b; };
+const ownerAddress = (n) => '1'.repeat(31) + B58[n];
+
 /** A fake chain. Records every call so the batching is observable. */
-function chain({ holders = [], programOwned = [], failPage = -1, largest = [] } = {}) {
+function chain({ holders = [], programOwned = [], failPage = -1, largest = [], tokenAccounts = null, decimals = 0 } = {}) {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     if (String(url) === INDEXER) {
@@ -38,7 +57,11 @@ function chain({ holders = [], programOwned = [], failPage = -1, largest = [] } 
 
     switch (body.method) {
       case 'getTokenSupply':
-        return reply({ value: { amount: '1000000', decimals: 0, uiAmount: 1_000_000 } });
+        return reply({ value: { amount: '1000000', decimals, uiAmount: 1_000_000 } });
+      // Unset means an endpoint that will not run the scan, which is several
+      // of the public ones and the reason the twenty are still in the code.
+      case 'getProgramAccounts':
+        return reply(tokenAccounts);
       case 'getTokenLargestAccounts':
         return reply({ value: largest });
       case 'getMultipleAccounts': {
@@ -106,16 +129,84 @@ await check('one unanswered batch is not a half-read aircraft', async () => {
   assert(list === null || list.holders.length !== 100, 'a partial read was passed off as the manifest');
 });
 
-await check('with no indexer it falls back to the largest accounts, resolved to owners', async () => {
-  chain({
+await check('with no indexer the whole cabin still comes off the chain', async () => {
+  /* The case this tier exists for. getTokenLargestAccounts stops at twenty —
+     the flight deck, all of first, ten business seats — so without an indexer
+     the aeroplane used to end in the middle of row 4 however many holders
+     turned up. Asking the token program for its own accounts has no cap. */
+  const calls = chain({
+    tokenAccounts: Array.from({ length: 178 }, (_, i) => account(ownerBytes(i + 1), 1000 - i)),
+  });
+  const list = await readHolderList({ rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+
+  assert(list, 'the chain returned no aircraft at all');
+  assert(list.holders.length === 178, `seated ${list.holders.length} of 178 from the mint alone`);
+  assert(new Set(list.holders.map((h) => h.address)).size === 178, 'two owners decoded to one address');
+  assert(!calls.some((c) => c.method === 'getTokenLargestAccounts'),
+    'settled for twenty accounts when the whole list was there to be had');
+});
+
+await check('the scan is pinned to token accounts, to this mint, and to 40 bytes', async () => {
+  /* Every one of these is load-bearing. Without the size and the mint this
+     reads every account the token program owns — every token on Solana —
+     and without the slice it drags back the full 165 bytes of each of them
+     on every cache miss. */
+  const calls = chain({ tokenAccounts: [account(ownerBytes(1), 5)] });
+  await readHolderList({ rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+
+  const scan = calls.find((c) => c.method === 'getProgramAccounts');
+  assert(scan, 'the chain was never asked for the holder list');
+  const [program, options] = scan.params;
+  assert(program === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', `asked the wrong program: ${program}`);
+  assert(options.filters.some((f) => f.dataSize === 165), 'nothing pinned the results to token accounts');
+  assert(options.filters.some((f) => f.memcmp?.offset === 0 && f.memcmp?.bytes === 'MINT'),
+    'the scan was not pinned to this mint');
+  assert(options.dataSlice?.offset === 32 && options.dataSlice?.length === 40,
+    'the whole account was fetched where the owner and the balance would do');
+});
+
+await check('a wallet holding two token accounts gets one seat, for the total', async () => {
+  /* A manifest names people, not accounts, and one wallet can hold the same
+     mint several times over. Two bags is one passenger with a bigger bag. */
+  chain({ tokenAccounts: [
+    account(ownerBytes(1), 300),
+    account(ownerBytes(2), 400),
+    account(ownerBytes(1), 500),
+  ] });
+  const list = await readHolderList({ rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+
+  assert(list.holders.length === 2, `expected 2 people, got ${list.holders.length}`);
+  const top = list.holders.find((h) => h.address === ownerAddress(1));
+  assert(top, `owner bytes did not decode to an address: ${list.holders.map((h) => h.address).join(', ')}`);
+  assert(top.balance === 800, `two bags did not add up: ${top.balance}`);
+});
+
+await check('balances arrive in whole tokens, and an empty account is nobody', async () => {
+  chain({ decimals: 6, tokenAccounts: [account(ownerBytes(1), 1_500_000), account(ownerBytes(2), 0)] });
+  const list = await readHolderList({ rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+  assert(list.holders.length === 1, `an account holding nothing was seated: ${list.holders.length}`);
+  assert(list.holders[0].balance === 1.5, `the token's decimals were not applied: ${list.holders[0].balance}`);
+});
+
+await check('an endpoint that refuses the scan still seats the front of the aircraft', async () => {
+  const calls = chain({
     largest: Array.from({ length: 20 }, (_, i) => ({
       address: `tokenacct${i}`, amount: String(100 - i), decimals: 0, uiAmount: 100 - i,
     })),
   });
   const list = await readHolderList({ rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+  assert(calls.some((c) => c.method === 'getProgramAccounts'), 'the uncapped path was never tried');
   assert(list, 'the RPC fallback returned nothing');
   assert(list.holders.length === 20, `expected the RPC cap of 20, got ${list.holders.length}`);
   assert(list.holders[0].address === 'owner-of-tokenacct0', `token account not resolved: ${list.holders[0].address}`);
+});
+
+await check('an indexer is still preferred to scanning the chain', async () => {
+  const calls = chain({ holders: people(30), tokenAccounts: [account(ownerBytes(1), 999)] });
+  const list = await readHolderList({ holdersUrl: INDEXER, rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+  assert(list.holders.length === 30, `the indexer's answer was not used: ${list.holders.length}`);
+  assert(!calls.some((c) => c.method === 'getProgramAccounts'),
+    'the chain was scanned although an indexer had already answered');
 });
 
 await check('with neither an indexer nor an RPC there is no aircraft', async () => {

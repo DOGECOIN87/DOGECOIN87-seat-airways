@@ -247,10 +247,22 @@ const signInText = (address, issued) =>
 
 const wallet = async () => {
   const keys = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
-  const address = toBase58(new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey)));
+  const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey));
+  const address = toBase58(bytes);
   const signWith = async (msg) =>
     toBase58(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, keys.privateKey, new TextEncoder().encode(msg))));
-  return { address, sign: signWith };
+  return { address, bytes, sign: signWith };
+};
+
+/* A token account as the chain returns it under the slice the Worker asks
+   for: 32 bytes of owner, then the balance as a little-endian u64. Built
+   from a real public key so that what comes back out the far end can be
+   checked against the address that key actually signs with. */
+const tokenAccount = (owner, amount) => {
+  const buf = new Uint8Array(40);
+  buf.set(owner, 0);
+  new DataView(buf.buffer).setBigUint64(32, BigInt(amount), true);
+  return { account: { data: [Buffer.from(buf).toString('base64'), 'base64'] } };
 };
 
 const signInBody = async (who, issued = new Date().toISOString()) => ({
@@ -297,8 +309,54 @@ const holderList = [
   { address: mabel.address, balance: 100_000 },
 ];
 
+/* Wallets the chain has stopped vouching for. Empty until a case sells up. */
+const soldOut = new Set();
+/* Taking the indexer away, so the Worker has to read holders off the chain. */
+let indexerDown = false;
+let scanAccounts = [];
+
 const holders = createServer((req, res) => {
-  res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(holderList));
+  if ((req.url ?? '').startsWith('/holders')) {
+    res.writeHead(200, { 'content-type': 'application/json' })
+      .end(JSON.stringify(indexerDown ? [] : holderList));
+    return;
+  }
+
+  /* The chain, as far as the Worker is concerned.
+
+     It exists so the holder check is a real check here rather than one
+     standing aside for want of an endpoint — which is what let a wallet that
+     had sold everything keep reading the roster for a day. `soldOut` is the
+     handle a case pulls to make somebody stop holding. */
+  let raw = '';
+  req.on('data', (chunk) => { raw += chunk; });
+  req.on('end', () => {
+    let call = {};
+    try { call = JSON.parse(raw); } catch { /* answered as nothing, below */ }
+    const reply = (result) => res
+      .writeHead(200, { 'content-type': 'application/json' })
+      .end(JSON.stringify({ jsonrpc: '2.0', id: call.id ?? 1, result }));
+
+    switch (call.method) {
+      case 'getTokenAccountsByOwner':
+        return reply({
+          value: soldOut.has(call.params?.[0]) ? [] : [
+            { account: { data: { parsed: { info: { tokenAmount: { uiAmount: 1000 } } } } } },
+          ],
+        });
+      case 'getTokenSupply':
+        return reply({ value: { amount: '1000000', decimals: 0, uiAmount: 1_000_000 } });
+      case 'getProgramAccounts':
+        return reply(scanAccounts);
+      case 'getMultipleAccounts':
+        /* Everybody here is a person. A null account is a wallet holding no
+           SOL, which is exactly what a wallet that has only ever received
+           tokens looks like — and what the holder list keeps. */
+        return reply({ value: (call.params?.[0] ?? []).map(() => null) });
+      default:
+        return reply(null);
+    }
+  });
 });
 await new Promise((resolve) => holders.listen(8788, '127.0.0.1', resolve));
 // The Worker caches seating for a second locally; let any older one lapse.
@@ -308,6 +366,22 @@ await check('GET /health reports the directory is bound', async () => {
   const body = await (await fetch(`${BASE}/health`, { headers: { origin: ORIGIN } })).json();
   assert(body.directory === true, 'the Worker does not see a D1 binding — apply the migrations first');
   assert(body.sections === true, 'the Worker has no holder feed, so it cannot tell the cabins apart');
+});
+
+await check('GET /holders hands the page the list the cabin is seated from', async () => {
+  /* The page reads this instead of scanning the chain itself, which is what
+     makes "the page and the Worker agree about who is aboard" the default
+     rather than two environment variables somebody has to keep in step. */
+  const res = await fetch(`${BASE}/holders`, { headers: { origin: ORIGIN } });
+  assert(res.status === 200, `status ${res.status}`);
+  const list = await res.json();
+  assert(Array.isArray(list), 'the holder feed is not a list');
+  assert(list.some((h) => h.address === captain.address), 'the flight deck is missing from the feed');
+  assert(list.some((h) => h.address === mabel.address), 'the wallet in business is missing from the feed');
+  assert(
+    list.every((h) => typeof h.address === 'string' && Number.isFinite(h.balance)),
+    'the feed is not in the shape an indexer gives, so the page cannot read it',
+  );
 });
 
 await check('a signed sign-in opens a session', async () => {
@@ -541,9 +615,90 @@ await check('the two wallets on a message always read it', async () => {
   );
 });
 
+/* ── The door, and how long it stays open ─────────────────────────────────
+   A session is proof of two things — that somebody holds their key, and that
+   they hold the token — and only the first of those stays true by itself. */
+
+await check('the door turns away a wallet that holds nothing', async () => {
+  const empty = await wallet();
+  soldOut.add(empty.address);
+  const res = await api('/session', { method: 'POST', body: await signInBody(empty) });
+  assert(res.status === 403, `a wallet with no bag was let into the directory: ${res.status}`);
+});
+
+await check('a wallet that sells its bag loses the session it opened', async () => {
+  /* The session lasts a day. A bag can be gone in a minute. Most of what
+     selling up costs somebody the seating handles on its own — off the
+     manifest, and contact details close behind you — but the roster itself
+     was only ever gated at sign-in, and the roster is most of what the room
+     is for. */
+  const seller = await wallet();
+  const token = (await (await api('/session', { method: 'POST', body: await signInBody(seller) })).json()).token;
+  assert((await api('/directory', { token })).status === 200, 'the session never opened');
+
+  soldOut.add(seller.address);
+  // Past OWNER_CACHE_MS, which wrangler.local.toml shortens for this.
+  await new Promise((r) => setTimeout(r, 400));
+
+  const after = await api('/directory', { token });
+  assert(after.status === 401, `a wallet that sold everything kept the roster: ${after.status}`);
+  assert((await api('/messages', { token })).status === 401, 'the session row outlived the holding');
+
+  const again = await api('/session', { method: 'POST', body: await signInBody(seller) });
+  assert(again.status === 403, `and it could sign straight back in: ${again.status}`);
+});
+
+await check('being out-held is not selling: an unseated holder keeps everything', async () => {
+  /* The rule this must not overreach into. `owner` is the banner wallet: it
+     holds the token and has no seat, which is the hold — part of this
+     aeroplane, and its card is still its own to edit. */
+  const outheld = await wallet();
+  const token = (await (await api('/session', { method: 'POST', body: await signInBody(outheld) })).json()).token;
+  await new Promise((r) => setTimeout(r, 400));
+  const res = await api('/profile', { method: 'PUT', token, body: { displayName: 'Standby' } });
+  assert(res.status === 200, `a holder with no seat was thrown out of the directory: ${res.status}`);
+  const roster = await (await api('/directory', { token })).json();
+  assert(roster[outheld.address]?.displayName === 'Standby', 'the hold lost its own card');
+});
+
 await check('signing out revokes the token', async () => {
   assert((await api('/session', { method: 'DELETE', token: bobToken })).status === 200, 'signing out failed');
   assert((await api('/messages', { token: bobToken })).status === 401, 'the token still worked after signing out');
+});
+
+await check('with no indexer, the cabin is seated off the chain', async () => {
+  /* The tier that makes "seat the cabin from the mint" true rather than
+     nearly true, exercised in the runtime that has to run it rather than in
+     Node. Reading a token account means base64 in, a little-endian u64 out,
+     and 32 bytes of owner encoded back to base58 — and the address that comes
+     out has to be spelled exactly as the wallet signs it, or a holder will
+     not match their own seat. These are real keypairs, so that is checkable.
+
+     `getTokenLargestAccounts` is deliberately left with nothing to say: if
+     the scan did not work, this seats nobody rather than quietly seating the
+     twenty. */
+  const first = await wallet();
+  const second = await wallet();
+  scanAccounts = [
+    tokenAccount(first.bytes, 900_000),
+    tokenAccount(second.bytes, 100_000),
+    // One wallet, two bags: a manifest names people, not token accounts.
+    tokenAccount(second.bytes, 50_000),
+  ];
+  indexerDown = true;
+  // Past LADDER_CACHE_MS, so the seating is read again rather than reused.
+  await new Promise((r) => setTimeout(r, 1300));
+
+  const list = await (await fetch(`${BASE}/holders`, { headers: { origin: ORIGIN } })).json();
+  assert(Array.isArray(list) && list.length === 2, `expected 2 holders off the chain, got ${JSON.stringify(list)}`);
+  const top = list.find((h) => h.address === first.address);
+  assert(top, `the owner bytes did not decode to the address the key signs with: ${list.map((h) => h.address)}`);
+  assert(top.balance === 900_000, `the balance did not survive the u64: ${top.balance}`);
+  const doubled = list.find((h) => h.address === second.address);
+  assert(doubled?.balance === 150_000, `two token accounts did not add up: ${doubled?.balance}`);
+
+  indexerDown = false;
+  scanAccounts = [];
 });
 
 await check('the preflight allows the headers the directory needs', async () => {

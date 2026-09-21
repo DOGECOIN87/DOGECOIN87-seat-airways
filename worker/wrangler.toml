@@ -48,17 +48,19 @@ ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 # page's VITE_HOLDERS_URL** — one feed is what keeps one seating chart, and
 # two would be the drift this service spent its life avoiding.
 #
-# Optional in exactly the way it is optional for the page: unset, the ladder
-# falls back to the twenty largest accounts from the RPC_URL secret and the
-# TOKEN_MINT above, which is the same fallback `holderList.ts` gives the page,
-# because it is the same function. Twenty accounts is the flight deck, all of
-# first, and ten business seats — rank 21 back is empty, so the aircraft ends
-# in the middle of row 4 and the holders down there have nobody behind them.
+# Genuinely optional now. Unset, the ladder asks the SPL Token program for
+# every account it owns for the mint below and sums them by owner, which is
+# the whole holder list rather than the twenty `getTokenLargestAccounts`
+# caps at — and the page reads the result back from this Worker's own
+# GET /holders, so the two cannot disagree about who is aboard.
 #
-# With neither an indexer nor an RPC the directory cannot tell one cabin from
-# another, so it withholds every card's contact details from everybody but
-# their owner and shows nobody another wallet's conversations. That is the
-# safe direction to fail in, and `GET /health` reports `sections` either way.
+# An indexer is still cheaper than a scan, so set one if you have one.
+#
+# Without even a mint the directory cannot tell one cabin from another, so it
+# withholds every card's contact details from everybody but their owner, shows
+# nobody another wallet's conversations, and refuses introductions rather than
+# delivering one it cannot place. That is the safe direction to fail in, and
+# `GET /health` reports `sections` either way.
 #
 # MANIFEST_SIZE must match the page's VITE_MANIFEST_SIZE. Both default to the
 # whole aircraft — 178 — read from the same constant in the shared seating
@@ -72,3 +74,11 @@ ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 TOKEN_MINT = "AWJCyg9PrMtYju9yaQmdQLcwrGobHMTv9JU3mo4upump"
 # RPC_URL is a secret rather than a var, since paid endpoints carry a key in
 # the URL:  npx wrangler secret put RPC_URL
+#
+# Unset, the Worker uses Solana's public endpoint rather than giving up on
+# reading the chain. That is not an invitation to leave it unset — the public
+# endpoint will rate-limit anything resembling traffic — it is because a
+# secret has to be set by hand, and a deploy where nobody remembered used to
+# produce a directory that opened, listed everybody, and withheld every
+# contact detail from everybody with only `sections: false` on /health to say
+# so. A rate limit is a failure that retries. Silence is not.

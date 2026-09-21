@@ -24,3 +24,17 @@ ALLOWED_ORIGINS = "http://localhost:3000"
 # reading the seating from the run before it.
 HOLDERS_URL = "http://127.0.0.1:8788/holders"
 LADDER_CACHE_MS = "1000"
+
+# The same server answers JSON-RPC, so the suite can decide who holds the
+# token and change its mind mid-run. Without this the holder check stands
+# aside — it has nothing to ask — and a wallet that sells its bag looks
+# exactly like one that has not.
+#
+# The mint is never dereferenced by the fake chain; it only has to be set,
+# because "no mint" is what tells the Worker there is no token to check
+# against yet.
+TOKEN_MINT = "TestMint111111111111111111111111111111111111"
+RPC_URL = "http://127.0.0.1:8788/rpc"
+# A fifth of a second rather than the default 45, so watching a holder stop
+# being one does not mean sitting through three quarters of a minute.
+OWNER_CACHE_MS = "200"

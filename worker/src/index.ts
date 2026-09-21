@@ -5,6 +5,7 @@
  *
  *   GET  /banners   the published wall, keyed by wallet
  *   POST /banner    put an advert up, if you can prove the wallet is yours
+ *   GET  /holders   who is aboard, as an indexer would put it
  *
  * The directory, behind a session that same wallet signature opens:
  *
@@ -39,7 +40,7 @@ import {
   signInChallenge, tokenHash,
   MESSAGES_PER_HOUR, MESSAGE_PAGE, SESSION_TTL_MS, SIGNIN_MAX_AGE_MS,
 } from './networking';
-import { readLadder } from './ladder';
+import { canSeat, readLadder, rpcUrl } from './ladder';
 import { canMessage, canViewContact } from '../../src/lib/seating';
 
 export interface Env {
@@ -93,6 +94,8 @@ export interface Env {
   RPC_URL?: string;
   /** The token this aircraft is flying. */
   TOKEN_MINT?: string;
+  /** How long a holder check is cached, in milliseconds. Defaults to 45s. */
+  OWNER_CACHE_MS?: string;
   /** Comma-separated origins allowed to call this. */
   ALLOWED_ORIGINS?: string;
 }
@@ -170,13 +173,20 @@ function imageUrl(env: Env, request: Request, key: string, updated?: string): st
  * so a wallet with no seat has nowhere to hang one.
  */
 async function holdsToken(env: Env, owner: string): Promise<boolean> {
-  // Unconfigured means "do not check" rather than "refuse everybody", so the
-  // service is usable before a mint exists.
-  if (!env.RPC_URL || !env.TOKEN_MINT) return true;
+  /* Unconfigured means "do not check" rather than "refuse everybody", so the
+     service is usable before a mint exists.
+
+     That used to cover a second and much less deliberate case: a deployment
+     with a mint but no `RPC_URL`, because the secret is set by hand and
+     nobody had. The door stood open and nothing said so. `rpcUrl` answers
+     with the public endpoint now, so this reads as it always claimed to —
+     there is no token yet. */
+  const url = rpcUrl(env);
+  if (!url || !env.TOKEN_MINT) return true;
   const cachedUntil = ownerCache.get(owner) ?? 0;
   if (cachedUntil > Date.now()) return true;
   try {
-    const res = await fetch(env.RPC_URL, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -196,7 +206,7 @@ async function holdsToken(env: Env, owner: string): Promise<boolean> {
     const accounts = body.result?.value;
     if (!Array.isArray(accounts)) return true;
     const valid = accounts.some((a) => (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0) > 0);
-    if (valid) ownerCache.set(owner, Date.now() + OWNER_CACHE_MS);
+    if (valid) ownerCache.set(owner, Date.now() + ownerTtl(env));
     return valid;
   } catch {
     // An RPC outage should not take the wall offline for everyone.
@@ -243,7 +253,15 @@ const WALL_KEY = 'wall';
 type Wall = Record<string, StoredBanner>;
 const MAX_REQUEST_BYTES = 1_500_000;
 const WALL_CACHE_MS = 30_000;
+/**
+ * How long a wallet stays believed to hold the token.
+ *
+ * Also how long a wallet that has sold everything keeps a session it already
+ * opened, which is why it is settable: the route suite has to watch a holder
+ * stop being one without sitting through three quarters of a minute.
+ */
 const OWNER_CACHE_MS = 45_000;
+const ownerTtl = (env: Env) => Number(env.OWNER_CACHE_MS || OWNER_CACHE_MS) || OWNER_CACHE_MS;
 let wallSnapshot: { value: Wall; expiresAt: number } | undefined;
 const ownerCache = new Map<string, number>();
 
@@ -361,10 +379,8 @@ const asMessage = (row: MessageRow) => ({
   sentAt: row.sent_at,
 });
 
-/** The wallet behind a bearer token, or null if there is not one. */
-async function sessionAddress(db: D1Database, request: Request): Promise<string | null> {
-  const token = bearerToken(request.headers.get('authorization'));
-  if (!token) return null;
+/** The wallet a bearer token stands for, or null if it stands for nobody. */
+async function sessionAddress(db: D1Database, token: string): Promise<string | null> {
   const row = await db
     .prepare('SELECT address, expires_at FROM sessions WHERE token_hash = ?')
     .bind(await tokenHash(token))
@@ -410,9 +426,35 @@ async function handle(request: Request, env: Env): Promise<Response> {
         service: 'seat-airlines-banners',
         storage: usingR2(env) ? 'r2' : 'kv',
         directory: Boolean(env.DIRECTORY),
-        // Whether this deployment can tell one cabin from another at all.
-        sections: Boolean(env.HOLDERS_URL || (env.RPC_URL && env.TOKEN_MINT)),
+        // Whether this deployment can tell one cabin from another at all,
+        // asked of the function that decides it rather than restated here.
+        sections: canSeat(env),
       }, 200, { ...cors, 'cache-control': 'no-store' });
+    }
+
+    /* Who is aboard, as an indexer would put it.
+
+       The page reads the same list this side seats people from, which is the
+       thing that has mattered most all along: two readings of "who is aboard"
+       are two aircraft, and this one decides who may read whose card.
+
+       It is also what keeps the chain scan affordable. Getting the whole
+       holder list out of a plain RPC means asking the token program for every
+       account it owns for this mint — not capped at twenty, and not cheap —
+       and doing that in the page would mean one scan per visitor every ninety
+       seconds. Done here it is one scan a minute for everybody, already
+       cached, already filtered of contracts.
+
+       Public, and nothing is given away by it: these are the wallets the seat
+       map draws on screen. Empty when this deployment cannot read holders at
+       all, which the page reads as "no indexer" and falls back to its own RPC
+       for, exactly as it did before there was one. */
+    if (request.method === 'GET' && url.pathname === '/holders') {
+      const ladder = await readLadder(env);
+      return json(ladder.holders, 200, {
+        ...cors,
+        'cache-control': 'public, max-age=30, stale-while-revalidate=120',
+      });
     }
 
     /* ── The directory ──────────────────────────────────────────────────
@@ -488,8 +530,35 @@ async function handle(request: Request, env: Env): Promise<Response> {
         return json({ ok: true }, 200, priv);
       }
 
-      const me = await sessionAddress(db, request);
-      if (!me) return json({ error: 'Sign in to read the cabin directory.' }, 401, priv);
+      const token = bearerToken(request.headers.get('authorization'));
+      const me = token ? await sessionAddress(db, token) : null;
+      if (!token || !me) return json({ error: 'Sign in to read the cabin directory.' }, 401, priv);
+
+      /* Still aboard?
+
+         A session lasts a day, and a bag can be gone in a minute. Most of
+         what selling up should cost somebody the seating already takes care
+         of: drop off the manifest and the ladder puts you in the hold within
+         its cache, so contact details close, conversations stop carrying,
+         and no introduction will send. But the door itself was checked once,
+         at sign-in, and never again — so a wallet that sold everything kept
+         the roster for up to twenty-four hours, and the roster is most of
+         what the room is for.
+
+         So the door's own check is made again here, against the same cache
+         that keeps it from being an RPC call per request. It stands aside
+         when the chain cannot answer, exactly as it does at sign-in — an
+         outage should not empty the cabin — and when it does answer no, the
+         session row goes too, so the page is told to sign in again rather
+         than left retrying a token that will never work again.
+
+         Being out-held is not selling. A holder who still holds anything
+         keeps their session, their card, and their inbox; they are in the
+         hold, which is part of this aeroplane. */
+      if (!(await holdsToken(env, me))) {
+        await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await tokenHash(token)).run();
+        return json({ error: 'That wallet no longer holds the token.' }, 401, priv);
+      }
 
       if (request.method === 'GET' && url.pathname === '/directory') {
         const ladder = await readLadder(env);
