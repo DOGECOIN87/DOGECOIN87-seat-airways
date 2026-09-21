@@ -521,7 +521,15 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
             {roomsAft.length > 0 && (
               <button
                 type="button"
-                onClick={() => setListeningAft((value) => !value)}
+                onClick={() => {
+                  const next = !listeningAft;
+                  setListeningAft(next);
+                  /* The sign-in only asked for the room you are sitting in,
+                     because that is the one the hub draws. This is the moment
+                     somebody says they want the rest, so this is when they
+                     are fetched. */
+                  if (next) void directory.hearAft();
+                }}
                 aria-pressed={listeningAft}
                 className="rounded-full border border-ui-line px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep transition-colors hover:bg-black/5"
               >
@@ -553,7 +561,11 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
 
           <div className={`mt-5 grid gap-4 ${rooms.length > 1 ? 'lg:grid-cols-2' : ''}`}>
             {rooms.map((zone) => {
-              const said = directory.channels[zone] ?? [];
+              /* Absent is not empty. A room the server has not been asked for
+                 yet is still on its way; one it sent with nothing in it is
+                 quiet. Saying "quiet back there" about a room nobody has
+                 fetched would be a confident wrong answer. */
+              const said = directory.channels[zone];
               return (
                 <div key={zone} className={`rounded-2xl border p-4 ${zoneAccent[zone]}`}>
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep">
@@ -562,7 +574,9 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                       ? ' · yours'
                       : ' · you are listening, they cannot hear you'}
                   </p>
-                  {said.length ? (
+                  {said === undefined ? (
+                    <p className="mt-3 text-[11px] text-ui-soft">Listening…</p>
+                  ) : said.length ? (
                     <ul className="mt-3 max-h-72 space-y-2.5 overflow-y-auto pr-1">
                       {said.map((message) => (
                         <li key={message.id} className="rounded-xl border border-ui-line bg-white/80 px-3 py-2.5">

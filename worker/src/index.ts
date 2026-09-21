@@ -809,12 +809,24 @@ async function handle(request: Request, env: Env): Promise<Response> {
            five-person aeroplane is a room it would draw and nobody could ever
            be in. The same reasoning the roster and the header already use.
 
+           And by default, only the room you are sitting in.
+
+           Which cabins a holder *may* hear has not changed — still their own
+           and every one behind it, and `?rooms=all` asks for all of them.
+           What changed is when they are fetched. The hub opens on your own
+           cabin and puts the rest behind a button, so reading all five on
+           every sign-in was up to two hundred and fifty rows fetched to paint
+           about twenty. The button asks for the rest, and it asks at the
+           moment somebody actually wants them.
+
            The PA is not one of these: it is one line from the flight deck
            that the whole aeroplane hears, the hold included. Being aboard is
            the only qualification for hearing it. */
         const occupied = new Set(ladder.seated().map((address) => ladder.zoneOf(address)));
+        const wantsAll = url.searchParams.get('rooms') === 'all';
         const readable = ladder.live && mine
-          ? CABIN_ZONES.map((z) => z.key).filter((zone) => canReadChannel(mine, zone) && occupied.has(zone))
+          ? CABIN_ZONES.map((z) => z.key).filter((zone) => occupied.has(zone)
+            && (wantsAll ? canReadChannel(mine, zone) : zone === mine))
           : [];
 
         const roomRows = readable.length

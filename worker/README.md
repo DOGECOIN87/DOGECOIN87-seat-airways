@@ -22,7 +22,8 @@ The directory, every route of which needs a session:
 | `DELETE /session` | hand it back |
 | `GET /directory` | every published card |
 | `PUT /profile` | publish or amend your own |
-| `GET /messages` | your introductions, every room you can hear, and the PA |
+| `GET /messages` | your introductions, your own cabin's room, and the PA |
+| `GET /messages?rooms=all` | the same, plus every cabin behind you |
 | `POST /messages` | to a wallet, to `section:<cabin>`, or to `announcement` |
 
 ## What the wall deliberately does not know
@@ -207,6 +208,18 @@ colon in it, so no key anybody holds can ever spell a cabin.
 Only cabins with somebody in them have rooms. An empty cabin's is necessarily
 empty, so asking after it is a query whose answer is known in advance, and
 drawing it would promise a conversation nobody could ever be in.
+
+**A sign-in fetches one room: the one you are sitting in.** Which cabins a
+seat *may* hear has not changed — that is still its own and every one behind
+it — but the hub opens on your own cabin and puts the rest behind a button, so
+reading all five on every sign-in meant up to 250 rows fetched to paint about
+twenty. `?rooms=all` is what that button asks for, and it asks at the moment
+somebody wants them. It is a request for what the seat may hear, not a way
+around it: Business asking for everything still gets Business.
+
+Worst case for a sign-in is now 5 queries and about 85 rows rather than 8 and
+405. Every read is still bounded by a `LIMIT`; none of them has ever been "all
+the messages".
 
 ### The PA
 

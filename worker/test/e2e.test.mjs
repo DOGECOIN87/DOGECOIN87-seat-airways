@@ -692,18 +692,32 @@ await check('nor in the one ahead of them', async () => {
   assert(res.status === 403, `business talked in the room in front of it: ${res.status}`);
 });
 
-await check('you hear your own room and every one behind it', async () => {
+await check('a sign-in fetches only the room you are sitting in', async () => {
+  /* The hub opens on your own cabin, so fetching every room you *may* hear on
+     every sign-in was up to five rooms read to paint one. What a seat is
+     allowed to hear has not changed; when it is fetched has. */
   const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
   const deck = await (await api('/messages', { token: captainToken })).json();
+  const rooms = Object.keys(deck.channels ?? {}).sort();
+  assert(rooms.join(',') === 'deck', `a sign-in fetched: ${rooms.join(',') || 'nothing'}`);
+});
+
+await check('and the cabins behind it only when asked for', async () => {
+  const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
+  const deck = await (await api('/messages?rooms=all', { token: captainToken })).json();
   const rooms = Object.keys(deck.channels ?? {}).sort();
   assert(rooms.join(',') === 'business,deck,first', `the flight deck heard: ${rooms.join(',') || 'nothing'}`);
   assert(
     (deck.channels.first ?? []).some((m) => m.body === 'First Class, anyone awake?'),
     'the flight deck could not hear First Class talking',
   );
+});
 
+await check('asking for all of them is still only the ones behind you', async () => {
+  /* `?rooms=all` is a request for what this seat may hear, not a way around
+     it. Business asking for everything gets its own room and nothing else. */
   const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
-  const business = await (await api('/messages', { token: hers })).json();
+  const business = await (await api('/messages?rooms=all', { token: hers })).json();
   assert(
     Object.keys(business.channels ?? {}).join(',') === 'business',
     `business heard more than its own room: ${Object.keys(business.channels ?? {}).join(',')}`,

@@ -45,6 +45,14 @@ export interface DirectoryState {
   signOut: () => Promise<void>;
   save: (profile: NetworkingProfile) => Promise<boolean>;
   send: (to: string, body: string) => Promise<boolean>;
+  /**
+   * Fetch the cabins behind you as well as your own.
+   *
+   * What the hub's listen button calls. The first load asks for one room
+   * because that is what the hub draws; this is the moment somebody says
+   * they want the rest.
+   */
+  hearAft: () => Promise<void>;
   dismiss: () => void;
 }
 
@@ -208,6 +216,23 @@ export function useDirectory(
     }
   }, [session]);
 
+  const hearAft = useCallback(async () => {
+    if (!session) return;
+    setLoading(true);
+    try {
+      // `rooms=all` is own *and* behind, so this replaces rather than merges.
+      const messages = await fetchMessages(session, 'all');
+      if (live.current) setChannels(messages.channels ?? {});
+    } catch (e) {
+      if (live.current) {
+        if (e instanceof SessionExpired) setSession(null);
+        setError(reason(e) || null);
+      }
+    } finally {
+      if (live.current) setLoading(false);
+    }
+  }, [session]);
+
   const dismiss = useCallback(() => {
     setError(null);
     setNotice(null);
@@ -217,6 +242,6 @@ export function useDirectory(
     available: hasDirectory,
     session, profiles, inbox, sent, overheard, channels, announcements,
     loading, signingIn, saving, error, notice,
-    signIn, signOut, save, send, dismiss,
+    signIn, signOut, save, send, hearAft, dismiss,
   };
 }

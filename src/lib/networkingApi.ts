@@ -246,12 +246,18 @@ export function saveProfile(session: Session, profile: NetworkingProfile): Promi
 /**
  * Everything this seat can hear.
  *
- * Introductions both directions, whatever it overhears, the conversation in
- * every cabin it may read, and the PA. One request, because they are one
- * table and one rule, and because the hub shows them on one screen.
+ * Introductions both directions, whatever it overhears, the PA, and — by
+ * default — the conversation in your own cabin and no other. One request,
+ * because they are one table and one rule, and because the hub shows them on
+ * one screen.
+ *
+ * `rooms: 'all'` adds every cabin behind you, which is what the hub's listen
+ * button asks for. It is a separate request on purpose: the hub opens on your
+ * own cabin, so fetching five rooms on every sign-in would be several hundred
+ * rows read to paint one of them.
  */
-export function fetchMessages(session: Session): Promise<Inbox> {
-  return call<Inbox>('/messages', { token: session.token });
+export function fetchMessages(session: Session, rooms: 'own' | 'all' = 'own'): Promise<Inbox> {
+  return call<Inbox>(rooms === 'all' ? '/messages?rooms=all' : '/messages', { token: session.token });
 }
 
 /**
