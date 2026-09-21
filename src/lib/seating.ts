@@ -204,24 +204,33 @@ export function canOverhear(
 /**
  * Whether a viewer may send an introduction to a member.
  *
- * Narrower than anything above, and on purpose. Reading down the aircraft is
- * what the seat buys; writing into somebody's inbox is a claim on their
- * attention, and the cabin sells that one only at the front. First Class
- * introduces itself to First Class — nobody writes forward into the flight
- * deck, and nobody writes out of the rows behind.
+ * The same rule as reading their card: your own section, and every seated
+ * section behind it. If you can see somebody's contact details you can
+ * introduce yourself to them — which is the version that needs no explaining,
+ * and why this delegates rather than restating the comparison.
  *
- * ── Why this moved ────────────────────────────────────────────────────────
- * It lived in `sectionAccess.ts`, the page's own module, for as long as the
- * composer was the only thing that ever asked. That is what made it an
- * interface affordance rather than a rule: the button was hidden from
- * everybody else, and `POST /messages` took the message anyway from anyone
- * holding a session. A wallet in economy could put a note in a First Class
- * inbox with one fetch, and the recipient would read it under a heading
- * promising it had come from their own cabin.
+ * ── Why it used to be narrower ────────────────────────────────────────────
+ * It was First Class to First Class and nothing else, on the reasoning that
+ * an inbox is a claim on somebody's attention rather than a view, and that a
+ * cabin should sell that in one place. The reasoning was sound; the rule
+ * drawn from it was not. It left the flight deck — the two largest holders on
+ * the aircraft — unable to write to anybody or be written to, and it left
+ * every cabin behind First with a directory it could read and never use. A
+ * perk that excludes the people at the front is not a perk.
  *
- * So it sits here with the other two, the Worker asks it before it writes a
- * row, and what the composer does is decline to offer a message that would
- * be refused — which is what a filter in front of a boundary is for.
+ * What that reasoning was protecting is still protected, by the same line
+ * that protects everything else: nobody writes forward. A holder cannot mail
+ * the seat ahead of them, so the flight deck's inbox reaches only the flight
+ * deck, and the further forward you sit the fewer people can reach you at
+ * all. The view forward is what the next seat up buys, and so is the quiet.
+ *
+ * ── Why it lives here ─────────────────────────────────────────────────────
+ * It was in `sectionAccess.ts`, the page's own module, for as long as the
+ * composer was the only thing that ever asked — which made it an interface
+ * affordance rather than a rule. The button was hidden, and `POST /messages`
+ * took the message anyway from anyone holding a session. So it sits here with
+ * the other two, the Worker asks it before it writes a row, and what the
+ * composer does is decline to offer a message that would be refused.
  *
  * The addresses are the part no seat can answer: a wallet is not an
  * introduction to itself.
@@ -232,8 +241,7 @@ export function canMessage(
   viewerAddress: string | null,
   memberAddress: string,
 ): boolean {
-  return viewerZone === 'first'
-    && memberZone === 'first'
+  return canViewContact(viewerZone, memberZone)
     && Boolean(viewerAddress)
     && viewerAddress !== memberAddress;
 }

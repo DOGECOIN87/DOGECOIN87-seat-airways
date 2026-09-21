@@ -23,7 +23,7 @@ The directory, every route of which needs a session:
 | `GET /directory` | every published card |
 | `PUT /profile` | publish or amend your own |
 | `GET /messages` | your introductions, both directions |
-| `POST /messages` | send one, First Class to First Class |
+| `POST /messages` | send one, to your own section or any behind it |
 
 ## What the wall deliberately does not know
 
@@ -145,7 +145,7 @@ aft and opaque looking forward:
 | A name and role | the roster, and the roster belongs to the whole cabin |
 | Contact details | your own section and every seated cabin behind it, never one in front |
 | A conversation | the two wallets on it, plus any section seated ahead of **both** |
-| An introduction | First Class to First Class, and nowhere else |
+| An introduction | wherever a card can be read: your own section and every seated one behind it |
 
 Three consequences worth stating plainly, because they are the point rather
 than side effects. The flight deck reads everything, and economy — with no
@@ -162,19 +162,25 @@ seats — `WHERE address IN (…)` and `WHERE sender IN (…) AND recipient IN
 (…)`, a cabinful of bound parameters — rather than asking for everything and
 filtering after. A row nobody can be shown is a row not worth fetching.
 
-**Writing is narrower than reading, and that is not an oversight.** An
-introduction is First Class to First Class: the flight deck reads every card
-on the aircraft and still cannot post into one, because a view is what a seat
-buys and an inbox is a claim on somebody's attention. The cabin sells that in
-one place.
+**Writing goes exactly as far as reading.** A card you can read is a card you
+can answer, and nothing carries forward. So the flight deck can reach anybody
+on the aircraft and nobody can reach the flight deck; the further forward a
+holder sits, the fewer people can write to them at all.
 
-Until recently that rule was the page's alone. The composer was hidden from
-everybody outside First Class and this route took the message anyway, so one
-fetch from economy put a note in a First Class inbox — and it arrived under a
-heading promising the reader it had come from their own cabin. Reads were
-enforced here; writes were on trust. `canMessage` sits in the shared seating
-module with the other two rules now, and `POST /messages` asks it before it
-writes a row.
+That rule was narrower once — First Class to First Class and nothing else, on
+the reasoning that an inbox is a claim on somebody's attention rather than a
+view. The reasoning was sound; the rule drawn from it was not. It left the two
+largest holders unable to write to a single person or be written to, and every
+cabin behind First with a directory it could read and never use. "Never
+forward" protects what that reasoning was actually protecting, and it is
+already the line everything else here runs on.
+
+Until recently the rule was the page's alone: the composer was hidden and this
+route took the message anyway, so one fetch wrote into an inbox the sender
+could not otherwise reach. Reads were enforced here; writes were on trust.
+`canMessage` sits in the shared seating module with the other two rules now —
+it *is* `canViewContact`, plus the check that a wallet is not an introduction
+to itself — and `POST /messages` asks it before it writes a row.
 
 So the seat is not just a placement any more. It is how far forward you can
 see, and how far back you can reach — which is the seat ladder's own argument

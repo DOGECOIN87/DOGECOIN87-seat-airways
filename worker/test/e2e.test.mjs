@@ -593,11 +593,11 @@ await check('and never aft', async () => {
   );
 });
 
-/* ── Writing, which is narrower than reading ──────────────────────────────
-   The composer has always been First Class to First Class. Until now that was
-   the whole of it: the page hid the button and this route took the message
-   from anybody holding a session, so the rule was one fetch away from not
-   existing. These cases are that fetch. */
+/* ── Writing, which goes exactly as far as reading ────────────────────────
+   A card you can read is a card you can answer, and nothing carries forward.
+   The page hides a composer it knows would be refused; until this route
+   checked for itself, that was the whole of the rule, and it was one fetch
+   away from not existing. These cases are that fetch. */
 
 await check('a cabin behind cannot introduce itself forward', async () => {
   const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
@@ -613,26 +613,44 @@ await check('a cabin behind cannot introduce itself forward', async () => {
   );
 });
 
-await check('and First Class cannot write aft either', async () => {
-  /* Not symmetry for its own sake. alice reads every word of mabel's card,
-     so this is the one place the aircraft is not simply transparent
-     backwards: a view is what the seat buys, and an inbox is not a view. */
+await check('but First Class can write aft, because it can read aft', async () => {
+  /* alice reads every word of mabel's card, so she can answer it. This used
+     to be refused, back when the rule was First Class to First Class and
+     nothing else — which also left the whole aircraft behind First with a
+     directory it could read and never use. */
   const res = await api('/messages', {
     method: 'POST', token: aliceToken, body: { to: mabel.address, body: 'Row 1, writing to row 11.' },
   });
-  assert(res.status === 403, `First Class posted into business: ${res.status}`);
+  assert(res.status === 200, `First Class could not post into business: ${res.status}`);
+
+  const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
+  const theirs = await (await api('/messages', { token: hers })).json();
+  assert(
+    theirs.inbox.some((m) => m.body === 'Row 1, writing to row 11.'),
+    'it was accepted and never arrived',
+  );
 });
 
-await check('the flight deck is not exempt', async () => {
-  /* The deck reads everything, which makes this the rule most likely to be
-     "corrected" by somebody reasoning from the other two. It is not an
-     oversight: introductions are a First Class perk, and the deck's is the
-     PA. */
+await check('and the flight deck can reach anybody, which is the point of it', async () => {
+  /* The case that made the old rule wrong rather than merely narrow: the two
+     largest holders on the aircraft could not write to a single person, nor
+     be written to. Being at the front should not be the one seat with no
+     directory. */
   const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
   const res = await api('/messages', {
     method: 'POST', token: captainToken, body: { to: alice.address, body: 'From the deck.' },
   });
-  assert(res.status === 403, `the flight deck posted into First Class: ${res.status}`);
+  assert(res.status === 200, `the flight deck could not post into First Class: ${res.status}`);
+});
+
+await check('and nobody at all can write to the flight deck', async () => {
+  /* The other half, and the reason the quiet at the front survives widening
+     the rule. Nothing carries forward, so the deck's inbox reaches only the
+     deck — the further forward you sit, the fewer people can reach you. */
+  const res = await api('/messages', {
+    method: 'POST', token: aliceToken, body: { to: captain.address, body: 'Row 1 to the cockpit.' },
+  });
+  assert(res.status === 403, `First Class posted into the flight deck: ${res.status}`);
 });
 
 await check('a conversation with the hold is started by nobody, and fetched by nobody', async () => {

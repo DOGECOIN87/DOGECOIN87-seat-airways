@@ -15,7 +15,7 @@
  *   GET    /directory  every published card
  *   PUT    /profile    publish or amend your own
  *   GET    /messages   your introductions, both directions
- *   POST   /messages   send one, First Class to First Class
+ *   POST   /messages   send one, to your own section or one behind it
  *
  * ── What this service knows about seats ───────────────────────────────────
  * For the wall, nothing, and it needs nothing: an advert is stored against
@@ -368,9 +368,11 @@ function wallEtag(wall: Wall): string {
        two wallets on them and by any section ahead of both. `ladder.ts` says
        how this side comes to know which is which without keeping a second
        copy of the seating.
-     · An introduction is First Class to First Class. Reading down the
-       aircraft is what a seat buys; writing into somebody's inbox is a claim
-       on their attention, and the cabin sells that one only at the front. */
+     · An introduction goes wherever a card can be read — your own section
+       and every seated one behind it — and nowhere forward. So a card you can
+       read is a card you can answer, and the further forward somebody sits
+       the fewer people can write to them at all. The flight deck's inbox
+       reaches only the flight deck. */
 
 interface ProfileRow {
   address: string;
@@ -805,17 +807,19 @@ async function handle(request: Request, env: Env): Promise<Response> {
         /* Who may start a conversation, asked of the seating rather than of
            the composer.
 
-           The page has always hidden the composer outside First Class, and
-           until now that was the whole of the rule: this route took an
-           introduction from anybody holding a session, so one fetch put a
-           note from the back of the aircraft into a First Class inbox — and
-           the recipient read it under a heading promising it had come from
-           their own cabin. Reads were enforced here; writes were on trust.
+           The page hides a composer it knows would be refused, and for a
+           while that was the whole of the rule: this route took an
+           introduction from anybody holding a session, so one fetch wrote a
+           note into an inbox the sender could not otherwise reach. Reads were
+           enforced here; writes were on trust.
 
-           `canMessage` is the page's own function, out of the file both
-           sides import, so the composer and this check cannot come apart.
-           Asked after the message has been read and before the rate limit,
-           which is the first thing here that costs a query. */
+           The rule is the one that decides contact details — your own section
+           and every seated section behind it — so a card you can read is a
+           card you can answer, and nobody writes forward. `canMessage` is the
+           page's own function out of the file both sides import, so the
+           composer and this check cannot come apart. Asked after the message
+           has been read and before the rate limit, which is the first thing
+           here that costs a query. */
         const ladder = await readLadder(env);
         if (!ladder.live) {
           /* With no holder feed every wallet reads as unseated, so the rule
@@ -827,7 +831,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
           return json({ error: 'The cabin cannot tell which section you are in right now.' }, 503, priv);
         }
         if (!canMessage(ladder.zoneOf(me), ladder.zoneOf(to), me, to)) {
-          return json({ error: 'Introductions are First Class to First Class.' }, 403, priv);
+          return json({ error: 'That cabin is ahead of yours. Introductions carry aft, never forward.' }, 403, priv);
         }
 
         const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();

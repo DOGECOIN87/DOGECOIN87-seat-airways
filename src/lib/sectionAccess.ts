@@ -25,11 +25,10 @@ import type { ZoneKey } from '../content/cabin';
  *
  * `canMessage` was the last one still written out in this file, and being the
  * page's alone is exactly what kept it from being a rule: the composer was
- * hidden from everybody outside First Class, and `POST /messages` took their
- * message regardless. It is narrower than the other two and always was —
- * reading down the aircraft is what the seat buys, and writing into somebody's
- * inbox is sold only at the front — which is a reason to enforce it, not a
- * reason to keep it here.
+ * hidden from everybody it did not cover, and `POST /messages` took their
+ * message regardless. It is the same line as `canViewContact` now — if you
+ * can read somebody's card you can introduce yourself to them — so writing it
+ * out again here would be keeping a copy of a rule that is one function away.
  */
 export { canMessage, canViewContact, canOverhear, outranks, zoneRank } from './seating';
 

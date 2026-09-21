@@ -273,8 +273,8 @@ the dialog says so.
 ### The cabin directory
 
 The seat is an access tier: holders publish a card, read the cards of their
-own section and everything behind it, and First Class introduces itself to
-First Class. All of that used to be `localStorage`, which made both halves of
+own section and everything behind it, and introduce themselves to anyone whose
+card they can read. All of that used to be `localStorage`, which made both halves of
 it fictions — a card existed only in the browser that typed it, so nobody in
 your section could ever read one, and a sent introduction was written to the
 *sender's* own storage and delivered to nobody. The interface said "queued in
@@ -315,14 +315,22 @@ never for the rest. The seat stopped being a placement and became how far forwar
 you can see, which is the seat ladder's own argument applied to people rather
 than to legroom.
 
-**Writing is narrower than reading.** An introduction is First Class to First
-Class and nothing else — the flight deck reads every card on the aircraft and
-still cannot post into one, because a view is what a seat buys and an inbox is
-a claim on somebody's attention. That was the page's rule alone until
-recently: the composer was hidden from everybody outside First Class, and
-`POST /messages` took their message regardless, so one fetch from economy put
-a note in a First Class inbox — under a heading promising the reader it had
-come from their own cabin.
+**Writing goes exactly as far as reading.** A card you can read is a card you
+can answer, and nothing carries forward — so the flight deck can reach anybody
+on the aircraft and nobody at all can reach the flight deck. The further
+forward you sit, the fewer people can write to you, which is the same thing
+the seat has always been selling.
+
+It was narrower once: First Class to First Class and nothing else, on the
+reasoning that an inbox is a claim on somebody's attention rather than a view.
+That reasoning was sound and the rule drawn from it was not — it left the two
+largest holders on the aircraft unable to write to a single person, and every
+cabin behind First with a directory it could read and never use. What the
+reasoning was protecting is protected by "never forward" on its own.
+
+Either way it was the page's rule alone until recently: the composer was
+hidden, and `POST /messages` took the message regardless, so one fetch wrote
+into an inbox the sender could not otherwise reach.
 
 That is enforced where the rows are, not in the browser. Which meant the
 Worker had to learn the seating it spent its life refusing to learn — and the

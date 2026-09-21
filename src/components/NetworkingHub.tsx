@@ -257,7 +257,9 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                         )}
                         {messageable && directory.session && (
                           <div className="mt-4 rounded-xl border border-[#FF668F]/30 bg-white/70 p-3">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B3265E]">First Class introduction</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B3265E]">
+                              {entry.seat.zone === viewerZone ? 'Same-section introduction' : `Introduction to ${sectionLabel(entry.seat.zone)}`}
+                            </p>
                             {/* Nobody should learn this from the seat in front
                                 quoting them. It is the first thing the box says. */}
                             <p className="mt-1.5 text-[11px] leading-relaxed text-ui-soft">
@@ -269,9 +271,12 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                             <button type="button" onClick={() => void submitMessage(entry)} disabled={directory.saving} className="sa-cta mt-2 disabled:opacity-60">{directory.saving ? 'Sending…' : 'Send message'} <span aria-hidden>→</span></button>
                           </div>
                         )}
-                        {!messageable && entry.address !== address && (
-                          <p className="mt-3 rounded-lg bg-black/5 px-3 py-2 text-[11px]">Messaging is reserved for First Class-to-First Class introductions.</p>
-                        )}
+                        {/* There is no "you cannot write to this one" line any
+                            more, and nothing to put in its place: a card you
+                            can read is a card you can answer. The cabins you
+                            cannot write to are the ones ahead of you, and they
+                            do not reach this branch — they say so themselves,
+                            below, in the terms that actually explain it. */}
                       </div>
                     ) : (
                       <p className="text-[12px] leading-relaxed text-ui-soft">

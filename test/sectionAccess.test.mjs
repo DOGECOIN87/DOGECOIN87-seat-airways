@@ -14,7 +14,10 @@ import { canMessage, canOverhear, canViewContact, isValidExternalUrl, outranks }
 const deck = 'deck';
 const first = 'first';
 const business = 'business';
+const exit = 'exit';
 const economy = 'economy';
+/** Every cabin, front to back, for the rules that must hold across all of them. */
+const CABINS = [deck, first, business, exit, economy];
 const hold = null;
 const alice = 'alice-wallet';
 const bob = 'bob-wallet';
@@ -75,23 +78,39 @@ check('outranks is strictly forward', () => {
   assert.equal(outranks(business, hold), true);
 });
 
-check('an introduction is First Class to First Class', () => {
-  assert.equal(canMessage(first, first, alice, bob), true);
-  assert.equal(canMessage(first, business, alice, bob), false, 'First Class wrote into the cabin behind it');
-  assert.equal(canMessage(business, first, alice, bob), false, 'business wrote into the cabin in front of it');
-  assert.equal(canMessage(first, first, alice, alice), false);
+check('an introduction carries aft, the way a card does', () => {
+  assert.equal(canMessage(first, first, alice, bob), true, 'a cabin cannot write to itself');
+  assert.equal(canMessage(first, business, alice, bob), true, 'First Class cannot write to the cabin behind it');
+  assert.equal(canMessage(deck, economy, alice, bob), true, 'the flight deck cannot reach the back');
+  assert.equal(canMessage(first, first, alice, alice), false, 'a wallet introduced itself to itself');
 });
 
-check('writing is narrower than reading, and the deck is not exempt', () => {
-  /* Every other rule here is about reading down the aircraft, and the flight
-     deck reads everything. Writing is not that rule: an inbox is a claim on
-     somebody's attention rather than a view, and the cabin sells it in one
-     place. So the deck cannot post into First Class even though it reads
-     First Class, and First Class cannot post back into the deck. */
-  assert.equal(canViewContact(deck, first), true, 'the deck reads First Class');
-  assert.equal(canMessage(deck, first, alice, bob), false, 'but it does not write to it');
-  assert.equal(canMessage(first, deck, alice, bob), false);
-  assert.equal(canMessage(business, business, alice, bob), false, 'nor does a cabin write to its own peers');
+check('and never forward', () => {
+  /* The line that does the protecting. It used to be done by the rule being
+     narrow — First Class to First Class and nothing else — which also left
+     the two largest holders on the aircraft unable to write to anybody. This
+     is what was actually worth keeping: the further forward you sit, the
+     fewer people can reach you, and nobody at all can reach the flight deck
+     from behind it. */
+  assert.equal(canMessage(business, first, alice, bob), false, 'business wrote into the cabin in front of it');
+  assert.equal(canMessage(economy, deck, alice, bob), false);
+  assert.equal(canMessage(first, deck, alice, bob), false, 'the flight deck was written to from behind');
+});
+
+check('writing is the same line as reading, in every cabin', () => {
+  /* The invariant, rather than five more examples of it: if you can read
+     somebody's contact details you can introduce yourself to them, and if you
+     cannot you cannot. Two rules that are meant to be one should fail here
+     the moment they stop being one. */
+  for (const viewer of CABINS) {
+    for (const member of CABINS) {
+      assert.equal(
+        canMessage(viewer, member, alice, bob),
+        canViewContact(viewer, member),
+        `${viewer} → ${member}: who may write disagrees with who may read`,
+      );
+    }
+  }
 });
 
 check('the hold sends nothing and is sent nothing', () => {
