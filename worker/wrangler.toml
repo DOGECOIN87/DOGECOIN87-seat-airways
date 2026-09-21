@@ -75,6 +75,11 @@ TOKEN_MINT = "AWJCyg9PrMtYju9yaQmdQLcwrGobHMTv9JU3mo4upump"
 # RPC_URL is a secret rather than a var, since paid endpoints carry a key in
 # the URL:  npx wrangler secret put RPC_URL
 #
+# It is also the page's endpoint now, at one remove: the page reads balances
+# and the holder list from this Worker rather than opening an RPC of its own,
+# because a VITE_ variable carrying an API key is a key published to every
+# visitor. Leave VITE_RPC_URL unset and set this.
+#
 # Unset, the Worker uses Solana's public endpoint rather than giving up on
 # reading the chain. That is not an invitation to leave it unset — the public
 # endpoint will rate-limit anything resembling traffic — it is because a

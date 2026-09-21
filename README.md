@@ -173,12 +173,19 @@ mode it is in rather than dressing a simulation up as a live reading.
 | Set | And | 
 | --- | --- |
 | `VITE_TOKEN_MINT` | the market feed reads Jupiter instead of the simulator |
-| `VITE_RPC_URL` | balances and the seat ladder come off the chain |
+| `VITE_RPC_URL` | balances come off the chain directly — **only for a deployment with no Worker**, since Vite inlines it into the public bundle |
 | `VITE_HOLDERS_URL` | the manifest seats from an indexer instead of the Worker's feed |
 | `VITE_BANNERS_API` | holders publish their own adverts, signed |
 | `VITE_DIRECTORY_API` | the cabin directory: holder cards and introductions, in a database |
 
 See `.env.example`, which documents all of them.
+
+**`VITE_RPC_URL` is the one to leave alone.** Vite inlines every `VITE_` value
+into the bundle it ships, so setting it publishes your RPC endpoint — API key
+and all — to everyone who opens the site. The Worker holds that endpoint as a
+secret and answers `GET /holding` and `GET /holders`, and the page reads both
+from there whenever `VITE_BANNERS_API` or `VITE_DIRECTORY_API` is set. Only a
+deployment running the page with no Worker behind it needs this variable.
 
 **Where the holder list comes from**, because the mint alone is famously not
 enough: Solana has no "list the holders of this token" call, and the closest,
@@ -192,9 +199,12 @@ So three sources are tried in order:
 1. **`VITE_HOLDERS_URL`**, an indexer. Uncapped, and still the best answer.
 2. **The Worker's `GET /holders`**, which is the default when no indexer is
    configured. It hands back the list the Worker has already read and cached
-   to decide who may read whose card — so the page and the Worker agree about
-   who is aboard by construction rather than by two variables being kept in
-   step, and the chain is read once a minute for the whole site.
+   to decide who may read whose card — with the supply alongside it, since a
+   page reading from here has no RPC of its own to ask for one. So the page
+   and the Worker agree about who is aboard by construction rather than by two
+   variables being kept in step, the chain is read once a minute for the whole
+   site, and no RPC key has to be shipped to a browser to make any of it
+   work.
 3. **The chain directly**, asking the SPL Token program for every account it
    owns for this mint and summing by owner. Uncapped too; it is just a scan,
    so it is the Worker that pays for it and caches it, and some public

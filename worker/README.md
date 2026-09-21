@@ -10,7 +10,8 @@ The wall:
 | `GET /banners` | the published wall, keyed by wallet |
 | `POST /banner` | put an advert up, if you can prove the wallet is yours |
 | `GET /health` | a no-store liveness response for monitoring and smoke tests |
-| `GET /holders` | who is aboard, as an indexer would put it — what the page seats from |
+| `GET /holders` | who is aboard, and the supply — what the page seats from |
+| `GET /holding` | one wallet's balance, so the page needs no RPC key of its own |
 | `GET /images/…` | the artwork, when it is kept in KV rather than R2 |
 
 The directory, every route of which needs a session:
@@ -215,6 +216,25 @@ a scan of every token on Solana. `holderList.ts` tries three sources in order:
    from the mint alone, no indexer required.
 3. The twenty largest accounts, for endpoints that refuse the scan. Several
    public ones do.
+
+**The page reads the chain through here, not around it.** `GET /holding` and
+`GET /holders` are the two reads the page used to open its own RPC for, which
+is what `VITE_RPC_URL` was. Vite inlines every `VITE_` value into the bundle,
+so that variable published the endpoint's API key to every visitor; the
+defence on offer was domain restriction at the provider, which is the `Origin`
+header, which is a string anybody with curl can type. The key is a Worker
+secret now and never leaves. What the browser gets back are public on-chain
+facts about wallets the seat map already draws.
+
+The saving is larger than the security. One visitor reloading the page was one
+call to a metered endpoint; a hundred visitors were a hundred callers. Now the
+Worker reads once and caches for all of them — sixty seconds for the seating,
+twenty for a single wallet's balance.
+
+A read that fails answers `503`, never a zero balance. A holder told they hold
+nothing is reseated into the hold, announced over the PA, and shut out of
+every card in the cabin — so "could not ask" must never arrive looking like an
+answer.
 
 **`RPC_URL` has a default.** It is a secret rather than a var, because a paid
 endpoint carries its key in the URL, and a secret is set by hand — which

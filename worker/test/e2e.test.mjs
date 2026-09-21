@@ -314,6 +314,8 @@ const soldOut = new Set();
 /* Taking the indexer away, so the Worker has to read holders off the chain. */
 let indexerDown = false;
 let scanAccounts = [];
+/* And taking the chain away, which is a different thing from it saying no. */
+let rpcDown = false;
 
 const holders = createServer((req, res) => {
   if ((req.url ?? '').startsWith('/holders')) {
@@ -331,6 +333,10 @@ const holders = createServer((req, res) => {
   let raw = '';
   req.on('data', (chunk) => { raw += chunk; });
   req.on('end', () => {
+    if (rpcDown) {
+      res.writeHead(500, { 'content-type': 'application/json' }).end('{}');
+      return;
+    }
     let call = {};
     try { call = JSON.parse(raw); } catch { /* answered as nothing, below */ }
     const reply = (result) => res
@@ -374,14 +380,44 @@ await check('GET /holders hands the page the list the cabin is seated from', asy
      rather than two environment variables somebody has to keep in step. */
   const res = await fetch(`${BASE}/holders`, { headers: { origin: ORIGIN } });
   assert(res.status === 200, `status ${res.status}`);
-  const list = await res.json();
+  const { holders: list, supply } = await res.json();
   assert(Array.isArray(list), 'the holder feed is not a list');
   assert(list.some((h) => h.address === captain.address), 'the flight deck is missing from the feed');
   assert(list.some((h) => h.address === mabel.address), 'the wallet in business is missing from the feed');
   assert(
     list.every((h) => typeof h.address === 'string' && Number.isFinite(h.balance)),
-    'the feed is not in the shape an indexer gives, so the page cannot read it',
+    'the feed is not in the shape the page reads, so the cabin would be empty',
   );
+  /* The supply rides along because the page has no RPC of its own to ask for
+     one, and a bag is only interesting as a share of something. */
+  assert(supply === 1_000_000, `the supply did not come with the list: ${supply}`);
+});
+
+await check('GET /holding answers a balance, so no page has to carry an RPC key', async () => {
+  const res = await fetch(`${BASE}/holding?address=${alice.address}`, { headers: { origin: ORIGIN } });
+  assert(res.status === 200, `status ${res.status}`);
+  const body = await res.json();
+  assert(body.balance === 1000, `balance: ${body.balance}`);
+  assert(body.supply === 1_000_000, `supply: ${body.supply}`);
+  assert(Math.abs(body.share - 0.001) < 1e-9, `share: ${body.share}`);
+});
+
+await check('a chain that cannot be asked is a 503, never a zero balance', async () => {
+  /* The failure this shape exists to prevent. A holder told they hold nothing
+     is reseated into the hold, announced over the PA, and shut out of every
+     card in the cabin — all of it wrong, and none of it visible as an error.
+     A fresh wallet each time, so the balance cache cannot answer instead. */
+  const fresh = await wallet();
+  rpcDown = true;
+  const res = await fetch(`${BASE}/holding?address=${fresh.address}`, { headers: { origin: ORIGIN } });
+  rpcDown = false;
+  assert(res.status === 503, `an unanswerable chain came back as ${res.status}`);
+  assert(res.headers.get('cache-control') === 'no-store', 'a failure was made cacheable');
+});
+
+await check('and something that is not a wallet is refused outright', async () => {
+  const res = await fetch(`${BASE}/holding?address=not-a-wallet`, { headers: { origin: ORIGIN } });
+  assert(res.status === 400, `status ${res.status}, expected 400`);
 });
 
 await check('a signed sign-in opens a session', async () => {
@@ -689,7 +725,7 @@ await check('with no indexer, the cabin is seated off the chain', async () => {
   // Past LADDER_CACHE_MS, so the seating is read again rather than reused.
   await new Promise((r) => setTimeout(r, 1300));
 
-  const list = await (await fetch(`${BASE}/holders`, { headers: { origin: ORIGIN } })).json();
+  const { holders: list } = await (await fetch(`${BASE}/holders`, { headers: { origin: ORIGIN } })).json();
   assert(Array.isArray(list) && list.length === 2, `expected 2 holders off the chain, got ${JSON.stringify(list)}`);
   const top = list.find((h) => h.address === first.address);
   assert(top, `the owner bytes did not decode to the address the key signs with: ${list.map((h) => h.address)}`);

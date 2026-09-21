@@ -43,9 +43,17 @@ jobs:
       # looks. Storing one as a secret would hide it from the repository and
       # from nobody else.
       #
-      # If the RPC endpoint carries a key, the only real protection is on the
-      # provider's side: restrict that key to this domain. Helius, QuickNode
-      # and Alchemy all support it.
+      # Which is why VITE_RPC_URL should be left UNSET on a deployment that
+      # has a Worker. A paid RPC endpoint carries its API key in the URL, and
+      # setting this publishes that key to everyone who opens the site. The
+      # protection on offer is to restrict the key by domain at the provider,
+      # and that restriction is the Origin header — a string anybody with curl
+      # can type. It stops a copy-paste, not a script.
+      #
+      # The Worker holds the endpoint as a real secret and answers /holding
+      # and /holders, which is where the page reads both from by default. This
+      # variable is the fallback for a deployment with no Worker at all; set
+      # it only if that is what you are running.
       - run: npm run build
         env:
           VITE_TOKEN_MINT: ${{ vars.VITE_TOKEN_MINT }}

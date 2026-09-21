@@ -5,7 +5,8 @@
  *
  *   GET  /banners   the published wall, keyed by wallet
  *   POST /banner    put an advert up, if you can prove the wallet is yours
- *   GET  /holders   who is aboard, as an indexer would put it
+ *   GET  /holders   who is aboard, and the supply their bags are shares of
+ *   GET  /holding   one wallet's balance, so no page has to carry an RPC key
  *
  * The directory, behind a session that same wallet signature opens:
  *
@@ -172,6 +173,54 @@ function imageUrl(env: Env, request: Request, key: string, updated?: string): st
  * non-holder still never appears: the page hangs adverts off the manifest,
  * so a wallet with no seat has nowhere to hang one.
  */
+async function rpc<T>(env: Env, method: string, params: unknown[]): Promise<T | null> {
+  const url = rpcUrl(env);
+  if (!url) return null;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    });
+    // Rate limited, out of credit, misconfigured, down: not an answer.
+    if (!res.ok) return null;
+    const body = (await res.json()) as { result?: T; error?: unknown };
+    // A JSON-RPC error carries no `result` at all.
+    if (body.error || body.result === undefined) return null;
+    return body.result;
+  } catch {
+    return null;
+  }
+}
+
+interface TokenAmount { amount: string; decimals: number; uiAmount: number | null }
+
+/** What a wallet holds, and what share of the aircraft that is. */
+interface Holding { balance: number; supply: number; share: number }
+
+/**
+ * What a wallet holds of the token, in whole tokens.
+ *
+ * Null is "could not ask", and it is a different answer from zero — which is
+ * the whole reason this returns a number or nothing rather than a number that
+ * might be a shrug. Telling a holder they hold nothing because an RPC was
+ * busy is the failure this shape exists to make impossible.
+ *
+ * A wallet can hold the same mint across several token accounts, so they are
+ * summed: a person with two bags has one bag, of the total size.
+ */
+async function readBalance(env: Env, owner: string): Promise<number | null> {
+  if (!env.TOKEN_MINT) return null;
+  const accounts = await rpc<{ value: { account: { data: { parsed: { info: { tokenAmount: TokenAmount } } } } }[] }>(
+    env, 'getTokenAccountsByOwner', [owner, { mint: env.TOKEN_MINT }, { encoding: 'jsonParsed' }],
+  );
+  if (!accounts || !Array.isArray(accounts.value)) return null;
+  return accounts.value.reduce((sum, a) => {
+    const t = a.account.data.parsed.info.tokenAmount;
+    return sum + (t.uiAmount ?? Number(t.amount) / 10 ** t.decimals);
+  }, 0);
+}
+
 async function holdsToken(env: Env, owner: string): Promise<boolean> {
   /* Unconfigured means "do not check" rather than "refuse everybody", so the
      service is usable before a mint exists.
@@ -185,33 +234,14 @@ async function holdsToken(env: Env, owner: string): Promise<boolean> {
   if (!url || !env.TOKEN_MINT) return true;
   const cachedUntil = ownerCache.get(owner) ?? 0;
   if (cachedUntil > Date.now()) return true;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getTokenAccountsByOwner',
-        params: [owner, { mint: env.TOKEN_MINT }, { encoding: 'jsonParsed' }],
-      }),
-    });
-    // Rate limited, out of credit, misconfigured, down: not an answer.
-    if (!res.ok) return true;
-    const body = (await res.json()) as {
-      result?: { value?: { account: { data: { parsed: { info: { tokenAmount: { uiAmount: number | null } } } } } }[] };
-    };
-    // A JSON-RPC error carries no `result` at all. Absent is unknown; an
-    // empty `value` is a real answer, and means no.
-    const accounts = body.result?.value;
-    if (!Array.isArray(accounts)) return true;
-    const valid = accounts.some((a) => (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0) > 0);
-    if (valid) ownerCache.set(owner, Date.now() + ownerTtl(env));
-    return valid;
-  } catch {
-    // An RPC outage should not take the wall offline for everyone.
-    return true;
-  }
+
+  const balance = await readBalance(env, owner);
+  /* Null is every way of not getting an answer — a 429, an outage, a JSON-RPC
+     error — and a wallet this cannot judge is let through. An empty result is
+     a real answer, and means no. */
+  if (balance === null) return true;
+  if (balance > 0) ownerCache.set(owner, Date.now() + ownerTtl(env));
+  return balance > 0;
 }
 
 /* ── CORS ───────────────────────────────────────────────────────────────── */
@@ -253,6 +283,15 @@ const WALL_KEY = 'wall';
 type Wall = Record<string, StoredBanner>;
 const MAX_REQUEST_BYTES = 1_500_000;
 const WALL_CACHE_MS = 30_000;
+/**
+ * How long one wallet's balance is reused.
+ *
+ * The page re-reads a connected wallet every two minutes, so this is not
+ * about staleness — it is about a reload, a second tab, or a wallet switched
+ * back and forth not each costing a call.
+ */
+const HOLDING_CACHE_MS = 20_000;
+const holdingCache = new Map<string, { value: Holding; expiresAt: number }>();
 /**
  * How long a wallet stays believed to hold the token.
  *
@@ -451,10 +490,62 @@ async function handle(request: Request, env: Env): Promise<Response> {
        for, exactly as it did before there was one. */
     if (request.method === 'GET' && url.pathname === '/holders') {
       const ladder = await readLadder(env);
-      return json(ladder.holders, 200, {
+      /* The supply rides along because the page needs both in the same breath
+         — a bag is only interesting as a share of something — and because it
+         is the second thing the page used to open an RPC of its own for. */
+      return json({ holders: ladder.holders, supply: ladder.supply }, 200, {
         ...cors,
         'cache-control': 'public, max-age=30, stale-while-revalidate=120',
       });
+    }
+
+    /* One wallet's balance.
+
+       ── Why the page does not read this itself ────────────────────────────
+       It used to, and that is why `VITE_RPC_URL` existed. Vite inlines every
+       VITE_ value into the bundle it ships, so an endpoint carrying an API
+       key — which is what a paid RPC is — was readable by anyone who opened
+       the site. The documented defence was to restrict the key by domain at
+       the provider, and that defence is the `Origin` header: a string anybody
+       with curl can type. It stops a copy-paste, not a script.
+
+       The key lives here instead, where it is a Worker secret and never
+       leaves. What the browser gets is this: a balance, a supply, and a
+       share, all of them public on-chain facts about a wallet the page is
+       already drawing on a seat map.
+
+       It is also cheaper by the same argument as `/holders`. One reload of
+       the page is no longer one RPC call; a hundred visitors are not a
+       hundred callers of somebody's metered endpoint.
+
+       A failure answers 503 rather than a zero balance. Telling a holder
+       they hold nothing because an endpoint was busy would reseat them into
+       the hold, announce it over the PA, and close every card in the cabin
+       to them — all of it wrong, and all of it silent. */
+    if (request.method === 'GET' && url.pathname === '/holding') {
+      const address = url.searchParams.get('address') ?? '';
+      if (!isAddress(address)) return json({ error: 'That is not a wallet address.' }, 400, cors);
+
+      const cached = holdingCache.get(address);
+      if (cached && cached.expiresAt > Date.now()) {
+        return json(cached.value, 200, { ...cors, 'cache-control': 'public, max-age=20' });
+      }
+
+      const balance = await readBalance(env, address);
+      if (balance === null) {
+        return json({ error: 'The chain could not be asked just now.' }, 503, { ...cors, 'cache-control': 'no-store' });
+      }
+
+      /* The supply the seating was read with, rather than a second call for a
+         number that changes about as often as the mint does. */
+      const ladder = await readLadder(env);
+      const supply = ladder.supply
+        || (await rpc<{ value: TokenAmount }>(env, 'getTokenSupply', [env.TOKEN_MINT]))?.value.uiAmount
+        || 0;
+
+      const value: Holding = { balance, supply, share: supply > 0 ? balance / supply : 0 };
+      holdingCache.set(address, { value, expiresAt: Date.now() + HOLDING_CACHE_MS });
+      return json(value, 200, { ...cors, 'cache-control': 'public, max-age=20' });
     }
 
     /* ── The directory ──────────────────────────────────────────────────

@@ -8,8 +8,8 @@
     "dev": "vite --host 0.0.0.0 --port 3000",
     "build": "tsc --noEmit && vite build",
     "lint": "tsc --noEmit",
-    "build:test": "esbuild src/lib/banners.ts src/lib/sectionAccess.ts src/lib/networkingApi.ts src/lib/holderList.ts --bundle --outdir=dist-test --format=esm --platform=node --define:import.meta.env='{\"VITE_BANNERS_API\":\"https://adverts.test\"}' && esbuild worker/src/networking.ts --bundle --outfile=dist-test/workerNetworking.js --format=esm --platform=node",
-    "test": "npm run build:test && node test/banners.test.mjs && node test/sectionAccess.test.mjs && node test/networking.test.mjs && node test/holderList.test.mjs",
+    "build:test": "esbuild src/lib/banners.ts src/lib/sectionAccess.ts src/lib/networkingApi.ts src/lib/holderList.ts src/lib/holdings.ts --bundle --outdir=dist-test --format=esm --platform=node --define:import.meta.env='{\"VITE_BANNERS_API\":\"https://adverts.test\"}' && esbuild worker/src/networking.ts --bundle --outfile=dist-test/workerNetworking.js --format=esm --platform=node",
+    "test": "npm run build:test && node test/banners.test.mjs && node test/sectionAccess.test.mjs && node test/networking.test.mjs && node test/holderList.test.mjs && node test/holdings.test.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "typecheck": "tsc --noEmit",
     "token:update": "node scripts/update-token.mjs"

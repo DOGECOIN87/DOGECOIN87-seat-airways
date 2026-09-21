@@ -5,18 +5,34 @@
  * — which is all the seat ladder needs. Doing it over `fetch` rather than a
  * client library keeps the whole app at two dependencies.
  *
- * ── Pointing it at a real token ───────────────────────────────────────────
- * Set both of these and the page reads the chain:
+ * ── Where the numbers come from ───────────────────────────────────────────
+ * From the Worker, when this deployment has one — the same service the advert
+ * wall and the directory already talk to. It answers `GET /holding?address=…`
+ * with a balance, the supply, and the share.
  *
- *   VITE_RPC_URL=https://your-rpc-endpoint
+ * That is not indirection for its own sake. Reading the chain takes an RPC
+ * endpoint; a paid one carries its API key in the URL; and Vite inlines every
+ * VITE_ value into the bundle it ships. So `VITE_RPC_URL` handed that key to
+ * everyone who opened the site. The documented defence was to restrict the
+ * key by domain at the provider — and that restriction is the `Origin`
+ * header, which is a string anybody with curl can type. It stops a
+ * copy-paste, not a script. A key belongs where it can be a secret, and on
+ * this deployment that is the Worker.
+ *
+ * The larger win is cost. One visitor reloading the page is no longer one
+ * call to somebody's metered endpoint, and a hundred visitors are not a
+ * hundred callers of it: the Worker reads once and caches for everybody.
+ *
+ *   VITE_RPC_URL=https://your-rpc-endpoint   optional — read only when there
+ *                                            is no Worker to ask instead
  *   VITE_TOKEN_MINT=<the SPL mint address>
  *
- * A public RPC will rate-limit a busy page; use your own endpoint. Without
- * them nothing is read and nothing is invented: the cabin is simply empty
- * until the chain answers.
+ * With neither, nothing is read and nothing is invented: the cabin is simply
+ * empty until something answers.
  */
 
 import { TOKEN_MINT } from './token';
+import { WORKER_API } from './networkingApi';
 
 export interface Holding {
   /** The wallet's balance, in whole tokens. */
@@ -35,8 +51,8 @@ export interface HoldingsSource {
 
 const RPC_URL = import.meta.env.VITE_RPC_URL as string | undefined;
 
-/** True when this deployment has been pointed at a real token. */
-export const isConfigured = Boolean(RPC_URL && TOKEN_MINT);
+/** True when there is anywhere at all to read a holding from. */
+export const isConfigured = Boolean(WORKER_API || (RPC_URL && TOKEN_MINT));
 
 async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
   try {
@@ -86,12 +102,43 @@ export function createRpcHoldings(): HoldingsSource {
 }
 
 
-/* One source. Unconfigured, `read` simply returns null and the caller keeps
-   whatever it had, which is nothing — an honest blank rather than a number
-   somebody might believe. */
-export const holdingsSource: HoldingsSource = isConfigured
-  ? createRpcHoldings()
-  : { live: false, async read() { return null; } };
+/**
+ * Reads the Worker, which reads the chain.
+ *
+ * Any failure resolves to null, and the Worker answers 503 rather than a zero
+ * balance for the same reason this refuses to invent one: a holder told they
+ * hold nothing is reseated into the hold, announced over the PA, and shut out
+ * of every card in the cabin. Being unable to ask must never look like an
+ * answer.
+ */
+function createWorkerHoldings(api: string): HoldingsSource {
+  return {
+    live: true,
+    async read(owner) {
+      try {
+        const res = await fetch(`${api}/holding?address=${encodeURIComponent(owner)}`);
+        if (!res.ok) return null;
+        const body = (await res.json()) as { balance?: unknown; supply?: unknown };
+        const balance = Number(body.balance);
+        const supply = Number(body.supply);
+        if (!Number.isFinite(balance) || !Number.isFinite(supply)) return null;
+        return { balance, supply, share: supply > 0 ? balance / supply : 0 };
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/* One source, chosen in the order that keeps an API key out of the bundle:
+   the Worker if this deployment has one, the chain directly if it does not,
+   and an honest blank if it has neither — a number somebody might believe is
+   worse than no number at all. */
+export const holdingsSource: HoldingsSource = WORKER_API
+  ? createWorkerHoldings(WORKER_API)
+  : isConfigured
+    ? createRpcHoldings()
+    : { live: false, async read() { return null; } };
 
 /* ────────────────────────────────────────────────────────────────────────
    The holder list
@@ -103,7 +150,6 @@ export const holdingsSource: HoldingsSource = isConfigured
 
 import { readHolderList, type HolderList } from './holderList';
 import { MANIFEST_SIZE } from './manifest';
-import { WORKER_API } from './networkingApi';
 
 /**
  * Where the holder list comes from.

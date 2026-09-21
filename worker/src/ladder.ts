@@ -111,6 +111,13 @@ export interface Ladder {
    * the whole site rather than once every ninety seconds per visitor.
    */
   holders: readonly Holder[];
+  /**
+   * Total supply, in whole tokens, as the same read established it.
+   *
+   * Here so that "what share is this bag" can be answered without a second
+   * `getTokenSupply` per asking. Zero when nothing could be read.
+   */
+  supply: number;
   /** The cabin a wallet is in, or null when it is in the hold. */
   zoneOf(address: string): ZoneKey | null;
   /** Everybody with a seat, which is everybody the page draws. */
@@ -130,7 +137,7 @@ export interface Ladder {
 
 /** A ladder that knows nothing, and therefore permits nothing. */
 const NO_LADDER: Ladder = {
-  live: false, holders: [], zoneOf: () => null, seated: () => [], seatedBehind: () => [],
+  live: false, holders: [], supply: 0, zoneOf: () => null, seated: () => [], seatedBehind: () => [],
 };
 
 let snapshot: { value: Ladder; expiresAt: number } | undefined;
@@ -168,6 +175,7 @@ export async function readLadder(env: LadderEnv): Promise<Ladder> {
   const value: Ladder = {
     live: true,
     holders: list.holders,
+    supply: list.supply,
     zoneOf: (address) => zones.get(address) ?? null,
     seated: () => manifest.entries.map((e) => e.address),
     seatedBehind: (zone) => manifest.entries

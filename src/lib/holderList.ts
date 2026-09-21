@@ -265,17 +265,39 @@ async function fromTokenAccounts(
   return [...byOwner].map(([address, balance]) => ({ address, balance }));
 }
 
-async function fromIndexer(holdersUrl: string | undefined): Promise<Holder[] | null> {
+interface IndexedList {
+  holders: Holder[];
+  /** Zero when the feed does not carry one. */
+  supply: number;
+}
+
+/**
+ * A holder list from a URL, in either of the two shapes one arrives in.
+ *
+ * A third-party indexer returns the bare array this has always read. The
+ * Worker's own `GET /holders` wraps that in an object carrying the supply as
+ * well — because a page reading it has no RPC of its own to ask for one, and
+ * a balance is only interesting as a share of something.
+ */
+async function fromIndexer(holdersUrl: string | undefined): Promise<IndexedList | null> {
   if (!holdersUrl) return null;
   try {
     const res = await fetch(holdersUrl);
     if (!res.ok) return null;
     const body: unknown = await res.json();
-    if (!Array.isArray(body)) return null;
-    return body
-      .map((h) => h as { address?: unknown; balance?: unknown })
-      .filter((h) => typeof h.address === 'string' && Number.isFinite(Number(h.balance)))
-      .map((h) => ({ address: String(h.address), balance: Number(h.balance) }));
+
+    const wrapped = body as { holders?: unknown; supply?: unknown };
+    const rows = Array.isArray(body) ? body : Array.isArray(wrapped.holders) ? wrapped.holders : null;
+    if (!rows) return null;
+
+    const supply = Number(wrapped.supply);
+    return {
+      holders: rows
+        .map((h) => h as { address?: unknown; balance?: unknown })
+        .filter((h) => typeof h.address === 'string' && Number.isFinite(Number(h.balance)))
+        .map((h) => ({ address: String(h.address), balance: Number(h.balance) })),
+      supply: Number.isFinite(supply) ? supply : 0,
+    };
   } catch {
     return null;
   }
@@ -309,13 +331,17 @@ export async function readHolderList(source: HolderSource): Promise<HolderList |
   }
 
   const indexed = await fromIndexer(holdersUrl);
-  if (indexed && indexed.length) {
+  if (indexed && indexed.holders.length) {
     // Only as many as could be seated, with room for the contracts that will
     // drop out. The account lookup batches, so this is no longer pinned to
     // getMultipleAccounts' hundred.
-    const top = [...indexed].sort((a, b) => b.balance - a.balance).slice(0, manifestSize + 10);
+    const top = [...indexed.holders].sort((a, b) => b.balance - a.balance).slice(0, manifestSize + 10);
+    /* With no RPC there is nothing to check accounts against — which is the
+       state a page is in once it reads holders from the Worker rather than
+       the chain. Nothing is lost by it: that feed has already dropped the
+       contracts, because the Worker had an RPC when it built the list. */
     const people = rpc ? await peopleOnly(rpc, top) : top;
-    if (people) return { holders: people, supply, live: true };
+    if (people) return { holders: people, supply: supply || indexed.supply, live: true };
   }
 
   if (!rpc || !mint) return null;
