@@ -21,6 +21,8 @@ const check = async (name, fn) => {
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 const SYSTEM = '11111111111111111111111111111111';
+const TOKEN = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const TOKEN_2022 = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 const RPC = 'https://rpc.test';
 const INDEXER = 'https://indexer.test/holders';
 
@@ -44,7 +46,10 @@ const ownerBytes = (n) => { const b = new Uint8Array(32); b[30] = n >> 8; b[31] 
 const ownerAddress = (n) => '1'.repeat(31) + B58[n];
 
 /** A fake chain. Records every call so the batching is observable. */
-function chain({ holders = [], programOwned = [], failPage = -1, largest = [], tokenAccounts = null, decimals = 0 } = {}) {
+function chain({
+  holders = [], programOwned = [], failPage = -1, largest = [],
+  tokenAccounts = null, decimals = 0, mintOwner = TOKEN,
+} = {}) {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     if (String(url) === INDEXER) {
@@ -58,6 +63,9 @@ function chain({ holders = [], programOwned = [], failPage = -1, largest = [], t
     switch (body.method) {
       case 'getTokenSupply':
         return reply({ value: { amount: '1000000', decimals, uiAmount: 1_000_000 } });
+      // Which token program owns the mint, and so which one to scan.
+      case 'getAccountInfo':
+        return reply({ value: mintOwner ? { owner: mintOwner } : null });
       // Unset means an endpoint that will not run the scan, which is several
       // of the public ones and the reason the twenty are still in the code.
       case 'getProgramAccounts':
@@ -163,6 +171,52 @@ await check('the scan is pinned to token accounts, to this mint, and to 40 bytes
     'the scan was not pinned to this mint');
   assert(options.dataSlice?.offset === 32 && options.dataSlice?.length === 40,
     'the whole account was fetched where the owner and the balance would do');
+});
+
+await check('a Token-2022 mint is scanned under its own program', async () => {
+  /* The bug this pins. `getProgramAccounts` is asked of a program, and a mint
+     belongs to exactly one — so asking the wrong one is not an error, it is
+     an empty list, which reads here as "this token has no holders". The
+     aeroplane comes back empty and nothing says why. The first real mint this
+     was pointed at was Token-2022, and it found nothing at all. */
+  const calls = chain({
+    mintOwner: TOKEN_2022,
+    tokenAccounts: [account(ownerBytes(1), 700), account(ownerBytes(2), 300)],
+  });
+  const list = await readHolderList({ rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+
+  const scan = calls.find((c) => c.method === 'getProgramAccounts');
+  assert(scan, 'the chain was never scanned');
+  assert(scan.params[0] === TOKEN_2022, `scanned the wrong program: ${scan.params[0]}`);
+  assert(list?.holders.length === 2, `seated ${list?.holders.length} of 2 Token-2022 holders`);
+});
+
+await check('and without the exact-size filter, which would exclude its holders', async () => {
+  /* A Token-2022 account is 165 bytes and then, if it carries any extension,
+     a type byte and the extension records. An associated token account always
+     carries ImmutableOwner — so demanding exactly 165 would exclude very
+     nearly every real holder, which is the same silence as asking the wrong
+     program. The memcmp on the mint is what does the work. */
+  const calls = chain({ mintOwner: TOKEN_2022, tokenAccounts: [account(ownerBytes(1), 5)] });
+  await readHolderList({ rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+
+  const { filters } = calls.find((c) => c.method === 'getProgramAccounts').params[1];
+  assert(!filters.some((f) => f.dataSize !== undefined),
+    'a size filter was sent to Token-2022, where accounts with extensions are longer than 165');
+  assert(filters.some((f) => f.memcmp?.offset === 0 && f.memcmp?.bytes === 'MINT'),
+    'nothing pinned the scan to this mint');
+});
+
+await check('a mint owned by neither token program is not scanned at all', async () => {
+  const calls = chain({
+    mintOwner: 'SomeOtherProgram11111111111111111111111111',
+    largest: [{ address: 'tokenacct0', amount: '5', decimals: 0, uiAmount: 5 }],
+  });
+  const list = await readHolderList({ rpcUrl: RPC, mint: 'MINT', manifestSize: 178 });
+
+  assert(!calls.some((c) => c.method === 'getProgramAccounts'),
+    'a program that owns no token accounts was scanned anyway');
+  assert(list?.holders.length === 1, 'it did not fall through to the largest accounts');
 });
 
 await check('a wallet holding two token accounts gets one seat, for the total', async () => {

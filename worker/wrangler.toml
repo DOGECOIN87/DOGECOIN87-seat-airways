@@ -48,8 +48,8 @@ ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 # page's VITE_HOLDERS_URL** — one feed is what keeps one seating chart, and
 # two would be the drift this service spent its life avoiding.
 #
-# Genuinely optional now. Unset, the ladder asks the SPL Token program for
-# every account it owns for the mint below and sums them by owner, which is
+# Genuinely optional now. Unset, the ladder asks whichever token program owns
+# the mint below for every account it holds of it, and sums them by owner —
 # the whole holder list rather than the twenty `getTokenLargestAccounts`
 # caps at — and the page reads the result back from this Worker's own
 # GET /holders, so the two cannot disagree about who is aboard.

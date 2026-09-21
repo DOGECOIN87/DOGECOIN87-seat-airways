@@ -207,15 +207,29 @@ first and ten business seats — so an aircraft of 178 used to end in the
 middle of row 4 unless somebody wired up an indexer.
 
 There is a way to get the rest out of a plain RPC, and it is the one every
-explorer uses: ask the SPL Token program for every account it owns whose mint
-field is this mint. Not capped, and pinned by two indexed filters so it is not
-a scan of every token on Solana. `holderList.ts` tries three sources in order:
+explorer uses: ask the token program for every account it owns whose mint
+field is this mint. Not capped, and pinned by indexed filters so it is not a
+scan of every token on Solana. `holderList.ts` tries three sources in order:
 
 1. `HOLDERS_URL`, an indexer. Still the best answer, still uncapped.
 2. Every token account for the mint, summed by owner — the whole aircraft,
    from the mint alone, no indexer required.
 3. The twenty largest accounts, for endpoints that refuse the scan. Several
    public ones do.
+
+**There are two token programs**, classic SPL Token and Token-2022, and a
+mint belongs to exactly one. `getProgramAccounts` is asked *of a program*, so
+asking the wrong one is not an error: it is an empty list, and an empty list
+reads as "this token has no holders". The aeroplane comes back with nobody on
+it and nothing says why. So the mint's owning program is looked up first — one
+cheap call that returns no account data — and the scan is pointed at that.
+
+The exact-size filter goes only to the classic program. A Token-2022 account
+is the same 165 bytes and then, when it carries any extension, a type byte and
+the extension records; an associated token account always carries
+ImmutableOwner, so demanding exactly 165 there would exclude very nearly every
+real holder. The memcmp on the mint does the work instead, and the first 165
+bytes are laid out identically either way, so one slice reads both.
 
 **The page reads the chain through here, not around it.** `GET /holding` and
 `GET /holders` are the two reads the page used to open its own RPC for, which

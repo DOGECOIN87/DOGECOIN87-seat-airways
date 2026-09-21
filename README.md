@@ -205,10 +205,16 @@ So three sources are tried in order:
    variables being kept in step, the chain is read once a minute for the whole
    site, and no RPC key has to be shipped to a browser to make any of it
    work.
-3. **The chain directly**, asking the SPL Token program for every account it
-   owns for this mint and summing by owner. Uncapped too; it is just a scan,
-   so it is the Worker that pays for it and caches it, and some public
-   endpoints refuse it — in which case the twenty are still there underneath.
+3. **The chain directly**, asking the token program for every account it owns
+   for this mint and summing by owner. Uncapped too; it is just a scan, so it
+   is the Worker that pays for it and caches it, and some public endpoints
+   refuse it — in which case the twenty are still there underneath.
+
+   *Which* token program is looked up first, because there are two and a mint
+   belongs to one. Asking the wrong one is not an error — it is an empty list,
+   which reads as "this token has no holders", so the aeroplane comes back
+   empty and nothing says why. This code scanned only classic SPL Token until
+   the first real mint it was pointed at turned out to be Token-2022.
 
 Any list is then read in batches of a hundred, because `getMultipleAccounts`
 — which is what separates people from bonding curves — takes no more than

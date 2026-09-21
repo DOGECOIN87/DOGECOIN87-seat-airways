@@ -20,8 +20,8 @@
  * and is a hard RPC limit. Twenty accounts is not forty seats.
  *
  * There is a way to get the rest of them out of a plain RPC, though, and it
- * is the one every explorer uses: ask the SPL Token program for every account
- * it owns whose mint field is this mint. That is the whole holder list, and
+ * is the one every explorer uses: ask the token program for every account it
+ * owns whose mint field is this mint. That is the whole holder list, and
  * it is not capped at twenty. It is only expensive — a scan the RPC has to do
  * — so some endpoints refuse it and none of them enjoy it.
  *
@@ -74,8 +74,22 @@ interface LargestAccount { address: string; amount: string; decimals: number; ui
    so the next launchpad or AMM is excluded without anybody remembering to. */
 const SYSTEM_PROGRAM = '11111111111111111111111111111111';
 
-/** The SPL Token program, which owns every classic token account there is. */
+/**
+ * The two token programs, because there are two and a mint belongs to one.
+ *
+ * ── The failure this pair exists to prevent ───────────────────────────────
+ * `getProgramAccounts` is asked *of a program*. Asking the wrong one is not
+ * an error and does not look like a mistake: it is an empty list, and an
+ * empty list reads here as "this token has no holders". The aeroplane comes
+ * back with nobody on it and nothing anywhere says why.
+ *
+ * That is not hypothetical. This code scanned only classic SPL Token, and
+ * the first real mint it was pointed at was a Token-2022 one — so it found
+ * zero accounts for a token with a billion in supply, and was right to,
+ * having asked a program that owns none of them.
+ */
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 
 /**
  * A token account's layout, in the two fields worth reading.
@@ -238,13 +252,34 @@ async function fromTokenAccounts(
   rpc: <T>(method: string, params: unknown[]) => Promise<T | null>,
   mint: string,
   decimals: number,
+  program: string,
 ): Promise<Holder[] | null> {
+  /* ── Why the size filter is only for the classic program ─────────────────
+     A classic SPL token account is exactly 165 bytes, so the size pins the
+     results to token accounts precisely and cheaply.
+
+     A Token-2022 account is those same 165 bytes and then, when it carries
+     any extension, a type byte and the extension records after it. An
+     associated token account made through the ATA program always carries
+     ImmutableOwner — so demanding exactly 165 there would exclude very
+     nearly every real holder, which is the same silence as asking the wrong
+     program in the first place.
+
+     Dropping it is safe because the memcmp is doing the work. Bytes 0 to 32
+     of a token account are the mint, and nothing else this program owns has
+     a 32-byte mint sitting at offset zero: a mint account begins with the
+     four-byte option tag of its authority, and a multisig with two small
+     integers. The first 165 bytes are laid out identically either way, which
+     is why one slice reads both. */
+  const filters: unknown[] = [{ memcmp: { offset: 0, bytes: mint } }];
+  if (program === TOKEN_PROGRAM) filters.unshift({ dataSize: TOKEN_ACCOUNT_BYTES });
+
   const accounts = await rpc<{ account: { data: [string, string] } }[]>('getProgramAccounts', [
-    TOKEN_PROGRAM,
+    program,
     {
       encoding: 'base64',
       dataSlice: { offset: OWNER_OFFSET, length: OWNER_AND_AMOUNT },
-      filters: [{ dataSize: TOKEN_ACCOUNT_BYTES }, { memcmp: { offset: 0, bytes: mint } }],
+      filters,
     },
   ]);
   if (!Array.isArray(accounts)) return null;
@@ -279,6 +314,29 @@ interface IndexedList {
  * well — because a page reading it has no RPC of its own to ask for one, and
  * a balance is only interesting as a share of something.
  */
+/**
+ * Which of the two token programs owns this mint.
+ *
+ * One cheap call — no account data comes back, only the owner — and it is
+ * what turns "scan for holders" from a guess into a question with an
+ * address on it. Null when the chain cannot be asked, or when the mint is
+ * owned by neither program and so is not a token this knows how to read:
+ * both send the caller on to `getTokenLargestAccounts`, which needs no
+ * program because the RPC resolves the mint itself.
+ */
+async function mintProgram(
+  rpc: <T>(method: string, params: unknown[]) => Promise<T | null>,
+  mint: string,
+): Promise<string | null> {
+  const info = await rpc<{ value: { owner?: unknown } | null }>('getAccountInfo', [
+    mint,
+    { encoding: 'base64', dataSlice: { offset: 0, length: 0 } },
+  ]);
+  const owner = info?.value?.owner;
+  if (owner !== TOKEN_PROGRAM && owner !== TOKEN_2022_PROGRAM) return null;
+  return owner;
+}
+
 async function fromIndexer(holdersUrl: string | undefined): Promise<IndexedList | null> {
   if (!holdersUrl) return null;
   try {
@@ -350,7 +408,8 @@ export async function readHolderList(source: HolderSource): Promise<HolderList |
      room for the contracts that will drop out — the same slice the indexer
      path takes, and for the same reason: a row nobody can be shown is a row
      not worth looking up. */
-  const everybody = await fromTokenAccounts(rpc, mint, decimals);
+  const program = await mintProgram(rpc, mint);
+  const everybody = program ? await fromTokenAccounts(rpc, mint, decimals, program) : null;
   if (everybody && everybody.length) {
     const top = [...everybody].sort((a, b) => b.balance - a.balance).slice(0, manifestSize + 10);
     const people = await peopleOnly(rpc, top);

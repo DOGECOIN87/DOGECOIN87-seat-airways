@@ -311,9 +311,15 @@ const holderList = [
 
 /* Wallets the chain has stopped vouching for. Empty until a case sells up. */
 const soldOut = new Set();
-/* Taking the indexer away, so the Worker has to read holders off the chain. */
+/* Taking the indexer away, so the Worker has to read holders off the chain.
+
+   The mint is Token-2022 here on purpose: it is the program the real one
+   turned out to belong to, and asking the wrong token program is not an
+   error — it is an empty list, which reads as "this token has no holders". */
+const TOKEN_2022 = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 let indexerDown = false;
 let scanAccounts = [];
+let scannedProgram = null;
 /* And taking the chain away, which is a different thing from it saying no. */
 let rpcDown = false;
 
@@ -352,7 +358,10 @@ const holders = createServer((req, res) => {
         });
       case 'getTokenSupply':
         return reply({ value: { amount: '1000000', decimals: 0, uiAmount: 1_000_000 } });
+      case 'getAccountInfo':
+        return reply({ value: { owner: TOKEN_2022 } });
       case 'getProgramAccounts':
+        scannedProgram = call.params?.[0];
         return reply(scanAccounts);
       case 'getMultipleAccounts':
         /* Everybody here is a person. A null account is a wallet holding no
@@ -726,6 +735,8 @@ await check('with no indexer, the cabin is seated off the chain', async () => {
   await new Promise((r) => setTimeout(r, 1300));
 
   const { holders: list } = await (await fetch(`${BASE}/holders`, { headers: { origin: ORIGIN } })).json();
+  assert(scannedProgram === TOKEN_2022,
+    `the mint is Token-2022 and the Worker scanned ${scannedProgram} — which owns none of its accounts`);
   assert(Array.isArray(list) && list.length === 2, `expected 2 holders off the chain, got ${JSON.stringify(list)}`);
   const top = list.find((h) => h.address === first.address);
   assert(top, `the owner bytes did not decode to the address the key signs with: ${list.map((h) => h.address)}`);
