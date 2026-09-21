@@ -9,7 +9,10 @@
  *   npm test
  */
 import assert from 'node:assert/strict';
-import { canMessage, canOverhear, canViewContact, isValidExternalUrl, outranks } from '../dist-test/sectionAccess.js';
+import {
+  ANNOUNCEMENT, canAnnounce, canMessage, canOverhear, canPostToChannel, canReadChannel,
+  canViewContact, channelFor, isChannel, isValidExternalUrl, outranks, zoneOfChannel,
+} from '../dist-test/sectionAccess.js';
 
 const deck = 'deck';
 const first = 'first';
@@ -118,6 +121,54 @@ check('the hold sends nothing and is sent nothing', () => {
   assert.equal(canMessage(first, hold, alice, bob), false, 'an introduction was addressed to the hold');
   assert.equal(canMessage(hold, hold, alice, bob), false);
   assert.equal(canMessage(first, first, null, bob), false, 'a disconnected wallet sent one');
+});
+
+check('a room is addressed like a person, and can never be one', () => {
+  /* A channel is stored as the recipient of a message, which is where a
+     wallet goes. The two must never be confusable, and they cannot be: base58
+     has no colon in it, so no key can ever spell `section:first`. */
+  assert.equal(channelFor(first), 'section:first');
+  assert.equal(zoneOfChannel('section:first'), first);
+  assert.equal(zoneOfChannel('section:cargo'), null, 'a cabin that does not exist resolved to one');
+  assert.equal(zoneOfChannel('7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'), null, 'a wallet read as a room');
+  assert.equal(isChannel('section:economy'), true);
+  assert.equal(isChannel(ANNOUNCEMENT), true);
+  assert.equal(isChannel('7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'), false);
+});
+
+check('you speak in your own cabin and no other', () => {
+  /* The one place posting is narrower than reading. You can read the cabin
+     behind you and write to anybody in it personally — but you cannot walk
+     into its conversation and talk, because that conversation belongs to the
+     people sitting in it. */
+  assert.equal(canPostToChannel(first, first), true);
+  assert.equal(canPostToChannel(first, business), false, 'First Class talked in the room behind it');
+  assert.equal(canPostToChannel(business, first), false, 'business talked in the room in front of it');
+  assert.equal(canPostToChannel(deck, economy), false, 'the flight deck talked in economy');
+  assert.equal(canPostToChannel(hold, economy), false, 'the hold talked in a cabin');
+  assert.equal(canPostToChannel(hold, hold), false);
+});
+
+check('but you hear your own cabin and every one behind it', () => {
+  for (const viewer of CABINS) {
+    for (const room of CABINS) {
+      assert.equal(
+        canReadChannel(viewer, room),
+        canViewContact(viewer, room),
+        `${viewer} hearing ${room} disagrees with who may read the card`,
+      );
+    }
+  }
+  assert.equal(canReadChannel(deck, economy), true, 'the flight deck hears the whole aeroplane');
+  assert.equal(canReadChannel(economy, business), false, 'the last row heard the cabin in front');
+  assert.equal(canReadChannel(hold, economy), false, 'the hold heard a cabin');
+});
+
+check('the PA belongs to the flight deck', () => {
+  assert.equal(canAnnounce(deck), true);
+  assert.equal(canAnnounce(first), false, 'First Class took the PA');
+  assert.equal(canAnnounce(economy), false);
+  assert.equal(canAnnounce(hold), false);
 });
 
 check('contact links must be http(s)', () => {

@@ -17,6 +17,8 @@ import {
   signIn as openSession, signOut as closeSession, storedSession,
   type NetworkingMessage, type NetworkingProfile, type PublishedProfile, type Session,
 } from './networkingApi';
+import { ANNOUNCEMENT, zoneOfChannel } from './sectionAccess';
+import type { ZoneKey } from '../content/cabin';
 
 export interface DirectoryState {
   /** Whether this deployment has a directory service at all. */
@@ -28,6 +30,10 @@ export interface DirectoryState {
   sent: NetworkingMessage[];
   /** Conversations from the cabins behind you, which your seat lets you read. */
   overheard: NetworkingMessage[];
+  /** Each cabin's own room, keyed by section. Only the ones you may read. */
+  channels: Partial<Record<ZoneKey, NetworkingMessage[]>>;
+  /** The PA, newest first. */
+  announcements: NetworkingMessage[];
   loading: boolean;
   /** True while a signature is being waited on. */
   signingIn: boolean;
@@ -59,6 +65,8 @@ export function useDirectory(
   const [inbox, setInbox] = useState<NetworkingMessage[]>([]);
   const [sent, setSent] = useState<NetworkingMessage[]>([]);
   const [overheard, setOverheard] = useState<NetworkingMessage[]>([]);
+  const [channels, setChannels] = useState<Partial<Record<ZoneKey, NetworkingMessage[]>>>({});
+  const [announcements, setAnnouncements] = useState<NetworkingMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -84,6 +92,8 @@ export function useDirectory(
     setInbox([]);
     setSent([]);
     setOverheard([]);
+    setChannels({});
+    setAnnouncements([]);
     setError(null);
     setNotice(null);
   }, [address]);
@@ -97,6 +107,8 @@ export function useDirectory(
       setInbox(messages.inbox);
       setSent(messages.sent);
       setOverheard(messages.overheard ?? []);
+      setChannels(messages.channels ?? {});
+      setAnnouncements(messages.announcements ?? []);
       setError(null);
     } catch (e) {
       if (!live.current) return;
@@ -134,6 +146,8 @@ export function useDirectory(
     setInbox([]);
     setSent([]);
     setOverheard([]);
+    setChannels({});
+    setAnnouncements([]);
     setNotice(null);
     await closeSession(current);
   }, [session]);
@@ -167,8 +181,20 @@ export function useDirectory(
     try {
       const message = await sendMessage(session, to, body);
       if (live.current) {
-        setSent((current) => [message, ...current]);
-        setNotice('Introduction sent.');
+        /* Put it where it will be read back from, so the page shows it
+           without waiting for the next poll. Three destinations, the same
+           three the server sorts by. */
+        const room = zoneOfChannel(to);
+        if (to === ANNOUNCEMENT) {
+          setAnnouncements((current) => [message, ...current]);
+          setNotice('Announcement made. The whole aircraft can hear it.');
+        } else if (room) {
+          setChannels((current) => ({ ...current, [room]: [message, ...(current[room] ?? [])] }));
+          setNotice('Posted to your section.');
+        } else {
+          setSent((current) => [message, ...current]);
+          setNotice('Introduction sent.');
+        }
       }
       return true;
     } catch (e) {
@@ -189,7 +215,7 @@ export function useDirectory(
 
   return {
     available: hasDirectory,
-    session, profiles, inbox, sent, overheard,
+    session, profiles, inbox, sent, overheard, channels, announcements,
     loading, signingIn, saving, error, notice,
     signIn, signOut, save, send, dismiss,
   };

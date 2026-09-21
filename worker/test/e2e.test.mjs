@@ -653,6 +653,115 @@ await check('and nobody at all can write to the flight deck', async () => {
   assert(res.status === 403, `First Class posted into the flight deck: ${res.status}`);
 });
 
+/* ── The rooms ────────────────────────────────────────────────────────────
+   A cabin is somewhere to talk as well as somewhere to sit. Reading one is
+   the same line as reading a card — your own and every one behind it — and
+   posting is narrower than both: your own section only, because a cabin's
+   conversation belongs to the people sitting in it. */
+
+const room = (zone) => `section:${zone}`;
+
+await check('a holder speaks in their own cabin', async () => {
+  const res = await api('/messages', {
+    method: 'POST', token: aliceToken, body: { to: room('first'), body: 'First Class, anyone awake?' },
+  });
+  assert(res.status === 200, `First Class could not speak in its own room: ${res.status}`);
+
+  const heard = await (await api('/messages', { token: aliceToken })).json();
+  assert(
+    (heard.channels?.first ?? []).some((m) => m.body === 'First Class, anyone awake?'),
+    'it was accepted and never appeared in the room',
+  );
+});
+
+await check('and cannot speak in the cabin behind, though they can hear it', async () => {
+  /* The one place reading and posting come apart. alice reads every word said
+     in business and can write to anybody in it personally — but she cannot
+     walk into their conversation and talk. */
+  const res = await api('/messages', {
+    method: 'POST', token: aliceToken, body: { to: room('business'), body: 'First Class, visiting.' },
+  });
+  assert(res.status === 403, `First Class talked in the room behind it: ${res.status}`);
+});
+
+await check('nor in the one ahead of them', async () => {
+  const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
+  const res = await api('/messages', {
+    method: 'POST', token: hers, body: { to: room('first'), body: 'Business, coming forward.' },
+  });
+  assert(res.status === 403, `business talked in the room in front of it: ${res.status}`);
+});
+
+await check('you hear your own room and every one behind it', async () => {
+  const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
+  const deck = await (await api('/messages', { token: captainToken })).json();
+  const rooms = Object.keys(deck.channels ?? {}).sort();
+  assert(rooms.join(',') === 'business,deck,first', `the flight deck heard: ${rooms.join(',') || 'nothing'}`);
+  assert(
+    (deck.channels.first ?? []).some((m) => m.body === 'First Class, anyone awake?'),
+    'the flight deck could not hear First Class talking',
+  );
+
+  const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
+  const business = await (await api('/messages', { token: hers })).json();
+  assert(
+    Object.keys(business.channels ?? {}).join(',') === 'business',
+    `business heard more than its own room: ${Object.keys(business.channels ?? {}).join(',')}`,
+  );
+});
+
+await check('the PA belongs to the flight deck, and is one a day', async () => {
+  /* A promise printed on the boarding pass before any of this was built:
+     "You have the PA. One announcement a day. Use it well." */
+  const refused = await api('/messages', {
+    method: 'POST', token: aliceToken, body: { to: 'announcement', body: 'First Class, on the PA.' },
+  });
+  assert(refused.status === 403, `First Class took the PA: ${refused.status}`);
+
+  const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
+  const said = await api('/messages', {
+    method: 'POST', token: captainToken, body: { to: 'announcement', body: 'Cabin crew, doors to arrival.' },
+  });
+  assert(said.status === 200, `the flight deck could not use the PA: ${said.status}`);
+
+  const again = await api('/messages', {
+    method: 'POST', token: captainToken, body: { to: 'announcement', body: 'And another thing.' },
+  });
+  assert(again.status === 429, `the PA was used twice in a day: ${again.status}`);
+});
+
+await check('and the whole aircraft hears it, the hold included', async () => {
+  const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
+  const business = await (await api('/messages', { token: hers })).json();
+  assert(
+    (business.announcements ?? []).some((m) => m.body === 'Cabin crew, doors to arrival.'),
+    'business could not hear the PA',
+  );
+
+  const stranger = await wallet();
+  const theirs = (await (await api('/session', { method: 'POST', body: await signInBody(stranger) })).json()).token;
+  const hold = await (await api('/messages', { token: theirs })).json();
+  assert(
+    (hold.announcements ?? []).some((m) => m.body === 'Cabin crew, doors to arrival.'),
+    'the hold could not hear the PA, and being aboard is the only qualification for hearing it',
+  );
+  assert(
+    Object.keys(hold.channels ?? {}).length === 0,
+    'an unseated wallet was given a cabin to listen to',
+  );
+});
+
+await check('a room post is not an outgoing letter', async () => {
+  /* `sent` is the outbox of introductions. A line said in your own section
+     comes back in `channels`, with everybody else's, and counting it twice
+     would make the hub claim you had written to somebody. */
+  const mine = await (await api('/messages', { token: aliceToken })).json();
+  assert(
+    !mine.sent.some((m) => m.to.startsWith('section:') || m.to === 'announcement'),
+    'a room post was filed as an introduction',
+  );
+});
+
 await check('a conversation with the hold is started by nobody, and fetched by nobody', async () => {
   /* `owner` is the wallet from the banner cases: it holds no seat, so it is
      on no manifest and no roster, and the page could not name it if it tried.

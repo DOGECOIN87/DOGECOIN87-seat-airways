@@ -245,3 +245,78 @@ export function canMessage(
     && Boolean(viewerAddress)
     && viewerAddress !== memberAddress;
 }
+
+/* ── Rooms ─────────────────────────────────────────────────────────────────
+   A cabin is a room as well as a rank. Every section has one channel, and a
+   channel is addressed the way a wallet is — as the recipient of a message —
+   because to everything that stores or reads a message that is exactly what
+   it is: somewhere a message was sent.
+
+   Writing a channel as a prefixed string rather than adding a column does
+   happen to avoid a schema migration, and migrations here are applied by
+   hand rather than by the deploy. But that is not the argument. The argument
+   is that the one place a room and a person must never be confused is the
+   one place they cannot be: base58 has no colon in it, so `section:first` is
+   not a key anybody holds, and no wallet can ever be mistaken for a cabin. */
+
+const CHANNEL_PREFIX = 'section:';
+
+/** The PA. One line from the flight deck that the whole aircraft hears. */
+export const ANNOUNCEMENT = 'announcement';
+
+/** Where a section's conversation lives. */
+export function channelFor(zone: ZoneKey): string {
+  return `${CHANNEL_PREFIX}${zone}`;
+}
+
+/** The section a channel belongs to, or null when that is not a channel. */
+export function zoneOfChannel(recipient: string): ZoneKey | null {
+  if (!recipient.startsWith(CHANNEL_PREFIX)) return null;
+  const zone = recipient.slice(CHANNEL_PREFIX.length) as ZoneKey;
+  return ZONE_RANK.has(zone) ? zone : null;
+}
+
+/** True for anything addressed to a room rather than to a person. */
+export function isChannel(recipient: string): boolean {
+  return recipient === ANNOUNCEMENT || zoneOfChannel(recipient) !== null;
+}
+
+/**
+ * Whether a holder may post in a section's channel.
+ *
+ * Your own, and only your own — which is the one place the rooms are narrower
+ * than the cards. You can read a cabin behind you and write to anybody in it
+ * personally, but you cannot walk into its conversation and talk. A section's
+ * channel is the one thing on this aircraft that belongs to the people
+ * sitting in it, and a room the rows in front can post into is not that.
+ *
+ * It is also what keeps moving up worth something in the other direction:
+ * every seat forward is one more room you can hear and one fewer voice in
+ * your own.
+ */
+export function canPostToChannel(viewerZone: ZoneKey | null, channelZone: ZoneKey | null): boolean {
+  return Boolean(viewerZone) && viewerZone === channelZone;
+}
+
+/**
+ * Whether a holder may read a section's channel.
+ *
+ * Your own and every one behind it — the same line as a contact card, and the
+ * same line as everything else here. The flight deck hears the whole
+ * aeroplane; the last row hears only itself.
+ */
+export function canReadChannel(viewerZone: ZoneKey | null, channelZone: ZoneKey | null): boolean {
+  return canViewContact(viewerZone, channelZone);
+}
+
+/**
+ * Who has the PA.
+ *
+ * The flight deck, because the boarding pass has promised exactly that since
+ * before any of this was built: *"You have the PA. One announcement a day.
+ * Use it well."* The once-a-day is what makes it worth listening to, and it
+ * is enforced where the rows are rather than in the composer.
+ */
+export function canAnnounce(viewerZone: ZoneKey | null): boolean {
+  return viewerZone === 'deck';
+}

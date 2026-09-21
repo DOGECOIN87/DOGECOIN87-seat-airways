@@ -32,6 +32,19 @@ import type { ZoneKey } from '../content/cabin';
  */
 export { canMessage, canViewContact, canOverhear, outranks, zoneRank } from './seating';
 
+/**
+ * And who may speak in which room.
+ *
+ * A cabin is a room as well as a rank. Reading one is the same line as
+ * reading a card — your own and every one behind it — but *posting* is
+ * narrower than both: your own section only. The conversation in a cabin
+ * belongs to the people sitting in it, and a room the rows in front can talk
+ * in is not that.
+ */
+export {
+  ANNOUNCEMENT, canAnnounce, canPostToChannel, canReadChannel, channelFor, isChannel, zoneOfChannel,
+} from './seating';
+
 export function sectionLabel(zone: ZoneKey): string {
   switch (zone) {
     case 'deck': return 'Flight Deck';

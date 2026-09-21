@@ -22,8 +22,8 @@ The directory, every route of which needs a session:
 | `DELETE /session` | hand it back |
 | `GET /directory` | every published card |
 | `PUT /profile` | publish or amend your own |
-| `GET /messages` | your introductions, both directions |
-| `POST /messages` | send one, to your own section or any behind it |
+| `GET /messages` | your introductions, every room you can hear, and the PA |
+| `POST /messages` | to a wallet, to `section:<cabin>`, or to `announcement` |
 
 ## What the wall deliberately does not know
 
@@ -146,6 +146,8 @@ aft and opaque looking forward:
 | Contact details | your own section and every seated cabin behind it, never one in front |
 | A conversation | the two wallets on it, plus any section seated ahead of **both** |
 | An introduction | wherever a card can be read: your own section and every seated one behind it |
+| A cabin's room | heard the same way; **spoken in only by the people seated in it** |
+| The PA | one line a day from the flight deck, heard by the whole aircraft |
 
 Three consequences worth stating plainly, because they are the point rather
 than side effects. The flight deck reads everything, and economy — with no
@@ -182,9 +184,44 @@ could not otherwise reach. Reads were enforced here; writes were on trust.
 it *is* `canViewContact`, plus the check that a wallet is not an introduction
 to itself — and `POST /messages` asks it before it writes a row.
 
+### Rooms, and the one place posting is narrower than reading
+
+A cabin is somewhere to talk as well as somewhere to sit. Each has a channel,
+and a holder **hears their own and every one behind it** — the same line as a
+contact card — but **speaks only in their own**. You can read what Economy is
+saying, and write to anybody in Economy personally, and still not walk into
+their conversation and talk. A section's room belongs to the people sitting in
+it; a room the rows in front can post into is not that.
+
+It is also what keeps moving up worth something in the other direction. Every
+seat forward is one more room you can hear and one fewer voice in your own.
+
+A channel is addressed the way a wallet is, as the `recipient` of a message,
+because to a table of messages that is exactly what it is: somewhere a message
+was sent. `section:first` needs no schema change, which matters here because
+migrations are applied by hand rather than by the deploy — but that is a
+convenience, not the argument. The argument is that the one place a room and a
+person must never be confused is the one place they cannot be: base58 has no
+colon in it, so no key anybody holds can ever spell a cabin.
+
+Only cabins with somebody in them have rooms. An empty cabin's is necessarily
+empty, so asking after it is a query whose answer is known in advance, and
+drawing it would promise a conversation nobody could ever be in.
+
+### The PA
+
+`announcement` is the last recipient, and the flight deck writes it: one line
+a day that the whole aircraft hears, the hold included. Being aboard is the
+only qualification for hearing it.
+
+Rationed by the day rather than the hour on purpose — a thing said once a day
+is listened to and a thing said twenty times is weather — and it was a promise
+printed on the boarding pass long before there was anywhere to keep it:
+*"You have the PA. One announcement a day. Use it well."*
+
 So the seat is not just a placement any more. It is how far forward you can
-see, and how far back you can reach — which is the seat ladder's own argument
-applied to people instead of legroom.
+see, how far back you can reach, and how many rooms you can hear — which is
+the seat ladder's own argument applied to people instead of legroom.
 
 ### Knowing that without a second ladder
 

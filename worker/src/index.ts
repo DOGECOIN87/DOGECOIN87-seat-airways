@@ -39,10 +39,15 @@ import {
 import {
   bearerToken, isAddress, messageId, mintToken, readMessageBody, readProfileInput,
   signInChallenge, tokenHash,
+  ANNOUNCEMENTS_PER_DAY, ANNOUNCEMENT_PAGE,
   MESSAGES_PER_HOUR, MESSAGE_PAGE, SESSION_TTL_MS, SIGNIN_MAX_AGE_MS,
 } from './networking';
 import { cabinSize, canSeat, readLadder, rpcUrl } from './ladder';
-import { canMessage, canViewContact } from '../../src/lib/seating';
+import { CABIN_ZONES } from '../../src/content/cabin';
+import {
+  ANNOUNCEMENT, canAnnounce, canMessage, canPostToChannel, canReadChannel, canViewContact,
+  channelFor, zoneOfChannel,
+} from '../../src/lib/seating';
 
 export interface Env {
   BANNERS: KVNamespace;
@@ -745,9 +750,15 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
       if (request.method === 'GET' && url.pathname === '/messages') {
         const columns = 'SELECT id, sender, recipient, body, sent_at FROM messages';
+        /* `sent` is the outbox of *introductions*, so the rooms are kept out
+           of it: a line said in your own section is not a letter you wrote,
+           and it comes back in `channels` already, with everyone else's. */
         const [inbox, sent] = await db.batch<MessageRow>([
           db.prepare(`${columns} WHERE recipient = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
-          db.prepare(`${columns} WHERE sender = ? ORDER BY sent_at DESC LIMIT ?`).bind(me, MESSAGE_PAGE),
+          db.prepare(
+            `${columns} WHERE sender = ? AND recipient NOT LIKE 'section:%' AND recipient <> ?` +
+            ' ORDER BY sent_at DESC LIMIT ?',
+          ).bind(me, ANNOUNCEMENT, MESSAGE_PAGE),
         ]);
 
         /* What carries forward from further aft.
@@ -782,10 +793,51 @@ async function handle(request: Request, env: Env): Promise<Response> {
           }
         }
 
+        /* The rooms.
+
+           One channel per cabin, and a holder reads their own and every one
+           behind it — the same line as a contact card. Asked as one statement
+           per channel rather than one for all of them, so a busy Economy
+           cannot crowd the flight deck's own room out of its own page. At
+           most five of them, and each is an index seek on
+           `messages_by_recipient`.
+
+           Cabins with somebody in them, not cabins the aircraft has. An empty
+           cabin's room is necessarily empty — there is nobody seated there to
+           have said anything — so asking after it is a query whose answer is
+           known in advance, and handing the page back `economy: []` on a
+           five-person aeroplane is a room it would draw and nobody could ever
+           be in. The same reasoning the roster and the header already use.
+
+           The PA is not one of these: it is one line from the flight deck
+           that the whole aeroplane hears, the hold included. Being aboard is
+           the only qualification for hearing it. */
+        const occupied = new Set(ladder.seated().map((address) => ladder.zoneOf(address)));
+        const readable = ladder.live && mine
+          ? CABIN_ZONES.map((z) => z.key).filter((zone) => canReadChannel(mine, zone) && occupied.has(zone))
+          : [];
+
+        const roomRows = readable.length
+          ? await db.batch<MessageRow>(readable.map((zone) => db
+            .prepare(`${columns} WHERE recipient = ? ORDER BY sent_at DESC LIMIT ?`)
+            .bind(channelFor(zone), MESSAGE_PAGE)))
+          : [];
+        const channels: Record<string, ReturnType<typeof asMessage>[]> = {};
+        readable.forEach((zone, i) => {
+          channels[zone] = (roomRows[i]?.results ?? []).map(asMessage);
+        });
+
+        const pa = await db
+          .prepare(`${columns} WHERE recipient = ? ORDER BY sent_at DESC LIMIT ?`)
+          .bind(ANNOUNCEMENT, ANNOUNCEMENT_PAGE)
+          .all<MessageRow>();
+
         return json({
           inbox: (inbox.results ?? []).map(asMessage),
           sent: (sent.results ?? []).map(asMessage),
           overheard: overheard.map(asMessage),
+          channels,
+          announcements: (pa.results ?? []).map(asMessage),
         }, 200, priv);
       }
 
@@ -797,15 +849,22 @@ async function handle(request: Request, env: Env): Promise<Response> {
           return json({ error: 'That request was not JSON.' }, 400, priv);
         }
 
-        const to = isAddress(body.to) ? body.to : '';
-        if (!to) return json({ error: 'That is not a wallet address.' }, 400, priv);
-        if (to === me) return json({ error: 'That message is addressed to you.' }, 400, priv);
+        /* Three things can be written to: a person, a section's room, and the
+           PA. They share this route because they share a table and a rule —
+           the seating decides all three — and splitting them into three
+           routes would be three places for that rule to drift. */
+        const to = typeof body.to === 'string' ? body.to : '';
+        const room = zoneOfChannel(to);
+        const announcing = to === ANNOUNCEMENT;
+        if (!room && !announcing) {
+          if (!isAddress(to)) return json({ error: 'That is not a wallet address or a cabin.' }, 400, priv);
+          if (to === me) return json({ error: 'That message is addressed to you.' }, 400, priv);
+        }
 
         const parsed = readMessageBody(body.body);
         if ('error' in parsed) return json({ error: parsed.error }, 400, priv);
 
-        /* Who may start a conversation, asked of the seating rather than of
-           the composer.
+        /* Who may say this, asked of the seating rather than of the composer.
 
            The page hides a composer it knows would be refused, and for a
            while that was the whole of the rule: this route took an
@@ -813,25 +872,53 @@ async function handle(request: Request, env: Env): Promise<Response> {
            note into an inbox the sender could not otherwise reach. Reads were
            enforced here; writes were on trust.
 
-           The rule is the one that decides contact details — your own section
-           and every seated section behind it — so a card you can read is a
-           card you can answer, and nobody writes forward. `canMessage` is the
-           page's own function out of the file both sides import, so the
-           composer and this check cannot come apart. Asked after the message
-           has been read and before the rate limit, which is the first thing
-           here that costs a query. */
+           Every one of these is a function out of the file both sides import,
+           so what the composer offers and what this accepts cannot come
+           apart. Asked after the message has been read and before the rate
+           limit, which is the first thing here that costs a query. */
         const ladder = await readLadder(env);
         if (!ladder.live) {
-          /* With no holder feed every wallet reads as unseated, so the rule
+          /* With no holder feed every wallet reads as unseated, so the rules
              below would refuse everybody — correctly, but for a reason that
              is about this deployment rather than about them. Say the true
              one. It fails closed, as the rest of the directory does when it
              cannot tell the cabins apart: `HOLDERS_URL`, or `RPC_URL` with
-             `TOKEN_MINT`, is what turns introductions on. */
+             `TOKEN_MINT`, is what turns any of this on. */
           return json({ error: 'The cabin cannot tell which section you are in right now.' }, 503, priv);
         }
-        if (!canMessage(ladder.zoneOf(me), ladder.zoneOf(to), me, to)) {
+        const mine = ladder.zoneOf(me);
+
+        if (announcing && !canAnnounce(mine)) {
+          return json({ error: 'The PA belongs to the flight deck.' }, 403, priv);
+        }
+        if (room && !canPostToChannel(mine, room)) {
+          /* Readable is not the same as postable here, and this is the one
+             place those two come apart. A cabin's conversation belongs to the
+             people sitting in it; the rows in front can listen, and can write
+             to anybody in it personally, but cannot talk in the room. */
+          return json({
+            error: canReadChannel(mine, room)
+              ? 'You can read that cabin, but its conversation belongs to the people sitting in it.'
+              : 'That cabin is ahead of yours.',
+          }, 403, priv);
+        }
+        if (!room && !announcing && !canMessage(mine, ladder.zoneOf(to), me, to)) {
           return json({ error: 'That cabin is ahead of yours. Introductions carry aft, never forward.' }, 403, priv);
+        }
+
+        /* The PA is rationed by the day rather than by the hour, because a
+           thing said once a day is listened to and a thing said twenty times
+           is weather. The boarding pass has promised exactly this since
+           before the directory existed. */
+        if (announcing) {
+          const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const already = await db
+            .prepare('SELECT COUNT(*) AS said FROM messages WHERE sender = ? AND recipient = ? AND sent_at > ?')
+            .bind(me, ANNOUNCEMENT, dayAgo)
+            .first<{ said: number }>();
+          if ((already?.said ?? 0) >= ANNOUNCEMENTS_PER_DAY) {
+            return json({ error: 'One announcement a day. Use it well.' }, 429, priv);
+          }
         }
 
         const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -840,7 +927,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
           .bind(me, hourAgo)
           .first<{ sent: number }>();
         if ((recent?.sent ?? 0) >= MESSAGES_PER_HOUR) {
-          return json({ error: 'That is enough introductions for one hour.' }, 429, priv);
+          return json({ error: 'That is enough for one hour.' }, 429, priv);
         }
 
         const message = { id: messageId(), from: me, to, body: parsed.body, sentAt: new Date().toISOString() };

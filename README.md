@@ -332,6 +332,24 @@ Either way it was the page's rule alone until recently: the composer was
 hidden, and `POST /messages` took the message regardless, so one fetch wrote
 into an inbox the sender could not otherwise reach.
 
+**Every cabin is also a room.** Each section has a channel, and a holder hears
+their own and every one behind it — the same line again — but **speaks only in
+their own**. You can read what Economy is saying, and write to anybody in
+Economy personally, and still not walk into their conversation and talk. A
+section's room belongs to the people sitting in it. The hub opens on your own
+cabin and puts the ones behind a button away, because five rooms at once
+buries the one you are in under whichever is busiest.
+
+That is the one place posting is narrower than reading, and it cuts the other
+way as you move up: every seat forward is one more room you can hear and one
+fewer voice in your own.
+
+**And the flight deck has the PA** — one line a day that the whole aircraft
+hears, the hold included. The boarding pass has promised exactly that since
+long before there was anywhere to keep it: *"You have the PA. One announcement
+a day. Use it well."* Once a day rather than once an hour, because a thing
+said once a day is listened to and a thing said twenty times is weather.
+
 That is enforced where the rows are, not in the browser. Which meant the
 Worker had to learn the seating it spent its life refusing to learn — and the
 refusal was always about a second *copy* drifting, so there is not one: the

@@ -26,6 +26,8 @@
  * are never handed to anybody who has not bought their way into the cabin.
  */
 
+import type { ZoneKey } from '../content/cabin';
+
 const API = (
   (import.meta.env.VITE_DIRECTORY_API as string | undefined)
   // Same Worker serves both by default, so an existing deployment only has to
@@ -78,6 +80,16 @@ export interface Inbox {
   sent: NetworkingMessage[];
   /** Conversations from the cabins behind you, which your seat lets you read. */
   overheard: NetworkingMessage[];
+  /**
+   * Each cabin's own conversation, keyed by section.
+   *
+   * Only the ones this seat may read: your own, and every cabin behind it.
+   * A section the server did not send is one you cannot hear, so an absent
+   * key and an empty room are deliberately different things.
+   */
+  channels: Partial<Record<ZoneKey, NetworkingMessage[]>>;
+  /** The PA. Newest first, and heard by the whole aircraft. */
+  announcements: NetworkingMessage[];
 }
 
 export interface NetworkingMessage {
@@ -231,12 +243,24 @@ export function saveProfile(session: Session, profile: NetworkingProfile): Promi
   });
 }
 
-/** Your introductions, both directions, plus whatever your seat overhears. */
+/**
+ * Everything this seat can hear.
+ *
+ * Introductions both directions, whatever it overhears, the conversation in
+ * every cabin it may read, and the PA. One request, because they are one
+ * table and one rule, and because the hub shows them on one screen.
+ */
 export function fetchMessages(session: Session): Promise<Inbox> {
   return call<Inbox>('/messages', { token: session.token });
 }
 
-/** Send one. */
+/**
+ * Send one.
+ *
+ * `to` is a wallet for an introduction, `section:<zone>` for a cabin's room,
+ * or `announcement` for the PA. The server decides which of the three rules
+ * applies; nothing here needs to know.
+ */
 export function sendMessage(session: Session, to: string, body: string): Promise<NetworkingMessage> {
   return call<NetworkingMessage>('/messages', {
     method: 'POST',

@@ -25,10 +25,21 @@ import { fromBase58, sha256Hex } from './verify';
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 /** How far out of date a sign-in signature may be. Same bound as an advert. */
 export const SIGNIN_MAX_AGE_MS = 5 * 60 * 1000;
-/** Introductions one wallet may send an hour. */
+/** Anything one wallet may send an hour: introductions and room posts alike. */
 export const MESSAGES_PER_HOUR = 20;
-/** How many of each direction the hub reads back. */
+/** How many of each direction, and of each room, the hub reads back. */
 export const MESSAGE_PAGE = 50;
+/**
+ * The PA, rationed by the day rather than the hour.
+ *
+ * A thing said once a day is listened to; a thing said twenty times is
+ * weather. This is the number the boarding pass has printed on it — *"You
+ * have the PA. One announcement a day. Use it well."* — and it was a promise
+ * on a ticket long before there was anywhere to keep it.
+ */
+export const ANNOUNCEMENTS_PER_DAY = 1;
+/** How far back the PA is read. It is a notice board, not a history. */
+export const ANNOUNCEMENT_PAGE = 5;
 /** Long enough for an introduction, short of an essay. */
 export const MAX_BODY_CHARS = 1_000;
 

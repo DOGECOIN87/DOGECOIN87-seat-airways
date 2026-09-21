@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Manifest, ManifestEntry } from '../lib/manifest';
 import { CABIN_ZONES, type ZoneKey } from '../content/cabin';
 import {
+  ANNOUNCEMENT,
+  canAnnounce,
   canMessage,
+  canReadChannel,
   canViewContact,
+  channelFor,
   defaultRole,
   isValidExternalUrl,
   outranks,
@@ -57,6 +61,12 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<NetworkingProfile>(EMPTY_PROFILE);
   const [invalid, setInvalid] = useState<string | null>(null);
+  const [roomDraft, setRoomDraft] = useState('');
+  const [paDraft, setPaDraft] = useState('');
+  /* Your own cabin is what you get by default. The rooms behind are yours to
+     read, but they are somebody else's conversation, and opening on all five
+     would bury your own section under whichever one is busiest. */
+  const [listeningAft, setListeningAft] = useState(false);
 
   const published = address ? directory.profiles[address] : undefined;
   const currentEntry = manifest.entries.find((entry) => entry.address === address) ?? null;
@@ -107,6 +117,41 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
       return name || (entry ? holderName(entry) : shortMember(from));
     };
   }, [manifest.entries, directory.profiles]);
+
+  /* The cabins whose rooms this seat may listen to, behind it and occupied.
+     Empty cabins are left out for the same reason the header leaves them out:
+     naming a room with nobody in it promises a conversation that cannot
+     exist. */
+  const roomsAft = useMemo(() => {
+    if (!viewerZone) return [];
+    const occupied = new Set(manifest.entries.map((entry) => entry.seat.zone));
+    return CABIN_ZONES
+      .filter((zone) => zone.key !== viewerZone && canReadChannel(viewerZone, zone.key) && occupied.has(zone.key))
+      .map((zone) => zone.key);
+  }, [viewerZone, manifest.entries]);
+
+  const rooms = viewerZone ? [viewerZone, ...(listeningAft ? roomsAft : [])] : [];
+
+  const postToRoom = async () => {
+    if (!viewerZone) return;
+    const body = roomDraft.trim();
+    if (!body) {
+      setInvalid('Write something before posting.');
+      return;
+    }
+    setInvalid(null);
+    if (await directory.send(channelFor(viewerZone), body)) setRoomDraft('');
+  };
+
+  const announce = async () => {
+    const body = paDraft.trim();
+    if (!body) {
+      setInvalid('An announcement needs something to announce.');
+      return;
+    }
+    setInvalid(null);
+    if (await directory.send(ANNOUNCEMENT, body)) setPaDraft('');
+  };
 
   const saveCard = async () => {
     if (![form.website, form.linkedin].every(isValidExternalUrl)) {
@@ -196,6 +241,53 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
           </p>
         </div>
       </header>
+
+      {/* The PA.
+
+          Above everything else because that is what a public address is: the
+          one thing on this aeroplane the whole cabin hears at once, the hold
+          included. It is shown to everybody and written by the flight deck,
+          once a day, which is the perk their boarding pass has promised since
+          long before there was anywhere to keep it. */}
+      {directory.session && (directory.announcements.length > 0 || canAnnounce(viewerZone)) && (
+        <div className="border-t border-ui-line bg-[#FFFBEA] px-5 py-5 sm:px-7">
+          <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#8A6D00]">The PA</p>
+          {directory.announcements.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {directory.announcements.map((message) => (
+                <li key={message.id} className="rounded-xl border border-[#E6D08A] bg-white/70 px-3.5 py-3">
+                  <p className="text-[13px] leading-relaxed text-ui-ink">{message.body}</p>
+                  <p className="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-ui-faint">
+                    {senders(message.from)} · {when(message.sentAt)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-[12px] text-ui-soft">Nothing announced yet.</p>
+          )}
+
+          {canAnnounce(viewerZone) && (
+            <div className="mt-4 rounded-xl border border-[#E6D08A] bg-white/70 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#8A6D00]">Yours to use</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-ui-soft">
+                One announcement a day, heard by every cabin and by the hold. Use it well.
+              </p>
+              <textarea
+                value={paDraft}
+                onChange={(event) => setPaDraft(event.target.value)}
+                placeholder="Cabin crew, doors to arrival…"
+                rows={2}
+                maxLength={1000}
+                className="mt-2 w-full resize-none rounded-lg border border-ui-line bg-white px-3 py-2 text-[12px] text-ui-ink outline-none focus:border-[#C8A93B]"
+              />
+              <button type="button" onClick={() => void announce()} disabled={directory.saving} className="sa-cta mt-2 disabled:opacity-60">
+                {directory.saving ? 'Announcing…' : 'Announce to the aircraft'} <span aria-hidden>→</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
         <div className="space-y-3">
@@ -406,6 +498,91 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
           )}
         </aside>
       </div>
+
+      {/* The rooms.
+
+          A cabin is somewhere to talk as well as somewhere to sit. You post
+          in your own and read every one behind it — so the reading is the
+          same line as a contact card, and the posting is narrower than both.
+          A section's conversation belongs to the people sitting in it.
+
+          Opens on your own cabin. The rest are a button away rather than
+          always on, because five rooms at once buries the one you are in
+          under whichever is busiest. */}
+      {directory.session && viewerZone && (
+        <div className="border-t border-ui-line px-5 py-6 sm:px-7">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">The rooms</p>
+              <h3 className="font-heading mt-1 text-xl leading-tight text-ui-ink">
+                {sectionLabel(viewerZone)} is talking
+              </h3>
+            </div>
+            {roomsAft.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setListeningAft((value) => !value)}
+                aria-pressed={listeningAft}
+                className="rounded-full border border-ui-line px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep transition-colors hover:bg-black/5"
+              >
+                {listeningAft
+                  ? `Just ${sectionLabel(viewerZone)}`
+                  : `Listen to ${list(roomsAft.map((zone) => sectionLabel(zone)))} too`}
+              </button>
+            )}
+          </div>
+
+          <p className="mt-2 max-w-[74ch] text-[12px] leading-relaxed text-ui-soft">
+            You speak in your own cabin. You can hear every cabin behind it and none ahead — so the rows in front
+            of you hear this one, and you hear the rows behind.
+          </p>
+
+          <div className="mt-4 rounded-2xl border border-ui-line bg-white/70 p-3.5">
+            <textarea
+              value={roomDraft}
+              onChange={(event) => setRoomDraft(event.target.value)}
+              placeholder={`Say something to ${sectionLabel(viewerZone)}…`}
+              rows={2}
+              maxLength={1000}
+              className="w-full resize-none rounded-lg border border-ui-line bg-white px-3 py-2 text-[12px] text-ui-ink outline-none focus:border-[#FF668F]"
+            />
+            <button type="button" onClick={() => void postToRoom()} disabled={directory.saving} className="sa-cta mt-2 disabled:opacity-60">
+              {directory.saving ? 'Posting…' : `Post to ${sectionLabel(viewerZone)}`} <span aria-hidden>→</span>
+            </button>
+          </div>
+
+          <div className={`mt-5 grid gap-4 ${rooms.length > 1 ? 'lg:grid-cols-2' : ''}`}>
+            {rooms.map((zone) => {
+              const said = directory.channels[zone] ?? [];
+              return (
+                <div key={zone} className={`rounded-2xl border p-4 ${zoneAccent[zone]}`}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep">
+                    {sectionLabel(zone)}
+                    {zone === viewerZone
+                      ? ' · yours'
+                      : ' · you are listening, they cannot hear you'}
+                  </p>
+                  {said.length ? (
+                    <ul className="mt-3 max-h-72 space-y-2.5 overflow-y-auto pr-1">
+                      {said.map((message) => (
+                        <li key={message.id} className="rounded-xl border border-ui-line bg-white/80 px-3 py-2.5">
+                          <p className="text-[11px] font-semibold text-ui-ink">{senders(message.from)}</p>
+                          <p className="mt-1 text-[12px] leading-relaxed text-ui-soft">{message.body}</p>
+                          <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-[11px] text-ui-soft">
+                      {zone === viewerZone ? 'Nobody has said anything yet. Go first.' : 'Quiet back there.'}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
   );
 };
