@@ -265,9 +265,29 @@ on, the directory cannot tell one cabin from another, so it fails closed:
 contact details go to nobody but their owner, nobody overhears anything, and
 `POST /messages` answers 503 rather than taking an introduction it has no way
 to place. A service that cannot name the cabins cannot keep a rule written in
-their names. `GET /health` reports `sections` so you can see which state a
-deployment is in — and it is worth checking, because that flag is the
-difference between a working directory and a quiet one.
+their names. `GET /health` is where you see which state a deployment is in,
+and it is worth reading before trusting a directory, because the difference
+between a working one and a quiet one is not visible from the page:
+
+| field | what it answers |
+| --- | --- |
+| `sections` | Can the cabins be told apart **right now**? False and every card keeps its contact details, nobody overhears, and no introduction sends. |
+| `configured` | Was a `HOLDERS_URL` or a `TOKEN_MINT` ever set? This separates "nobody configured it" from "the endpoint refused". |
+| `seated` / `cabin` | How much of the aircraft actually filled. |
+
+`sections` was `configured` until the chain scan arrived and pulled the two
+apart: with a mint set and an endpoint that refuses the scan, a deployment is
+configured and seating nobody, and reporting the first when you asked the
+second is how a silent failure stays silent. They are separate fields for
+that reason, and the pair reads as a diagnosis — `sections: false` with
+`configured: false` is a missing setting, and with `configured: true` it is
+an endpoint that would not answer.
+
+`seated` is the third failure, and the one that looks healthiest. A cabin
+filling to 20 of 178 reports `sections: true` and is telling the truth: the
+cabins genuinely can be told apart. It is simply a directory that works for
+twenty people and does not exist for anybody else, which is what falling back
+to `getTokenLargestAccounts` looks like from outside.
 
 Abuse is bounded separately: 20 introductions per wallet per hour, 1,000
 characters each, and contact links that must be `http(s)`.
@@ -334,7 +354,12 @@ workflow) before the code that depends on it goes out.
 
 **`TOKEN_MINT` is what turns the cabins on.** With it the Worker can read
 holders — from `HOLDERS_URL` if you set one, from the chain if you do not —
-and `GET /health` reports `sections: true`. Without any way to read holders
+and `GET /health` reports `sections: true` once a read has actually
+succeeded, with `seated` saying how many of `cabin` it placed. Setting the
+mint is what makes the read possible, not what makes it work: an endpoint
+that refuses the scan is `configured: true` with a `seated` well short of the
+aircraft, or `sections: false` if it would not answer at all. Without any way
+to read holders
 the directory cannot tell one cabin from another: every card keeps its
 contact details to itself, nobody overhears anything, and no introduction
 will send. `HOLDERS_URL` is a plain var in `wrangler.toml`, alongside

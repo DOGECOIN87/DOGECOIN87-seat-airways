@@ -41,7 +41,7 @@ import {
   signInChallenge, tokenHash,
   MESSAGES_PER_HOUR, MESSAGE_PAGE, SESSION_TTL_MS, SIGNIN_MAX_AGE_MS,
 } from './networking';
-import { canSeat, readLadder, rpcUrl } from './ladder';
+import { cabinSize, canSeat, readLadder, rpcUrl } from './ladder';
 import { canMessage, canViewContact } from '../../src/lib/seating';
 
 export interface Env {
@@ -460,14 +460,46 @@ async function handle(request: Request, env: Env): Promise<Response> {
     }
 
     if (request.method === 'GET' && url.pathname === '/health') {
+      /* `sections` is the field somebody curls this route to read, and it
+         used to answer a different question than the one being asked.
+         `canSeat` is true the moment a mint is set, so a deployment whose
+         endpoint refuses the holder scan reported `sections: true` while
+         withholding every contact detail from everybody and refusing every
+         introduction with a 503. A health check that reports the healthy
+         answer during precisely the failure it exists to surface is worse
+         than not having one, because it is believed.
+
+         So the seating is read here rather than assumed. `readLadder` is the
+         same cached call the directory already makes on every request: a warm
+         isolate answers from memory, and a cold one pays for one read per
+         `LADDER_CACHE_MS` — the read the next visitor would have paid for
+         anyway. If that read is slow then the directory is slow, which is a
+         thing to learn from a health check rather than have hidden by one.
+
+         `ok` stays a statement about the Worker itself, so "up but seating
+         nobody" and "down" remain different answers to different questions. */
+      const ladder = await readLadder(env);
       return json({
         ok: true,
         service: 'seat-airlines-banners',
         storage: usingR2(env) ? 'r2' : 'kv',
         directory: Boolean(env.DIRECTORY),
-        // Whether this deployment can tell one cabin from another at all,
-        // asked of the function that decides it rather than restated here.
-        sections: canSeat(env),
+        // Whether the cabins can be told apart *right now* — the thing that
+        // decides whether a card shows contact details or an introduction
+        // sends, asked of the ladder that decides it.
+        sections: ladder.live,
+        // And whether anything was ever configured to tell them apart, which
+        // is what separates "nobody set a mint or a feed" from "the endpoint
+        // refused". Two causes, two fixes, so they are two fields.
+        configured: canSeat(env),
+        /* How much of the aircraft actually filled. `sections: true` with
+           `seated: 20` out of `cabin: 178` is the quiet failure this pair
+           exists to make loud: a directory that works perfectly for the
+           twenty largest holders and does not exist for anybody else. It is
+           what a deployment falling back to `getTokenLargestAccounts` looks
+           like, which is what an unset `RPC_URL` looks like. */
+        seated: ladder.seated().length,
+        cabin: cabinSize(env),
       }, 200, { ...cors, 'cache-control': 'no-store' });
     }
 

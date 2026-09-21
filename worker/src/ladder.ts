@@ -66,10 +66,17 @@ export function rpcUrl(env: LadderEnv): string | undefined {
 }
 
 /**
- * Whether this deployment can tell one cabin from another at all.
+ * Whether this deployment is *configured* to tell one cabin from another.
  *
- * What `/health` reports as `sections`, asked of the same function that
- * decides it, so the two cannot drift.
+ * Reported by `/health` as `configured`, and deliberately no longer as
+ * `sections`. This answers "was a feed or a mint ever set", which is a
+ * question about the deployment. `sections` answers "was the seating
+ * actually read", which is a question about right now. They were the same
+ * field until the chain scan arrived and pulled them apart: with a mint set
+ * and an endpoint that refuses the scan, this returns true while the cabin
+ * seats nobody. Answering the first when an operator asked the second is how
+ * a silent failure stays silent, so `/health` reports both, and they mean
+ * different things on purpose.
  */
 export function canSeat(env: LadderEnv): boolean {
   return Boolean(env.HOLDERS_URL || env.TOKEN_MINT);
@@ -83,6 +90,29 @@ export function canSeat(env: LadderEnv): boolean {
  * means setting `VITE_MANIFEST_SIZE` there.
  */
 const DEFAULT_MANIFEST_SIZE = FULL_CABIN;
+
+/** The manifest size this deployment asks for, sane or not. */
+function requestedSize(env: LadderEnv): number {
+  return Math.max(2, Number(env.MANIFEST_SIZE || DEFAULT_MANIFEST_SIZE));
+}
+
+/**
+ * How many seats this deployment can fill, which is how many `/health`
+ * reports `seated` out of.
+ *
+ * A cabin quietly filling to twenty of a hundred and seventy-eight is the
+ * failure that survived every other fix in this file, because twenty seated
+ * holders and a working directory look exactly like success from outside.
+ * Reported as a number so it is something an operator reads rather than
+ * something they have to already suspect.
+ *
+ * Capped at the aircraft because `seatHolders` caps there too: a
+ * `MANIFEST_SIZE` above the seat count buys no extra seats, and reporting
+ * one would invent an aeroplane the page does not draw.
+ */
+export function cabinSize(env: LadderEnv): number {
+  return Math.min(requestedSize(env), FULL_CABIN);
+}
 
 export interface LadderEnv {
   /** An indexer, as the page's `VITE_HOLDERS_URL`. The uncapped source. */
@@ -155,7 +185,7 @@ export async function readLadder(env: LadderEnv): Promise<Ladder> {
   if (!canSeat(env)) return NO_LADDER;
   if (snapshot && snapshot.expiresAt > Date.now()) return snapshot.value;
 
-  const size = Math.max(2, Number(env.MANIFEST_SIZE || DEFAULT_MANIFEST_SIZE));
+  const size = requestedSize(env);
   const list = await readHolderList({
     holdersUrl: env.HOLDERS_URL,
     rpcUrl: rpcUrl(env),
