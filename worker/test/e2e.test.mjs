@@ -322,6 +322,11 @@ let scanAccounts = [];
 let scannedProgram = null;
 /* And taking the chain away, which is a different thing from it saying no. */
 let rpcDown = false;
+/* What `getTokenLargestAccounts` answers: the capped tier the reading falls
+   back to when the scan is refused. Null is "nothing to say", which is what
+   the other cases want — a scan that did not work should seat nobody rather
+   than quietly seat the twenty. A case that is *about* the fallback sets it. */
+let largestAccounts = null;
 
 const holders = createServer((req, res) => {
   if ((req.url ?? '').startsWith('/holders')) {
@@ -363,6 +368,8 @@ const holders = createServer((req, res) => {
       case 'getProgramAccounts':
         scannedProgram = call.params?.[0];
         return reply(scanAccounts);
+      case 'getTokenLargestAccounts':
+        return reply(largestAccounts && { value: largestAccounts });
       case 'getMultipleAccounts':
         /* Everybody here is a person. A null account is a wallet holding no
            SOL, which is exactly what a wallet that has only ever received
@@ -377,10 +384,18 @@ await new Promise((resolve) => holders.listen(8788, '127.0.0.1', resolve));
 // The Worker caches seating for a second locally; let any older one lapse.
 await new Promise((r) => setTimeout(r, 1200));
 
-await check('GET /health reports the directory is bound', async () => {
+await check('GET /health reports the seating it actually has', async () => {
+  /* Every field here is read rather than assumed, which is the whole point
+     of the route: `sections` used to be `canSeat(env)`, true the moment a
+     mint was set, and so it stayed true through exactly the failures an
+     operator curls this route to find. */
   const body = await (await fetch(`${BASE}/health`, { headers: { origin: ORIGIN } })).json();
   assert(body.directory === true, 'the Worker does not see a D1 binding — apply the migrations first');
-  assert(body.sections === true, 'the Worker has no holder feed, so it cannot tell the cabins apart');
+  assert(body.sections === true, 'the Worker cannot tell the cabins apart, so no card will show contact details');
+  assert(body.configured === true, 'a holder feed and a mint are both set in wrangler.local.toml');
+  assert(body.seated === holderList.length,
+    `the feed has ${holderList.length} holders and the cabin seated ${body.seated}`);
+  assert(body.cabin === 178, `the aircraft is 178 seats, reported as ${body.cabin}`);
 });
 
 await check('GET /holders hands the page the list the cabin is seated from', async () => {
@@ -746,6 +761,41 @@ await check('with no indexer, the cabin is seated off the chain', async () => {
 
   indexerDown = false;
   scanAccounts = [];
+});
+
+await check('an aircraft that fills to a fraction of itself says so', async () => {
+  /* The failure the `seated`/`cabin` pair exists for, and the one a
+     deployment actually lands in. With no indexer and an endpoint that
+     refuses `getProgramAccounts` — which is what Solana's public endpoint
+     does, and an unset `RPC_URL` is how a deployment ends up on it — the
+     reading falls back to `getTokenLargestAccounts` and seats at most twenty
+     of a hundred and seventy-eight.
+
+     Nothing about that is visible from the directory. It works, correctly,
+     for the handful of people it can place, and does not exist for anybody
+     else. `sections` is true and should be: the cabins genuinely can be told
+     apart. The number is the only tell, which is why it is reported. */
+  const first = await wallet();
+  const second = await wallet();
+  indexerDown = true;
+  scanAccounts = [];
+  largestAccounts = [
+    { address: first.address, uiAmount: 900_000, amount: '900000', decimals: 0 },
+    { address: second.address, uiAmount: 100_000, amount: '100000', decimals: 0 },
+  ];
+  // Past LADDER_CACHE_MS, so the seating is read again rather than reused.
+  await new Promise((r) => setTimeout(r, 1300));
+
+  const body = await (await fetch(`${BASE}/health`, { headers: { origin: ORIGIN } })).json();
+  assert(body.sections === true, 'the cabins can still be told apart, so this is not a sections failure');
+  assert(body.configured === true, 'the mint and the feed are both still configured');
+  assert(body.seated === 2, `the capped fallback seats 2, and /health reported ${body.seated}`);
+  assert(body.cabin === 178, `the aircraft is still 178 seats, reported as ${body.cabin}`);
+  assert(body.seated < body.cabin, 'a partly full aircraft must not read as a full one');
+
+  indexerDown = false;
+  largestAccounts = null;
+  await new Promise((r) => setTimeout(r, 1300));
 });
 
 await check('the preflight allows the headers the directory needs', async () => {

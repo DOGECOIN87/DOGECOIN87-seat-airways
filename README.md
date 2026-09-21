@@ -338,7 +338,9 @@ everything from everybody. With no mint at all it fails closed: contact
 details go nowhere but to their owner, nobody overhears anything, and an
 introduction is refused rather than delivered somewhere the Worker cannot
 place. `GET /health` reports `sections` false when a deployment is in that
-state.
+state, and `seated` out of `cabin` beside it — a cabin filling to twenty of
+178 is a working directory for twenty people and no directory at all for
+everybody else, which is the same failure wearing a healthier face.
 
 The rest of what the server holds: sign-in signatures are spent on use so a
 captured one cannot mint a second token, and a wallet may send twenty

@@ -60,7 +60,9 @@ ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 # withholds every card's contact details from everybody but their owner, shows
 # nobody another wallet's conversations, and refuses introductions rather than
 # delivering one it cannot place. That is the safe direction to fail in, and
-# `GET /health` reports `sections` either way.
+# `GET /health` reports `sections` either way — and `seated` out of `cabin`
+# beside it, because a cabin that fills to twenty of a hundred and seventy-
+# eight is the other way this goes quietly wrong.
 #
 # MANIFEST_SIZE must match the page's VITE_MANIFEST_SIZE. Both default to the
 # whole aircraft — 178 — read from the same constant in the shared seating
@@ -87,3 +89,12 @@ TOKEN_MINT = "AWJCyg9PrMtYju9yaQmdQLcwrGobHMTv9JU3mo4upump"
 # produce a directory that opened, listed everybody, and withheld every
 # contact detail from everybody with only `sections: false` on /health to say
 # so. A rate limit is a failure that retries. Silence is not.
+#
+# There is one cost the public endpoint carries that a rate limit does not.
+# Reading the whole holder list means asking the token program for every
+# account it owns for this mint, which is the expensive call, and an endpoint
+# that refuses it drops the reading to `getTokenLargestAccounts` — twenty
+# accounts, hard capped. The directory then works correctly for twenty people
+# and does not exist for the other hundred and fifty-eight. `GET /health`
+# reports `seated` out of `cabin`, so that is a number to read rather than a
+# thing to suspect.
