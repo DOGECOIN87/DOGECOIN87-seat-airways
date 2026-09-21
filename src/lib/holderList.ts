@@ -84,20 +84,45 @@ function rpcCall(rpcUrl: string) {
   };
 }
 
+/**
+ * `getMultipleAccounts` takes a hard maximum of a hundred addresses.
+ *
+ * Which is fine for a cabin of forty and silently not fine for one of 178:
+ * over the limit the call errors, the caller reads that as "the chain could
+ * not be asked", and the whole manifest falls back to the twenty largest
+ * accounts. A full aircraft that quietly seats twenty is worse than one that
+ * refuses to start, so every account lookup goes through here in batches.
+ */
+const ACCOUNTS_PER_CALL = 100;
+
+const inBatches = <T,>(items: readonly T[]): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += ACCOUNTS_PER_CALL) {
+    out.push(items.slice(i, i + ACCOUNTS_PER_CALL));
+  }
+  return out;
+};
+
 /** Keeps the holders that are people. Null if the chain could not be asked. */
 async function peopleOnly(
   rpc: <T>(method: string, params: unknown[]) => Promise<T | null>,
   holders: Holder[],
 ): Promise<Holder[] | null> {
   if (!holders.length) return holders;
-  const res = await rpc<{ value: ({ owner: string } | null)[] }>('getMultipleAccounts', [
-    holders.map((h) => h.address),
-    { encoding: 'base64', dataSlice: { offset: 0, length: 0 } },
-  ]);
-  if (!res) return null;
+
+  const pages = await Promise.all(inBatches(holders).map((batch) =>
+    rpc<{ value: ({ owner: string } | null)[] }>('getMultipleAccounts', [
+      batch.map((h) => h.address),
+      { encoding: 'base64', dataSlice: { offset: 0, length: 0 } },
+    ])));
+  // One unanswered page makes the whole list a guess, and guessing here seats
+  // a bonding curve in 1A.
+  if (pages.some((page) => !page)) return null;
+
+  const accounts = pages.flatMap((page) => page!.value);
   return holders.filter((_, i) => {
-    const account = res.value[i];
-    return account === null || account.owner === SYSTEM_PROGRAM;
+    const account = accounts[i];
+    return account === null || account === undefined || account.owner === SYSTEM_PROGRAM;
   });
 }
 
@@ -106,11 +131,16 @@ async function ownersOf(
   rpc: <T>(method: string, params: unknown[]) => Promise<T | null>,
   accounts: string[],
 ): Promise<(string | null)[]> {
-  const res = await rpc<{
-    value: ({ data: { parsed: { info: { owner: string } } } } | null)[];
-  }>('getMultipleAccounts', [accounts, { encoding: 'jsonParsed' }]);
-  if (!res) return accounts.map(() => null);
-  return res.value.map((a) => a?.data?.parsed?.info?.owner ?? null);
+  const pages = await Promise.all(inBatches(accounts).map((batch) =>
+    rpc<{ value: ({ data: { parsed: { info: { owner: string } } } } | null)[] }>(
+      'getMultipleAccounts', [batch, { encoding: 'jsonParsed' }],
+    )));
+  return pages.flatMap((page, i) => (
+    page
+      ? page.value.map((a) => a?.data?.parsed?.info?.owner ?? null)
+      // A page that failed is that batch's worth of unknowns, not everyone's.
+      : inBatches(accounts)[i].map(() => null)
+  ));
 }
 
 async function fromIndexer(holdersUrl: string | undefined): Promise<Holder[] | null> {
@@ -153,9 +183,10 @@ export async function readHolderList(source: HolderSource): Promise<HolderList |
 
   const indexed = await fromIndexer(holdersUrl);
   if (indexed && indexed.length) {
-    // Only as many as could be seated, with room for the contracts to drop
-    // out, and inside getMultipleAccounts' limit of 100.
-    const top = [...indexed].sort((a, b) => b.balance - a.balance).slice(0, Math.min(100, manifestSize + 10));
+    // Only as many as could be seated, with room for the contracts that will
+    // drop out. The account lookup batches, so this is no longer pinned to
+    // getMultipleAccounts' hundred.
+    const top = [...indexed].sort((a, b) => b.balance - a.balance).slice(0, manifestSize + 10);
     const people = rpc ? await peopleOnly(rpc, top) : top;
     if (people) return { holders: people, supply, live: true };
   }

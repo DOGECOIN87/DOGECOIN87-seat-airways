@@ -21,14 +21,20 @@
  * the holder list, caching it, and answering "which cabin is this wallet in".
  */
 
-import { seatHolders, zoneRank } from '../../src/lib/seating';
+import { FULL_CABIN, seatHolders, zoneRank } from '../../src/lib/seating';
 import { readHolderList } from '../../src/lib/holderList';
 import type { ZoneKey } from '../../src/content/cabin';
 
 /** How long a holder list is reused before it is read again. */
 const DEFAULT_CACHE_MS = 60_000;
-/** Matches the page's default; a deployment that changes one changes both. */
-const DEFAULT_MANIFEST_SIZE = 40;
+/**
+ * The whole aircraft, read from the shared seating rather than written down.
+ *
+ * The page defaults to the same constant from the same file, so the two agree
+ * without anybody keeping two numbers in step. Setting `MANIFEST_SIZE` here
+ * means setting `VITE_MANIFEST_SIZE` there.
+ */
+const DEFAULT_MANIFEST_SIZE = FULL_CABIN;
 
 export interface LadderEnv {
   /** An indexer, as the page's `VITE_HOLDERS_URL`. The uncapped source. */

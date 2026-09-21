@@ -53,16 +53,18 @@ ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 # TOKEN_MINT above, which is the same fallback `holderList.ts` gives the page,
 # because it is the same function. Twenty accounts is the flight deck, all of
 # first, and ten business seats — rank 21 back is empty, so the aircraft ends
-# in the middle of row 4 and nobody has anybody behind them to read.
+# in the middle of row 4 and the holders down there have nobody behind them.
 #
 # With neither an indexer nor an RPC the directory cannot tell one cabin from
 # another, so it withholds every card's contact details from everybody but
 # their owner and shows nobody another wallet's conversations. That is the
 # safe direction to fail in, and `GET /health` reports `sections` either way.
 #
-# MANIFEST_SIZE must match the page's VITE_MANIFEST_SIZE; both default to 40.
+# MANIFEST_SIZE must match the page's VITE_MANIFEST_SIZE. Both default to the
+# whole aircraft — 178 — read from the same constant in the shared seating
+# module, so leaving both unset is the one way they cannot disagree.
 # HOLDERS_URL = "https://…"
-# MANIFEST_SIZE = "40"
+# MANIFEST_SIZE = "178"
 
 # The token. Together with the RPC_URL secret below, lets the Worker refuse
 # adverts from wallets that do not hold it; without that secret the check is

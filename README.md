@@ -106,7 +106,7 @@ the best placements at the front. The image is centre-cropped and re-encoded on
 the way in, so nothing anybody uploads can stretch the grid.
 
 Seats are drawn at a size that follows their class — the flight deck largest,
-first next, the rest at par — because rank 1 and rank 40 are not the same
+first next, the rest at par — because rank 1 and rank 178 are not the same
 placement and a map that draws them identically argues that they are.
 
 Held seats with nothing on them yet carry Seat Airlines' own campaigns, the way
@@ -182,8 +182,15 @@ See `.env.example`, which documents all of them.
 
 **`VITE_HOLDERS_URL` is not really optional.** Without it the code falls back
 to the RPC's `getTokenLargestAccounts`, which returns at most 20 accounts —
-and the cabin seats 40. Half the aeroplane would sit empty however many
-holders the token has.
+and the cabin seats **178**. The flight deck and first would fill, business
+would get ten of its thirty, and everything from row 4 back would sit empty
+however many holders the token has.
+
+An indexer's list is read in batches of a hundred, because
+`getMultipleAccounts` — which is what separates people from bonding curves —
+takes no more than that per call. Over the limit it errors, and an error
+reads as "the chain could not be asked", which would drop the whole aircraft
+back to those twenty accounts without saying so.
 
 ### The market feed
 

@@ -1,5 +1,5 @@
 import { ALL_SEATS } from '../content/cabin';
-import { seatHolders as seat, type Holder, type Manifest } from './seating';
+import { FULL_CABIN, seatHolders as seat, type Holder, type Manifest } from './seating';
 
 /**
  * Who is actually on this aircraft.
@@ -24,19 +24,27 @@ import { seatHolders as seat, type Holder, type Manifest } from './seating';
  * end of it: the build-time manifest size, bound once.
  */
 
-/** How many holders are seated. Everyone below this is standby. */
+/**
+ * How many holders are seated. Everyone below this is standby.
+ *
+ * The whole aircraft by default. It used to be forty, which happened to be
+ * the flight deck, first and business exactly — so the seat map drew Exit Row
+ * and Economy, counted them in its 178, and they could never be anything but
+ * `0/12` and `0/126` however many holders turned up.
+ */
 export const MANIFEST_SIZE = Math.max(
   2,
-  Math.min(ALL_SEATS.length, Number(import.meta.env.VITE_MANIFEST_SIZE || 40)),
+  Math.min(ALL_SEATS.length, Number(import.meta.env.VITE_MANIFEST_SIZE || FULL_CABIN)),
 );
 
 /**
  * Seat a list of holders, at this deployment's manifest size.
  *
  * **The Worker has to agree with this.** It computes the same ladder to
- * decide who may read whose card, and it reads its own `MANIFEST_SIZE`, so a
- * deployment that changes `VITE_MANIFEST_SIZE` has to change both or the two
- * will disagree about who is seated at the very back.
+ * decide who may read whose card. Both default to `FULL_CABIN` from the
+ * shared module, so out of the box they cannot disagree; a deployment that
+ * sets `VITE_MANIFEST_SIZE` has to set the Worker's `MANIFEST_SIZE` to match,
+ * or the two will differ about who is seated at the very back.
  */
 export function seatHolders(holders: readonly Holder[], supply: number, live: boolean): Manifest {
   return seat(holders, supply, live, MANIFEST_SIZE);

@@ -43,6 +43,16 @@ export const SEAT_ORDER: readonly CabinSeat[] = (() => {
   });
 })();
 
+/**
+ * Every seat there is.
+ *
+ * The default manifest size on both sides, so "how big is the aircraft" is
+ * one number in one file rather than a 40 written in the page's build config
+ * and another in the Worker's vars, waiting to disagree about who is seated
+ * at the back.
+ */
+export const FULL_CABIN = SEAT_ORDER.length;
+
 /** One holder, as read from the chain (or made up, in demo). */
 export interface Holder {
   address: string;
