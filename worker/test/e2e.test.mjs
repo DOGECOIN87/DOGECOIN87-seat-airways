@@ -459,19 +459,68 @@ await check('and never aft', async () => {
   );
 });
 
-await check('a conversation with the hold is fetched by nobody', async () => {
+/* ── Writing, which is narrower than reading ──────────────────────────────
+   The composer has always been First Class to First Class. Until now that was
+   the whole of it: the page hid the button and this route took the message
+   from anybody holding a session, so the rule was one fetch away from not
+   existing. These cases are that fetch. */
+
+await check('a cabin behind cannot introduce itself forward', async () => {
+  const hers = (await (await api('/session', { method: 'POST', body: await signInBody(mabel) })).json()).token;
+  const res = await api('/messages', {
+    method: 'POST', token: hers, body: { to: alice.address, body: 'Business here, coming through.' },
+  });
+  assert(res.status === 403, `business posted into a First Class inbox: ${res.status}`);
+
+  const theirs = await (await api('/messages', { token: aliceToken })).json();
+  assert(
+    !theirs.inbox.some((m) => m.body === 'Business here, coming through.'),
+    'the refusal was reported and the row written anyway',
+  );
+});
+
+await check('and First Class cannot write aft either', async () => {
+  /* Not symmetry for its own sake. alice reads every word of mabel's card,
+     so this is the one place the aircraft is not simply transparent
+     backwards: a view is what the seat buys, and an inbox is not a view. */
+  const res = await api('/messages', {
+    method: 'POST', token: aliceToken, body: { to: mabel.address, body: 'Row 1, writing to row 11.' },
+  });
+  assert(res.status === 403, `First Class posted into business: ${res.status}`);
+});
+
+await check('the flight deck is not exempt', async () => {
+  /* The deck reads everything, which makes this the rule most likely to be
+     "corrected" by somebody reasoning from the other two. It is not an
+     oversight: introductions are a First Class perk, and the deck's is the
+     PA. */
+  const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
+  const res = await api('/messages', {
+    method: 'POST', token: captainToken, body: { to: alice.address, body: 'From the deck.' },
+  });
+  assert(res.status === 403, `the flight deck posted into First Class: ${res.status}`);
+});
+
+await check('a conversation with the hold is started by nobody, and fetched by nobody', async () => {
   /* `owner` is the wallet from the banner cases: it holds no seat, so it is
      on no manifest and no roster, and the page could not name it if it tried.
      A conversation it is part of is not the cabin's business, and — the
      reason this is a rule rather than a filter — not something the Worker
-     should be reading out of the database to then decline to show. */
+     should be reading out of the database to then decline to show.
+
+     Both halves are asserted because the send being refused would otherwise
+     make the read assertion pass for the wrong reason. The read side still
+     has work to do: rows written before this rule existed are in the table,
+     and what keeps them out of somebody's `overheard` is the query naming
+     the seats rather than the sender having been turned away. */
   const stranger = await wallet();
   const strangerToken =
     (await (await api('/session', { method: 'POST', body: await signInBody(stranger) })).json()).token;
-  await api('/messages', {
+  const refused = await api('/messages', {
     method: 'POST', token: strangerToken,
     body: { to: owner, body: 'Two wallets in the hold, talking.' },
   });
+  assert(refused.status === 403, `a wallet with no seat posted an introduction: ${refused.status}`);
 
   const captainToken = (await (await api('/session', { method: 'POST', body: await signInBody(captain) })).json()).token;
   const heard = await (await api('/messages', { token: captainToken })).json();

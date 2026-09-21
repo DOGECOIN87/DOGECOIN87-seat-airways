@@ -75,11 +75,30 @@ check('outranks is strictly forward', () => {
   assert.equal(outranks(business, hold), true);
 });
 
-check('First Class messaging is unchanged', () => {
+check('an introduction is First Class to First Class', () => {
   assert.equal(canMessage(first, first, alice, bob), true);
-  assert.equal(canMessage(first, business, alice, bob), false);
-  assert.equal(canMessage(business, first, alice, bob), false);
+  assert.equal(canMessage(first, business, alice, bob), false, 'First Class wrote into the cabin behind it');
+  assert.equal(canMessage(business, first, alice, bob), false, 'business wrote into the cabin in front of it');
   assert.equal(canMessage(first, first, alice, alice), false);
+});
+
+check('writing is narrower than reading, and the deck is not exempt', () => {
+  /* Every other rule here is about reading down the aircraft, and the flight
+     deck reads everything. Writing is not that rule: an inbox is a claim on
+     somebody's attention rather than a view, and the cabin sells it in one
+     place. So the deck cannot post into First Class even though it reads
+     First Class, and First Class cannot post back into the deck. */
+  assert.equal(canViewContact(deck, first), true, 'the deck reads First Class');
+  assert.equal(canMessage(deck, first, alice, bob), false, 'but it does not write to it');
+  assert.equal(canMessage(first, deck, alice, bob), false);
+  assert.equal(canMessage(business, business, alice, bob), false, 'nor does a cabin write to its own peers');
+});
+
+check('the hold sends nothing and is sent nothing', () => {
+  assert.equal(canMessage(hold, first, alice, bob), false, 'a wallet with no seat introduced itself');
+  assert.equal(canMessage(first, hold, alice, bob), false, 'an introduction was addressed to the hold');
+  assert.equal(canMessage(hold, hold, alice, bob), false);
+  assert.equal(canMessage(first, first, null, bob), false, 'a disconnected wallet sent one');
 });
 
 check('contact links must be http(s)', () => {

@@ -21,7 +21,7 @@ The directory, every route of which needs a session:
 | `GET /directory` | every published card |
 | `PUT /profile` | publish or amend your own |
 | `GET /messages` | your introductions, both directions |
-| `POST /messages` | send one |
+| `POST /messages` | send one, First Class to First Class |
 
 ## What it deliberately does not know
 
@@ -135,6 +135,7 @@ aft and opaque looking forward:
 | A name and role | the roster, and the roster belongs to the whole cabin |
 | Contact details | your own section and every seated cabin behind it, never one in front |
 | A conversation | the two wallets on it, plus any section seated ahead of **both** |
+| An introduction | First Class to First Class, and nowhere else |
 
 Three consequences worth stating plainly, because they are the point rather
 than side effects. The flight deck reads everything, and economy — with no
@@ -151,9 +152,23 @@ seats — `WHERE address IN (…)` and `WHERE sender IN (…) AND recipient IN
 (…)`, a cabinful of bound parameters — rather than asking for everything and
 filtering after. A row nobody can be shown is a row not worth fetching.
 
+**Writing is narrower than reading, and that is not an oversight.** An
+introduction is First Class to First Class: the flight deck reads every card
+on the aircraft and still cannot post into one, because a view is what a seat
+buys and an inbox is a claim on somebody's attention. The cabin sells that in
+one place.
+
+Until recently that rule was the page's alone. The composer was hidden from
+everybody outside First Class and this route took the message anyway, so one
+fetch from economy put a note in a First Class inbox — and it arrived under a
+heading promising the reader it had come from their own cabin. Reads were
+enforced here; writes were on trust. `canMessage` sits in the shared seating
+module with the other two rules now, and `POST /messages` asks it before it
+writes a row.
+
 So the seat is not just a placement any more. It is how far forward you can
-see, which is the seat ladder's own argument applied to people instead of
-legroom.
+see, and how far back you can reach — which is the seat ladder's own argument
+applied to people instead of legroom.
 
 ### Knowing that without a second ladder
 
@@ -183,10 +198,14 @@ Two things have to line up, and both are config rather than code:
 - **`MANIFEST_SIZE` must match `VITE_MANIFEST_SIZE`**, or the two disagree
   about who is on the aircraft at all at the very back.
 
-Unset `HOLDERS_URL` and the directory cannot tell one cabin from another, so
-it fails closed: contact details go to nobody but their owner, and nobody
-overhears anything. `GET /health` reports `sections` so you can see which
-state a deployment is in.
+With neither `HOLDERS_URL` nor an `RPC_URL`/`TOKEN_MINT` pair to fall back
+on, the directory cannot tell one cabin from another, so it fails closed:
+contact details go to nobody but their owner, nobody overhears anything, and
+`POST /messages` answers 503 rather than taking an introduction it has no way
+to place. A service that cannot name the cabins cannot keep a rule written in
+their names. `GET /health` reports `sections` so you can see which state a
+deployment is in — and it is worth checking, because that flag is the
+difference between a working directory and a quiet one.
 
 Abuse is bounded separately: 20 introductions per wallet per hour, 1,000
 characters each, and contact links that must be `http(s)`.

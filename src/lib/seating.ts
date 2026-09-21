@@ -8,10 +8,10 @@
  * with itself is worse than one nobody checks.
  *
  * That argument is against a second *copy*, not against the server knowing.
- * Once the rules below decide who may read somebody's contact details and
- * whose conversations are visible from which cabin, they stop being an
- * interface affordance and become a boundary — and a boundary enforced only
- * in the browser is not one. So the ladder lives here, in plain TypeScript
+ * Once the rules below decide who may read somebody's contact details, whose
+ * conversations are visible from which cabin, and who may write into whose
+ * inbox, they stop being an interface affordance and become a boundary — and
+ * a boundary enforced only in the browser is not one. So the ladder lives here, in plain TypeScript
  * with no browser and no Cloudflare in it, and both sides import this file.
  * There is one copy; it is this one.
  *
@@ -199,4 +199,41 @@ export function canOverhear(
 ): boolean {
   if (!viewerZone || !senderZone || !recipientZone) return false;
   return outranks(viewerZone, senderZone) && outranks(viewerZone, recipientZone);
+}
+
+/**
+ * Whether a viewer may send an introduction to a member.
+ *
+ * Narrower than anything above, and on purpose. Reading down the aircraft is
+ * what the seat buys; writing into somebody's inbox is a claim on their
+ * attention, and the cabin sells that one only at the front. First Class
+ * introduces itself to First Class — nobody writes forward into the flight
+ * deck, and nobody writes out of the rows behind.
+ *
+ * ── Why this moved ────────────────────────────────────────────────────────
+ * It lived in `sectionAccess.ts`, the page's own module, for as long as the
+ * composer was the only thing that ever asked. That is what made it an
+ * interface affordance rather than a rule: the button was hidden from
+ * everybody else, and `POST /messages` took the message anyway from anyone
+ * holding a session. A wallet in economy could put a note in a First Class
+ * inbox with one fetch, and the recipient would read it under a heading
+ * promising it had come from their own cabin.
+ *
+ * So it sits here with the other two, the Worker asks it before it writes a
+ * row, and what the composer does is decline to offer a message that would
+ * be refused — which is what a filter in front of a boundary is for.
+ *
+ * The addresses are the part no seat can answer: a wallet is not an
+ * introduction to itself.
+ */
+export function canMessage(
+  viewerZone: ZoneKey | null,
+  memberZone: ZoneKey | null,
+  viewerAddress: string | null,
+  memberAddress: string,
+): boolean {
+  return viewerZone === 'first'
+    && memberZone === 'first'
+    && Boolean(viewerAddress)
+    && viewerAddress !== memberAddress;
 }

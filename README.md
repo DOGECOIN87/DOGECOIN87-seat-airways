@@ -285,15 +285,27 @@ never for the rest. The seat stopped being a placement and became how far forwar
 you can see, which is the seat ladder's own argument applied to people rather
 than to legroom.
 
+**Writing is narrower than reading.** An introduction is First Class to First
+Class and nothing else — the flight deck reads every card on the aircraft and
+still cannot post into one, because a view is what a seat buys and an inbox is
+a claim on somebody's attention. That was the page's rule alone until
+recently: the composer was hidden from everybody outside First Class, and
+`POST /messages` took their message regardless, so one fetch from economy put
+a note in a First Class inbox — under a heading promising the reader it had
+come from their own cabin.
+
 That is enforced where the rows are, not in the browser. Which meant the
 Worker had to learn the seating it spent its life refusing to learn — and the
 refusal was always about a second *copy* drifting, so there is not one: the
 ladder lives in `src/lib/seating.ts`, with no browser and no Cloudflare in it,
 and the page and the Worker import the same file. The Worker reads the same
 holder feed the page does (`HOLDERS_URL`, which should be your
-`VITE_HOLDERS_URL`) and caches the seating for a minute. Unset, it fails
-closed: contact details go nowhere but to their owner, and nobody overhears
-anything.
+`VITE_HOLDERS_URL`) and caches the seating for a minute; failing that, it
+falls back to the twenty largest accounts from `RPC_URL`, exactly as the page
+does. With neither it fails closed: contact details go nowhere but to their
+owner, nobody overhears anything, and an introduction is refused rather than
+delivered somewhere the Worker cannot place. `GET /health` reports `sections`
+false when a deployment is in that state.
 
 The rest of what the server holds: sign-in signatures are spent on use so a
 captured one cannot mint a second token, and a wallet may send twenty

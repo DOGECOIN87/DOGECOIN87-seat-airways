@@ -13,19 +13,21 @@
  *   GET    /directory  every published card
  *   PUT    /profile    publish or amend your own
  *   GET    /messages   your introductions, both directions
- *   POST   /messages   send one
+ *   POST   /messages   send one, First Class to First Class
  *
- * ── What this service does not do ─────────────────────────────────────────
- * It does not know which seat anybody is in, and it must not learn. Working
- * that out means the whole seat ladder — ranking, cutoffs, tie-breaks, the
- * cargo-hold rule — and a second copy of that logic would drift from the
- * page's copy the first time either changed. The page already computes the
- * ladder, because computing the ladder is what the page is. So adverts are
- * stored against the wallet that published them and the page decides where
- * they hang.
+ * ── What this service knows about seats ───────────────────────────────────
+ * For the wall, nothing, and it needs nothing: an advert is stored against
+ * the wallet that published it and the page decides where it hangs. That
+ * leaves the wall exactly one question — is this request really from the
+ * wallet it names? — and the first half of this file answers it.
  *
- * That leaves exactly one question here: is this request really from the
- * wallet it names? Everything below is in service of answering it.
+ * For the directory that is not enough. "Your own section and everything
+ * behind it" is a rule about who may read somebody's email address and who
+ * may write into their inbox, and a rule enforced in the browser is a
+ * suggestion the network tab ignores. So this side works the seating out as
+ * well. Not a second copy of it — the drift that would cause is what the
+ * refusal was always about — but the page's own module, imported from
+ * `src/lib/seating.ts` and fed the page's own holder feed by `ladder.ts`.
  */
 
 import {
@@ -38,7 +40,7 @@ import {
   MESSAGES_PER_HOUR, MESSAGE_PAGE, SESSION_TTL_MS, SIGNIN_MAX_AGE_MS,
 } from './networking';
 import { readLadder } from './ladder';
-import { canViewContact, zoneRank } from '../../src/lib/seating';
+import { canMessage, canViewContact } from '../../src/lib/seating';
 
 export interface Env {
   BANNERS: KVNamespace;
@@ -79,7 +81,11 @@ export interface Env {
    * another and withholds everything but your own card.
    */
   HOLDERS_URL?: string;
-  /** Must match the page's `VITE_MANIFEST_SIZE`. Defaults to 40, as it does. */
+  /**
+   * Must match the page's `VITE_MANIFEST_SIZE`. Unset, both sides default to
+   * the whole aircraft out of the shared seating, which is the one way they
+   * cannot disagree.
+   */
   MANIFEST_SIZE?: string;
   /** How long seating is cached, in milliseconds. Defaults to a minute. */
   LADDER_CACHE_MS?: string;
@@ -284,12 +290,15 @@ function wallEtag(wall: Wall): string {
    Profiles and introductions, in SQL, because they are rows: one card per
    wallet, and messages read back by recipient and by sender.
 
-   What this service still does not know is which seat anybody is in. The page
-   decides that, as it does for adverts, and the section perks — contacts
-   surfaced to your own section, introductions between First Class members —
-   are the page's reading of the manifest it already holds.
+   This service used not to know which seat anybody was in, and this comment
+   used to say so: the page decided that, as it does for adverts, and the
+   section perks were the page's reading of a manifest it already held. That
+   is no longer true, because a perk that is only the page's reading is one
+   the network tab helps itself to. The seating is worked out on this side as
+   well — from the page's own module rather than a second copy of it — and
+   the perks are decided where the rows are.
 
-   The lines this service does draw are the two it can hold on its own:
+   The lines this service draws:
 
      · Nothing here is readable without a session, and a session is only
        opened by a wallet that proved its key *and* holds the token. The
@@ -301,7 +310,10 @@ function wallEtag(wall: Wall): string {
        section and everything behind it, conversations are readable by the
        two wallets on them and by any section ahead of both. `ladder.ts` says
        how this side comes to know which is which without keeping a second
-       copy of the seating. */
+       copy of the seating.
+     · An introduction is First Class to First Class. Reading down the
+       aircraft is what a seat buys; writing into somebody's inbox is a claim
+       on their attention, and the cabin sells that one only at the front. */
 
 interface ProfileRow {
   address: string;
@@ -597,6 +609,34 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
         const parsed = readMessageBody(body.body);
         if ('error' in parsed) return json({ error: parsed.error }, 400, priv);
+
+        /* Who may start a conversation, asked of the seating rather than of
+           the composer.
+
+           The page has always hidden the composer outside First Class, and
+           until now that was the whole of the rule: this route took an
+           introduction from anybody holding a session, so one fetch put a
+           note from the back of the aircraft into a First Class inbox — and
+           the recipient read it under a heading promising it had come from
+           their own cabin. Reads were enforced here; writes were on trust.
+
+           `canMessage` is the page's own function, out of the file both
+           sides import, so the composer and this check cannot come apart.
+           Asked after the message has been read and before the rate limit,
+           which is the first thing here that costs a query. */
+        const ladder = await readLadder(env);
+        if (!ladder.live) {
+          /* With no holder feed every wallet reads as unseated, so the rule
+             below would refuse everybody — correctly, but for a reason that
+             is about this deployment rather than about them. Say the true
+             one. It fails closed, as the rest of the directory does when it
+             cannot tell the cabins apart: `HOLDERS_URL`, or `RPC_URL` with
+             `TOKEN_MINT`, is what turns introductions on. */
+          return json({ error: 'The cabin cannot tell which section you are in right now.' }, 503, priv);
+        }
+        if (!canMessage(ladder.zoneOf(me), ladder.zoneOf(to), me, to)) {
+          return json({ error: 'Introductions are First Class to First Class.' }, 403, priv);
+        }
 
         const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
         const recent = await db

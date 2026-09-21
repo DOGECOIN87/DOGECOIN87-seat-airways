@@ -6,35 +6,32 @@
  * store: which of them the page puts in front of you, read off the seat
  * ladder it has already worked out.
  *
- * This is the page's own filter, not the boundary. The server cannot check a
- * section without a second copy of that ladder; the rule it does hold is that
- * the directory opens only to a wallet holding the token, so everything in it
- * is a holders' room to begin with. The two work together — the server
- * decides who is let in, this decides what is worth showing them.
+ * This is the page's own filter, not the boundary — but it is the same rule.
+ * The Worker computes the seating too now, in `worker/src/ladder.ts`, from
+ * the very module this file re-exports, and refuses at the row what this file
+ * declines to draw. That is the order the two belong in: the server decides,
+ * and this decides what is worth putting in front of somebody, so that a
+ * holder is not offered a card that will not open or a composer whose message
+ * would come back refused.
  */
 import type { ZoneKey } from '../content/cabin';
 
 /**
- * Who may read a card, and who may read a conversation.
+ * Who may read a card, who may read a conversation, and who may start one.
  *
- * Both now live in `seating.ts`, because the Worker enforces them and the two
- * must be the same rule rather than two readings of it. Re-exported here so
- * the cabin components keep asking the module that is about access.
+ * All three live in `seating.ts`, because the Worker enforces them and the
+ * two sides must be the same rule rather than two readings of it. Re-exported
+ * here so the cabin components keep asking the module that is about access.
+ *
+ * `canMessage` was the last one still written out in this file, and being the
+ * page's alone is exactly what kept it from being a rule: the composer was
+ * hidden from everybody outside First Class, and `POST /messages` took their
+ * message regardless. It is narrower than the other two and always was —
+ * reading down the aircraft is what the seat buys, and writing into somebody's
+ * inbox is sold only at the front — which is a reason to enforce it, not a
+ * reason to keep it here.
  */
-export { canViewContact, canOverhear, outranks, zoneRank } from './seating';
-
-/** First-class messaging is intentionally narrower than contact visibility. */
-export function canMessage(
-  viewerZone: ZoneKey | null,
-  memberZone: ZoneKey,
-  viewerAddress: string | null,
-  memberAddress: string,
-): boolean {
-  return viewerZone === 'first'
-    && memberZone === 'first'
-    && Boolean(viewerAddress)
-    && viewerAddress !== memberAddress;
-}
+export { canMessage, canViewContact, canOverhear, outranks, zoneRank } from './seating';
 
 export function sectionLabel(zone: ZoneKey): string {
   switch (zone) {
