@@ -82,7 +82,22 @@ export default function AdvertDialog({ seat, current, onSave, onClear, onClose, 
   };
 
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2B2F37]/50 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Advertise on seat ${seat}`} onPaste={acceptPaste} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <div className="ui-card max-h-[94vh] w-full max-w-2xl overflow-y-auto p-5 sm:p-6">
+    {/* A column, not a scrolling box.
+
+        This card used to carry `overflow-y-auto` itself, and it never
+        scrolled: `.ui-card` sets `overflow: hidden`, and it is written
+        outside any `@layer` while Tailwind's utilities are inside one — so
+        the unlayered rule wins the cascade no matter what order they are in.
+        Everything past 94vh was clipped with no scrollbar to recover it,
+        which on a phone meant the one button this dialog exists for could
+        not be reached or even seen.
+
+        So the card clips (which is what it is for — the rounded corners) and
+        a child scrolls inside it, with the actions pinned below as their own
+        row. `min-h-0` is load-bearing: without it a flex child refuses to
+        shrink below its content and the scroll never engages. */}
+    <div className="ui-card flex max-h-[94vh] w-full max-w-2xl flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
       <header className="mb-4 flex items-baseline gap-3"><h2 className="text-[13px] font-bold uppercase tracking-[.2em] text-ui-deep">Seat {seat}</h2><p className="text-[11px] uppercase tracking-[.14em] text-ui-faint">Your billboard</p><button ref={first} type="button" onClick={onClose} className="ml-auto px-2 text-[18px] leading-none text-ui-soft" aria-label="Close">×</button></header>
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_220px]">
         <div>
@@ -103,9 +118,23 @@ export default function AdvertDialog({ seat, current, onSave, onClear, onClose, 
       </div>
       <label className="mt-4 block"><span className="mb-1 block text-[10px] uppercase tracking-[.16em] text-ui-faint">Description</span><input value={alt} onChange={e => setAlt(e.target.value)} maxLength={120} placeholder="What the advert says" className="ui-field" /></label>
       <label className="mt-3 block"><span className="mb-1 block text-[10px] uppercase tracking-[.16em] text-ui-faint">Link (optional)</span><input value={href} onChange={e => setHref(e.target.value)} inputMode="url" placeholder="https://" className="ui-field" /></label>
-      {error && <p role="alert" className="mt-3 text-[11.5px] font-semibold text-[#B3261E]">{error}</p>}
       <p className="mt-4 ui-rule pt-3 text-[10.5px] leading-relaxed text-ui-faint">{shared ? 'Your wallet will ask you to sign this advert. The signature proves the seat is yours and covers this exact image — it moves no funds.' : 'Saved in this browser only. Everyone else sees the published wall until yours is accepted onto it.'}</p>
-      <div className="mt-4 flex gap-2"><button type="button" onClick={() => void save()} disabled={busy} className="sa-cta px-5 py-2 text-[11px] disabled:opacity-40">{busy ? 'Working…' : shared ? 'Sign and put it up' : 'Put it up'}</button>{current && <button type="button" onClick={() => { onClear(); onClose(); }} className="sa-ghost px-5 py-2 text-[11px]">Take it down</button>}</div>
+      </div>
+
+      {/* ── The action bar ──
+          Its own row rather than the last thing in the scroll, because it is
+          the point of the dialog: under the preview, the image controls, the
+          filters, the rotate pair and two text fields, it was a long way
+          past everything else even once scrolling worked. Somebody looking
+          for a button called "Save" never found it at all — it is called
+          "Sign and put it up", and it is now always on screen to be read.
+
+          The error came with it. Feedback belongs beside the control that
+          caused it, not a screenful above the button you just pressed. */}
+      <div className="shrink-0 border-t border-ui-line px-5 pb-5 pt-3.5 sm:px-6 sm:pb-6">
+        {error && <p role="alert" className="mb-2.5 text-[11.5px] font-semibold text-[#B3261E]">{error}</p>}
+        <div className="flex gap-2"><button type="button" onClick={() => void save()} disabled={busy} className="sa-cta px-5 py-2 text-[11px] disabled:opacity-40">{busy ? 'Working…' : shared ? 'Sign and put it up' : 'Put it up'}</button>{current && <button type="button" onClick={() => { onClear(); onClose(); }} className="sa-ghost px-5 py-2 text-[11px]">Take it down</button>}</div>
+      </div>
     </div>
   </div>;
 }
