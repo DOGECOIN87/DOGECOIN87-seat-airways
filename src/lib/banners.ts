@@ -14,9 +14,11 @@
  * ── Where these live ──────────────────────────────────────────────────────
  * Three sources, in increasing order of authority.
  *
- * `localStorage`, which is what an upload does when nothing else is
- * configured: the banner stays in the browser that set it, and the UI says
- * so rather than implying the wall has changed for anyone else.
+ * `localStorage`, which is what an upload did when nothing else was
+ * configured: the banner stayed in the browser that set it, and the UI said
+ * so rather than implying the wall had changed for anyone else. That path is
+ * still here and still correct, but it is no longer where a default build
+ * lands — `workerBase.ts` names a Worker when no variable does.
  *
  *   VITE_BANNERS_API=https://…      self-serve, signed, keyed by wallet
  *   VITE_BANNERS_URL=https://….json curated, read-only, keyed by seat
@@ -38,6 +40,7 @@
  */
 
 import { MARK_PATH } from '../components/Mark';
+import { resolveWorkerApi } from './workerBase';
 
 export interface Banner {
   /** A square image: an https URL, or a data URI from a local upload. */
@@ -58,12 +61,19 @@ export type BannerSet = Readonly<Record<string, Banner>>;
 
 const KEY = 'seat-airlines.banners.v1';
 const REMOTE = import.meta.env.VITE_BANNERS_URL as string | undefined;
-const API = (import.meta.env.VITE_BANNERS_API as string | undefined)?.replace(/\/$/, '');
+const API = resolveWorkerApi(import.meta.env.VITE_BANNERS_API as string | undefined);
 let cachedPublished: Record<string, Banner> = {};
 let cachedOwnerBanners: Record<string, Banner> = {};
 let ownerEtag: string | undefined;
 
-/** True when holders can publish for themselves rather than only locally. */
+/**
+ * True when holders can publish for themselves rather than only locally.
+ *
+ * There is always a Worker to publish to now, so this is always true; it
+ * stays a named condition because what it guards is a claim about the
+ * deployment rather than a constant, and the local-only path below is what
+ * runs if that ever stops being so.
+ */
 export const canPublish = Boolean(API);
 
 /** The longest side of a stored banner, and the JPEG quality it keeps. */

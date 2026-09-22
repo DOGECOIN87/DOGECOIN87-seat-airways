@@ -27,19 +27,20 @@
  */
 
 import type { ZoneKey } from '../content/cabin';
+import { resolveWorkerApi } from './workerBase';
 
-const API = (
-  (import.meta.env.VITE_DIRECTORY_API as string | undefined)
-  // Same Worker serves both by default, so an existing deployment only has to
-  // bind the database rather than configure a second URL.
-  ?? (import.meta.env.VITE_BANNERS_API as string | undefined)
-)?.replace(/\/$/, '');
+const API = resolveWorkerApi(
+  import.meta.env.VITE_DIRECTORY_API as string | undefined,
+  // Same Worker serves both, so a deployment that has configured the advert
+  // wall has configured this too and need not name a second URL.
+  import.meta.env.VITE_BANNERS_API as string | undefined,
+);
 
 /** True when this deployment has a directory to talk to at all. */
 export const hasDirectory = Boolean(API);
 
 /**
- * The Worker this deployment talks to, if it has one.
+ * The Worker this deployment talks to.
  *
  * Exported because the directory is not the only thing that lives there:
  * `holdings.ts` reads the holder list from the same service, and resolving
