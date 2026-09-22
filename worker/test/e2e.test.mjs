@@ -1110,6 +1110,99 @@ await check('the preflight allows the amendment the logbook is edited with', asy
   assert(/PATCH/.test(res.headers.get('access-control-allow-methods') ?? ''), 'PATCH is not allowed');
 });
 
+/* ── The flight controls ──────────────────────────────────────────────────
+   Read by everybody, written by one wallet. The opposite of the logbook on
+   purpose: an aeroplane that only its operator can see rolled is a
+   screensaver, so `GET` is public and says so. */
+
+await check('what the aeroplane is doing is public, and it starts hands off', async () => {
+  const res = await fetch(`${BASE}/flight`, { headers: { origin: ORIGIN } });
+  assert(res.status === 200, `status ${res.status}`);
+  const flight = await res.json();
+  assert(flight.halfRolls === 0 && flight.spin === 0, `not level: ${JSON.stringify(flight)}`);
+  assert(flight.flaps === null && flight.hour === null && flight.weather === null,
+    `something was overridden from nothing: ${JSON.stringify(flight)}`);
+  assert(/max-age/.test(res.headers.get('cache-control') ?? ''), 'every visitor polls this; it must be cacheable');
+});
+
+await check('a holder cannot fly the aeroplane', async () => {
+  /* A 403 rather than the logbook's 404, and deliberately so: this route is
+     not hidden. Everybody watching the aeroplane roll knows somebody did it. */
+  const res = await api('/flight', { method: 'PUT', token: aliceToken, body: { halfRolls: 1 } });
+  assert(res.status === 403, `a passenger got ${res.status}`);
+  const still = await (await fetch(`${BASE}/flight`, { headers: { origin: ORIGIN } })).json();
+  assert(still.halfRolls === 0, 'the refused roll happened anyway');
+});
+
+await check('and neither can somebody with no session at all', async () => {
+  const res = await api('/flight', { method: 'PUT', body: { halfRolls: 1 } });
+  assert(res.status === 403, `an anonymous request got ${res.status}`);
+});
+
+await check('the flight deck rolls it, and everybody reads the same answer', async () => {
+  const put = await api('/flight', {
+    method: 'PUT', token: adminToken,
+    body: { halfRolls: 1, spin: 6, flaps: 0.5, hour: 21, weather: 'storm' },
+  });
+  const flown = await put.json();
+  assert(put.status === 200, `status ${put.status}: ${JSON.stringify(flown)}`);
+  assert(flown.halfRolls === 1, `halfRolls: ${flown.halfRolls}`);
+
+  /* Read back with no credentials whatsoever, because that is who this is
+     for: the visitor who has never heard of the logbook and is looking at an
+     upside-down aeroplane. The warm snapshot is five seconds, so wait it
+     out rather than reading back the isolate's own memory. */
+  await new Promise((r) => setTimeout(r, 5200));
+  const seen = await (await fetch(`${BASE}/flight`, { headers: { origin: ORIGIN } })).json();
+  assert(seen.halfRolls === 1 && seen.spin === 6, `a stranger saw ${JSON.stringify(seen)}`);
+  assert(seen.weather === 'storm' && seen.hour === 21, `a stranger saw ${JSON.stringify(seen)}`);
+});
+
+await check('nothing gets past the clamp on the way in', async () => {
+  /* The failure this exists to prevent: a stored NaN is a rotation of NaN on
+     every open page at once — an aeroplane that disappears and a canvas that
+     never comes back. */
+  const put = await api('/flight', {
+    method: 'PUT', token: adminToken,
+    body: { halfRolls: 'banana', spin: 9e9, flaps: 40, hour: -5, weather: 'apocalypse' },
+  });
+  const flown = await put.json();
+  assert(put.status === 200, `status ${put.status}`);
+  assert(flown.halfRolls === 0, `halfRolls: ${flown.halfRolls}`);
+  assert(flown.spin === 45, `spin: ${flown.spin}`);
+  assert(flown.flaps === 1, `flaps: ${flown.flaps}`);
+  assert(flown.hour === 0, `hour: ${flown.hour}`);
+  assert(flown.weather === null, `weather: ${flown.weather}`);
+});
+
+await check('giving it back to the market leaves nothing behind', async () => {
+  const put = await api('/flight', {
+    method: 'PUT', token: adminToken,
+    body: { halfRolls: 0, spin: 0, flaps: null, hour: null, weather: null },
+  });
+  assert(put.status === 200, `status ${put.status}`);
+  await new Promise((r) => setTimeout(r, 5200));
+  const seen = await (await fetch(`${BASE}/flight`, { headers: { origin: ORIGIN } })).json();
+  assert(seen.halfRolls === 0 && seen.spin === 0 && seen.weather === null,
+    `the aeroplane kept flying itself: ${JSON.stringify(seen)}`);
+});
+
+await check('a body that is not a set of controls is refused', async () => {
+  const notJson = await fetch(`${BASE}/flight`, {
+    method: 'PUT',
+    headers: { origin: ORIGIN, 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+    body: 'not json at all',
+  });
+  assert(notJson.status === 400, `status ${notJson.status}`);
+  const notObject = await api('/flight', { method: 'PUT', token: adminToken, body: 'a string' });
+  assert(notObject.status === 400, `status ${notObject.status}`);
+});
+
+await check('the flight controls cannot be deleted, only levelled', async () => {
+  const res = await api('/flight', { method: 'DELETE', token: adminToken });
+  assert(res.status === 405, `status ${res.status}`);
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 holders.close();
 process.exit(fail ? 1 : 0);

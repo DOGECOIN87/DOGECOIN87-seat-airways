@@ -113,7 +113,7 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing, controls = HAN
         chgRead.current.style.color = tick.change5m >= 0 ? '#5BE86B' : '#FF5B4E';
       }
     }
-  });
+  }, controls);
 
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     orbit.current.active = true;

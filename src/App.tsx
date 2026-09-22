@@ -27,7 +27,8 @@ import {
 import { useFlightState } from './lib/useFlightState';
 import { useAircraftAudio } from './lib/useAircraftAudio';
 import { useSky } from './lib/useSky';
-import { clamped, coverFor, keepControls, storedControls, type ManualControls } from './lib/manualControls';
+import { coverFor } from './lib/manualControls';
+import { useFlight } from './lib/useFlight';
 import { useWallet } from './lib/useWallet';
 import { holdingsSource, type Holding } from './lib/holdings';
 import { berthFromManifest } from './lib/seatLadder';
@@ -207,17 +208,14 @@ export default function App() {
      not reporting anything. */
   const feed = useMemo(() => createLiveFeed(INITIAL_TICK), []);
   const { tick, lamps } = useFlightState(feed);
-  /* The manual controls: cosmetic, local to this browser, and reachable only
-     from the hidden page. The aeroplane flies the market by default and this
-     is where somebody takes hold of it. */
-  const [controls, setControls] = useState<ManualControls>(storedControls);
-  const flyBy = useCallback((next: ManualControls) => {
-    // Through the same limits storage is read back through, so the barrel-roll
-    // button cannot queue more turns than a reload would keep.
-    const held = clamped(next);
-    setControls(held);
-    keepControls(held);
-  }, []);
+  /* What the aeroplane is doing.
+  
+     Read by every page on the site, because the switches are the aircraft's
+     and not this tab's: if the flight deck has rolled it, a visitor who has
+     never heard of the logbook is looking at an inverted aeroplane. Writing
+     is the operator's, and happens in the panel, which is the only place that
+     holds the session it needs. */
+  const [controls, showControls] = useFlight();
   const sky = useSky(
     controls.weather
       ? { hour: controls.hour, weather: controls.weather, cloudCover: coverFor(controls.weather) }
@@ -574,13 +572,13 @@ export default function App() {
               }
             >
               {camera === 'hold' ? (
-                <CargoHold feed={feed} band={band} belowCutoff={belowCutoff} />
+                <CargoHold feed={feed} band={band} belowCutoff={belowCutoff} controls={controls} />
               ) : camera === 'exterior' ? (
                 <Suspense fallback={<SceneLoading exterior />}>
                   <ExteriorView feed={feed} sky={sky} band={band} taken={taken} claimed={claimedSeat} viewing={viewSeat} controls={controls} />
                 </Suspense>
               ) : camera === 'deck' ? (
-                <FlightDeck feed={feed} lamps={lamps} sky={sky} band={band} />
+                <FlightDeck feed={feed} lamps={lamps} sky={sky} band={band} controls={controls} />
               ) : (
                 <Suspense fallback={<SceneLoading />}>
                   <CabinView3D
@@ -592,6 +590,7 @@ export default function App() {
                     facing={facing}
                     taken={taken}
                     adverts={advertImages}
+                    controls={controls}
                   />
                 </Suspense>
               )}
@@ -958,7 +957,7 @@ export default function App() {
             address={seatKey}
             sign={wallet.signMessage}
             controls={controls}
-            onControls={flyBy}
+            onControls={showControls}
             onClose={closeLogbook}
           />
         </Suspense>

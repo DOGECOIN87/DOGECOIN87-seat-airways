@@ -35,12 +35,21 @@ import {
 } from '../lib/logbookApi';
 import { useLogbook } from '../lib/useLogbook';
 import { HANDS_OFF, WEATHERS, handsOff, type ManualControls } from '../lib/manualControls';
+import { setFlight } from '../lib/flightApi';
 
 interface LogbookProps {
   manifest: Manifest;
   address: string | null;
   sign: (message: string) => Promise<string>;
-  /** The hand-flying switches, and the way to move them. */
+  /**
+   * What the aeroplane is doing, and how to show a change at once.
+   *
+   * The change itself goes to the Worker from in here, because this is the
+   * only place that holds the session it needs. `onControls` is the page
+   * agreeing to draw it immediately rather than at the top of the next poll —
+   * everybody else's page finds out the slow way, which is the right way
+   * round: the person pressing the switch should not wait on their own poll.
+   */
   controls: ManualControls;
   onControls: (next: ManualControls) => void;
   onClose: () => void;
@@ -92,10 +101,17 @@ const Gate = ({ children, onClose }: { children: React.ReactNode; onClose: () =>
    read off the chart, and that is the premise of the whole site. These are
    the switches that take hold of it anyway.
 
-   Every one of them is cosmetic and local to this browser — see
-   `manualControls.ts`. Nothing here is written to the server, nothing here
-   changes what anybody else's aeroplane is doing, and the altitude is still
-   the market cap however far over the thing is rolled. */
+   They are the *aircraft's* switches and not this browser's. Throwing invert
+   rolls the aeroplane on every open page — somebody sitting in 24C watches
+   the ground come up over their window, somebody on the flight deck watches
+   the artificial horizon go over — because an aeroplane only one person can
+   see upside down is a screensaver.
+
+   What they cannot touch is anything that matters. The altitude is still the
+   market cap however far over the thing is rolled, the seats are still the
+   holders, and no balance, address or message is reachable from here. The
+   worst a switch can do is make the aeroplane look silly, which is the
+   point. */
 
 const Switch = ({ on, onClick, children, title }: {
   on: boolean; onClick: () => void; children: React.ReactNode; title?: string;
@@ -136,9 +152,9 @@ const FLAPS = [
 
 const Controls = ({ controls, onControls }: {
   controls: ManualControls;
-  onControls: (next: ManualControls) => void;
+  onControls: (next: Partial<ManualControls>) => void;
 }) => {
-  const set = (patch: Partial<ManualControls>) => onControls({ ...controls, ...patch });
+  const set = (patch: Partial<ManualControls>) => onControls(patch);
   const inverted = ((controls.halfRolls % 2) + 2) % 2 === 1;
 
   return (
@@ -213,6 +229,8 @@ const Controls = ({ controls, onControls }: {
 
 const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: LogbookProps) => {
   const book = useLogbook(address, sign, true);
+  /** Why the aeroplane would not do as it was told, if it would not. */
+  const [refused, setRefused] = useState<string | null>(null);
   /* Collapsed to the switches alone, so the aeroplane is visible while it is
      being flown. The fragment stays in the URL and the session stays open:
      this is the same page with its own panel folded down. */
@@ -228,6 +246,34 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
   const [tag, setTag] = useState<string | null>(null);
 
   const open = book.mine === true;
+
+  /**
+   * Move a switch.
+   *
+   * Shown here first and sent second, in that order on purpose: the person
+   * pressing it should not wait on a round trip to see their own aeroplane
+   * roll. Everybody else finds out at the top of their next poll, which is
+   * the right way round.
+   *
+   * A refusal puts it back. Leaving the panel showing `Inverted` over an
+   * aeroplane that is the right way up would be the switch lying about the
+   * aircraft, which is worse than the aircraft not rolling.
+   */
+  const fly = async (patch: Partial<ManualControls>) => {
+    if (!book.session) return;
+    const before = controls;
+    const next = { ...controls, ...patch };
+    onControls(next);
+    setRefused(null);
+    try {
+      const landed = await setFlight(book.session, next);
+      // What the Worker stored, which may have clamped something.
+      onControls(landed);
+    } catch (e) {
+      onControls(before);
+      setRefused(e instanceof Error ? e.message : 'The aeroplane would not take that.');
+    }
+  };
 
   /* The page behind does not scroll while this is over it, and Escape closes
      it — the two things a full-screen panel owes whoever opened it. */
@@ -364,7 +410,8 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
             </div>
           </div>
           <div className="mt-3">
-            <Controls controls={controls} onControls={onControls} />
+            <Controls controls={controls} onControls={(patch) => void fly(patch)} />
+            {refused && <p className="mt-2 text-[11px] text-[#C2185B]">{refused}</p>}
           </div>
         </div>
       </div>
@@ -433,7 +480,8 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
             </p>
           </div>
           <div className="px-5 py-4 sm:px-6">
-            <Controls controls={controls} onControls={onControls} />
+            <Controls controls={controls} onControls={(patch) => void fly(patch)} />
+            {refused && <p className="mt-3 text-[11px] text-[#C2185B]">{refused}</p>}
           </div>
         </section>
 

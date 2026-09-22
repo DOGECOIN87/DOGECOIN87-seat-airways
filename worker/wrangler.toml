@@ -99,9 +99,12 @@ TOKEN_MINT = "AWJCyg9PrMtYju9yaQmdQLcwrGobHMTv9JU3mo4upump"
 # reports `seated` out of `cabin`, so that is a number to read rather than a
 # thing to suspect.
 
-# The one wallet the logbook belongs to — the operator's private notes, at
-# GET/POST/PATCH/DELETE /logbook. Unset, that route does not exist: no
-# logbook, and the same 404 for everybody.
+# The one wallet the operator's things belong to:
+#
+#   · the logbook — private notes, at GET/POST/PATCH/DELETE /logbook. Unset,
+#     that route does not exist: no logbook, and the same 404 for everybody.
+#   · the flight controls — PUT /flight, which rolls the aeroplane on every
+#     visitor's page. GET /flight is public either way.
 #
 # A public key rather than a secret, and deliberately kept in the open here.
 # It is on the chain, and drawn on this aircraft's own seat map if the

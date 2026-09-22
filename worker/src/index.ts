@@ -7,6 +7,8 @@
  *   POST /banner    put an advert up, if you can prove the wallet is yours
  *   GET  /holders   who is aboard, and the supply their bags are shares of
  *   GET  /holding   one wallet's balance, so no page has to carry an RPC key
+ *   GET  /flight    what the aeroplane is being told to do, if anything
+ *   PUT  /flight    tell it — the flight deck only
  *
  * The directory, behind a session that same wallet signature opens:
  *
@@ -55,6 +57,7 @@ import {
   LOGBOOK_PAGE, type LogEntry, type LogStatus,
 } from './logbook';
 import { cabinSize, canSeat, readLadder, rpcUrl } from './ladder';
+import { HANDS_OFF, clamped, handsOff, type ManualControls } from '../../src/lib/manualControls';
 import { CABIN_ZONES } from '../../src/content/cabin';
 import {
   ANNOUNCEMENT, canAnnounce, canMessage, canPostToChannel, canReadChannel, canViewContact,
@@ -373,6 +376,34 @@ function wallEtag(wall: Wall): string {
   return `"${Object.keys(wall).length}-${newest}"`;
 }
 
+/* ── The flight controls ─────────────────────────────────────────────────
+   One small record, read by every visitor and written by one wallet.
+
+   In KV rather than SQL because it is exactly one key with no history and no
+   relations, and behind a short warm-isolate snapshot for the same reason the
+   wall has one: this is the hottest read on the service — everybody's page
+   asks it, repeatedly, for as long as they have the tab open — and it changes
+   when somebody presses a button, which is rarely. */
+const FLIGHT_KEY = 'flight';
+const FLIGHT_CACHE_MS = 5_000;
+let flightCache: { value: ManualControls; expiresAt: number } | null = null;
+
+async function readFlight(env: Env): Promise<ManualControls> {
+  if (flightCache && flightCache.expiresAt > Date.now()) return flightCache.value;
+  let value = HANDS_OFF;
+  try {
+    const stored = await env.BANNERS.get(FLIGHT_KEY, 'json');
+    // Clamped on the way out as well as in. The way in is this deployment's
+    // own code; the way out is whatever is in the namespace today.
+    if (stored && typeof stored === 'object') value = clamped(stored as Partial<ManualControls>);
+  } catch {
+    /* An unreadable record is an aeroplane flying the market, which is what
+       it does when nobody has touched anything. Never a failed page. */
+  }
+  flightCache = { value, expiresAt: Date.now() + FLIGHT_CACHE_MS };
+  return value;
+}
+
 /* ── The cabin directory ────────────────────────────────────────────────────
    Profiles and introductions, in SQL, because they are rows: one card per
    wallet, and messages read back by recipient and by sender.
@@ -628,6 +659,77 @@ async function handle(request: Request, env: Env): Promise<Response> {
       const value: Holding = { balance, supply, share: supply > 0 ? balance / supply : 0 };
       holdingCache.set(address, { value, expiresAt: Date.now() + HOLDING_CACHE_MS });
       return json(value, 200, { ...cors, 'cache-control': 'public, max-age=20' });
+    }
+
+    /* ── The flight controls ────────────────────────────────────────────
+       What the aeroplane is doing, when somebody is flying it by hand.
+
+       The aircraft flies the market: pitch, bank, speed and altitude are all
+       read off the chart, on every visitor's page, from the same number.
+       These are the switches that take hold of it — invert, barrel roll, a
+       camera turntable, flaps, the hour, the weather — and they are read by
+       *everybody*, which is the entire reason they live here rather than in
+       one browser's storage. An aeroplane only one person can see upside
+       down is a screensaver. This is a flight everybody is on.
+
+       So `GET` is public and unauthenticated, like the wall and the holder
+       list, and `PUT` belongs to the wallet named in `ADMIN_WALLET` — the
+       same one the logbook belongs to. That one refuses with a 403 rather
+       than the logbook's 404, and the difference is deliberate: the logbook
+       is hidden, and this is not. Every visitor watching the aeroplane roll
+       already knows somebody rolled it.
+
+       Nothing in here can hurt anybody. It is an attitude, a camera rate and
+       a sky — no balances, no addresses, nothing written anywhere else — and
+       every field is clamped on the way in by the same function the page
+       clamps with, because the alternative is a stored NaN that becomes a
+       rotation of NaN on a hundred and seventy-eight people's screens. */
+    if (url.pathname === '/flight') {
+      if (request.method === 'GET') {
+        const flight = await readFlight(env);
+        return json(flight, 200, {
+          ...cors,
+          /* Short, because the point of a switch is that it does something
+             now. `stale-while-revalidate` lets the edge keep answering while
+             it refreshes, so a page polling this costs a revalidation rather
+             than a round trip most of the time. */
+          'cache-control': 'public, max-age=10, stale-while-revalidate=50',
+        });
+      }
+
+      if (request.method === 'PUT') {
+        const priv = { ...cors, 'cache-control': 'no-store' };
+        const db = env.DIRECTORY;
+        if (!db) return json({ error: 'This deployment has no cabin directory configured.' }, 503, priv);
+
+        const token = bearerToken(request.headers.get('authorization'));
+        const who = token ? await sessionAddress(db, token) : null;
+        if (!isAdmin(env.ADMIN_WALLET, who)) {
+          return json({ error: 'The flight controls belong to the flight deck.' }, 403, priv);
+        }
+
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+        if (!body || typeof body !== 'object') {
+          return json({ error: 'That was not a set of controls.' }, 400, priv);
+        }
+
+        const flight = clamped(body as Partial<ManualControls>);
+        /* Hands off is stored as an absence rather than as a record of zeroes,
+           so the common case — nobody flying — is a missing key that reads
+           back as the default, and giving the aeroplane back to the market
+           leaves nothing behind to go stale. */
+        if (handsOff(flight)) await env.BANNERS.delete(FLIGHT_KEY);
+        else await env.BANNERS.put(FLIGHT_KEY, JSON.stringify(flight));
+        flightCache = { value: flight, expiresAt: Date.now() + FLIGHT_CACHE_MS };
+        return json(flight, 200, priv);
+      }
+
+      return json({ error: `${request.method} is not allowed on ${url.pathname}.` }, 405, cors);
     }
 
     /* ── The logbook ────────────────────────────────────────────────────

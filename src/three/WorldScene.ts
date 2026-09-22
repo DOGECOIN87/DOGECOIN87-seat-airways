@@ -871,7 +871,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       const z = pose.seatIndex === null ? rowZ(1) - 4.2 : rowZ(pose.row);
       camera.position.set(x, CABIN.floorY + CABIN.eyeHeight, z + 0.02);
       cabinLight.position.set(x, CABIN.ceilingY - 0.3, z - 1.4);
-      camera.rotation.set(0, THREE.MathUtils.degToRad(-pose.yaw), 0, 'YXZ');
+      /* `YXZ`, so the roll is applied innermost — about the camera's own
+         line of sight rather than about any world axis. Which is what makes
+         it a roll of the shot and not a swing of the head. */
+      camera.rotation.set(0, THREE.MathUtils.degToRad(-pose.yaw), THREE.MathUtils.degToRad(a.roll), 'YXZ');
       if (camera.fov !== 70) {
         camera.fov = 70;
         camera.updateProjectionMatrix();

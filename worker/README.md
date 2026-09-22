@@ -412,6 +412,54 @@ careful not to give it away: until the server confirms, it draws a small card
 saying nothing about what it guards, and if the answer is no it draws nothing
 at all.
 
+## Flying it by hand
+
+The aeroplane flies the market. Pitch, bank, speed and altitude are all read
+off the chart, on every visitor's page, from the same number — and `/flight`
+is the one place that overrules it: an extra roll, a camera turntable, flaps,
+the hour of the day and the weather.
+
+`GET` is public and unauthenticated, like the wall and the holder list.
+`PUT` belongs to the wallet in `ADMIN_WALLET`, and refuses everybody else with
+a plain **403** rather than the logbook's 404. The difference is the point:
+the logbook is hidden and this is not. Every visitor watching the aeroplane
+roll already knows somebody rolled it.
+
+That is also why it is stored here rather than in a browser. An aeroplane only
+its operator can see upside down is a screensaver; this one is a flight
+everybody is on. Throw the invert switch and somebody sitting in 24C watches
+the ground come up over their window, the artificial horizon on the flight
+deck goes over, and the cargo hold leans all the way with it.
+
+Nothing reachable from here can hurt anybody, and nothing here is asked to be
+trusted. It is an attitude, a camera rate and a sky: no balances, no
+addresses, nothing written anywhere else. The altitude is still the market cap
+however far over the thing is rolled, and the manifest is still the manifest.
+The worst a compromised set of switches could do is make the aeroplane look
+silly.
+
+Every field is clamped by `src/lib/manualControls.ts` — the same function the
+page clamps with, imported by both sides exactly as the seating is — on the
+way in *and* on the way back out, because the way in is this deployment's own
+code and the way out is whatever is in the namespace today. The limits are not
+decoration: an unbounded roll is every open page watching an aeroplane spin
+for a minute and a half with no switch that stops it, and a non-numeric one is
+a rotation of `NaN`, which is an aeroplane that vanishes from every screen at
+once.
+
+It lives in KV rather than SQL because it is one key with no history and no
+relations, behind a five-second warm-isolate snapshot — this is the hottest
+read on the service, since every open tab asks it every twenty seconds, and it
+changes when somebody presses a button, which is rarely. Hands off is stored
+as an *absence*: giving the aeroplane back to the market deletes the record
+rather than writing a row of zeroes, so the common case is a missing key and
+there is nothing left behind to go stale.
+
+**It is not free.** A visitor with the tab open is one request every twenty
+seconds — call it 4,300 a day — against the free plan's 100,000. That is the
+cost of "everybody sees it", and it is worth knowing before launch traffic
+rather than after: the Workers Paid plan is $5/month for 10 million.
+
 ## Serving the artwork
 
 A record is keyed by the wallet that published it, but the **artwork is

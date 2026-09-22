@@ -4,6 +4,7 @@ import type { FlightFeed } from '../lib/flightFeed';
 import type { BandState } from '../lib/flightModel';
 import type { SkyState } from '../lib/sky';
 import { useAttitude } from '../lib/useAttitude';
+import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
 import type { CabinSeat, CabinZone, Facing } from '../content/cabin';
 
 /**
@@ -31,9 +32,18 @@ interface CabinView3DProps {
   taken: ReadonlySet<string>;
   /** Seat id to the image its holder is running, for the seat-back screens. */
   adverts: Readonly<Record<string, string>>;
+  /**
+   * What the aeroplane is being told to do, if anybody is telling it.
+   *
+   * Inverted, this is the window: the cabin comes over with the viewer —
+   * the seat in front is still in front — and the ground ends up above the
+   * sky outside. `WorldScene` decides that from where the camera is; all
+   * this has to do is hand the switches over.
+   */
+  controls?: ManualControls;
 }
 
-const CabinView3D = ({ feed, sky, band, seat, zone, facing, taken, adverts }: CabinView3DProps) => {
+const CabinView3D = ({ feed, sky, band, seat, zone, facing, taken, adverts, controls = HANDS_OFF }: CabinView3DProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const world = useRef<WorldHandles | null>(null);
   const pose = useRef<ViewPose>({ seatIndex: 0, row: 1, yaw: 0, id: '1A' });
@@ -94,7 +104,13 @@ const CabinView3D = ({ feed, sky, band, seat, zone, facing, taken, adverts }: Ca
   useAttitude(feed, (a) => {
     pose.current.yaw = YAW_FOR[facing] + drag.current.yaw;
     world.current?.render(a, latest.current.sky, latest.current.band, pose.current);
-  });
+  }, controls);
+
+  /* Only the flaps are read from this; the roll arrives eased on the
+     attitude above. Pushed in on change rather than per frame. */
+  useEffect(() => {
+    world.current?.setControls(controls);
+  }, [controls]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     drag.current.active = true;
