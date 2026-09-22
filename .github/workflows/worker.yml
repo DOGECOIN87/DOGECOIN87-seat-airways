@@ -73,6 +73,26 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Schema before code, because that is the order the two can be wrong in.
+      #
+      # A deploy that ships a route before its table exists answers 500 to the
+      # one person the route is for, and nothing on the page says why — the
+      # logbook shipped exactly that way until this step existed. The reverse
+      # is harmless: a table nothing reads yet is a table nothing reads yet.
+      #
+      # Safe to run on every push. Wrangler records what it has applied and
+      # skips it, and every statement in `migrations/` is `IF NOT EXISTS`
+      # anyway, so a database that was set up by hand before there was a
+      # migrations table converges rather than collides.
+      - name: Apply migrations
+        if: steps.creds.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: d1 migrations apply seat-airlines-directory --remote
+
       - name: Deploy
         if: steps.creds.outputs.ready == 'true'
         uses: cloudflare/wrangler-action@v3
