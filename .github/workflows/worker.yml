@@ -73,26 +73,22 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Schema before code, because that is the order the two can be wrong in.
+      # Migrations are deliberately NOT applied from here, and it is worth
+      # knowing why before somebody adds the step back.
       #
-      # A deploy that ships a route before its table exists answers 500 to the
-      # one person the route is for, and nothing on the page says why — the
-      # logbook shipped exactly that way until this step existed. The reverse
-      # is harmless: a table nothing reads yet is a table nothing reads yet.
+      # It was added, and it failed: `wrangler d1 migrations apply` needs an
+      # API token with *D1: Edit*, this one has Workers, KV and R2, and the
+      # Cloudflare API answered 7403. Worse, it failed in the right place —
+      # schema before code — so it took the whole deploy with it, which is
+      # correct behaviour for a step that cannot do its job and a broken
+      # pipeline either way.
       #
-      # Safe to run on every push. Wrangler records what it has applied and
-      # skips it, and every statement in `migrations/` is `IF NOT EXISTS`
-      # anyway, so a database that was set up by hand before there was a
-      # migrations table converges rather than collides.
-      - name: Apply migrations
-        if: steps.creds.outputs.ready == 'true'
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: worker
-          command: d1 migrations apply seat-airlines-directory --remote
-
+      # So the schema is made by the Worker instead, from its D1 *binding*,
+      # which is not an API token and needs no permission granted to one. See
+      # `ensureLogbook` in src/index.ts. That works for one table of two
+      # `IF NOT EXISTS` statements and does not generalise: a schema with
+      # anything to actually migrate wants this step back, and wants the token
+      # given D1 first.
       - name: Deploy
         if: steps.creds.outputs.ready == 'true'
         uses: cloudflare/wrangler-action@v3

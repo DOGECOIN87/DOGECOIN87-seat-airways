@@ -376,6 +376,54 @@ function wallEtag(wall: Wall): string {
   return `"${Object.keys(wall).length}-${newest}"`;
 }
 
+/* ── The logbook's table ─────────────────────────────────────────────────
+   Made here, by the Worker, rather than by a migration in CI — and that is a
+   concession rather than a preference, so it is worth saying why.
+
+   `wrangler d1 migrations apply` needs an API token with *D1: Edit*. The
+   token this repository deploys with has Workers, KV and R2 and not that, so
+   the migration step failed with a 7403 and took the deploy down with it:
+   schema before code works only when you can write the schema. Granting the
+   token D1 costs a trip to the Cloudflare dashboard, which the operator of
+   this deployment does not currently have.
+
+   A *binding* is not an API token. At runtime `env.DIRECTORY` speaks to the
+   database directly with no token in the path at all, so the one thing CI
+   cannot do, the Worker can — and `migrations/0002_logbook.sql` stays as the
+   schema's written record and as what `--local` applies for the route suite.
+
+   Once per isolate, on the operator's first logbook request and never on
+   anybody else's: the call sits after the admin check, so a stranger's 404
+   costs nothing and no unauthenticated request can make this service write
+   DDL. A failure clears the latch rather than caching itself, because a
+   database that was briefly unreachable should not leave the logbook broken
+   until the next deploy.
+
+   This does not generalise. One table, two statements, both `IF NOT EXISTS`.
+   A schema with anything to migrate — a column to add, a row to backfill —
+   belongs in `migrations/` and wants the token fixed. */
+let logbookTable: Promise<unknown> | null = null;
+
+function ensureLogbook(db: D1Database): Promise<unknown> {
+  logbookTable ??= db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS logbook (
+      id         TEXT PRIMARY KEY,
+      body       TEXT NOT NULL,
+      source     TEXT NOT NULL DEFAULT '',
+      tags       TEXT NOT NULL DEFAULT '',
+      conviction INTEGER NOT NULL DEFAULT 0,
+      status     TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`),
+    db.prepare('CREATE INDEX IF NOT EXISTS logbook_by_time ON logbook (created_at DESC)'),
+  ]).catch((e) => {
+    logbookTable = null;
+    throw e;
+  });
+  return logbookTable;
+}
+
 /* ── The flight controls ─────────────────────────────────────────────────
    One small record, read by every visitor and written by one wallet.
 
@@ -763,6 +811,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
       const token = bearerToken(request.headers.get('authorization'));
       const who = token ? await sessionAddress(db, token) : null;
       if (!isAdmin(env.ADMIN_WALLET, who)) return nowhere();
+
+      // After the gate, so a stranger's 404 costs nothing and no
+      // unauthenticated request can make this service write DDL.
+      await ensureLogbook(db);
 
       const priv = { ...cors, 'cache-control': 'no-store' };
       const asEntry = (row: LogRow): LogEntry => ({
