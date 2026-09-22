@@ -786,24 +786,38 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       manual.flaps ?? Math.max(lowSpeed, descent, climb) * 0.28,
     );
 
-    /* Roll it by hand, on the airframe alone.
+    /* Roll it by hand — and where that roll goes depends on where the camera
+       is standing, because "the aeroplane is inverted" is two different
+       pictures from two different places.
 
-       The exterior camera is a child of `aircraft`, so it rides the airframe:
-       bank the whole group and the aeroplane sits still in frame while the
-       horizon turns, which is what flying alongside something looks like and
-       is exactly wrong for a switch labelled "invert" — you would see the
-       world flip and the aeroplane apparently not move.
+       From outside, it goes on the airframe alone. The exterior camera is a
+       child of `aircraft`, so it rides the airframe: bank the whole group and
+       the aeroplane sits still in frame while the horizon turns — which is
+       what flying alongside something actually looks like, and exactly wrong
+       for a switch labelled "invert". Rolling the model instead, which the
+       camera is a sibling of rather than a passenger in, leaves the horizon
+       where it was and turns the aeroplane over in front of it.
 
-       So the extra roll goes on the model, which the camera is a sibling of
-       rather than a passenger in. The horizon stays where it was and the
-       aeroplane rolls over in front of it, which is what somebody who threw
-       the switch is asking to watch.
+       From inside it goes on the camera, below, and the first attempt at that
+       got it wrong in an instructive way. Rolling the whole `aircraft` group
+       is what a passenger would actually experience — they go over *with* the
+       cabin, so the seat in front is still in front and the only thing that
+       changes is out of the window — and it is very nearly invisible: the
+       cabin renders identically and the one thing that moves is a hand-sized
+       rectangle of ground. Correct, and nobody would notice. Rolling the
+       camera turns the whole shot over instead: the seat backs swing above
+       the viewer, the ceiling comes up from below, and the ground still ends
+       up over the sky outside.
 
-       Eased rather than set, so half a turn takes about a second and a barrel
-       roll is a roll rather than a jump cut. Frame-rate independent, for the
-       same reason everything else here is. */
-    rollShown += (manual.halfRolls * 180 - rollShown) * (1 - Math.exp(-3.2 * dt));
-    airframe.group.rotation.z = THREE.MathUtils.degToRad(rollShown);
+       The market's own bank is deliberately not treated this way and stays on
+       the group, which is why `useAttitude` keeps `bank` and `roll` apart: a
+       two-degree lean should tilt the horizon past the window, not tip the
+       furniture.
+
+       Eased in `useAttitude` rather than here, so the horizon out of the
+       cockpit and the lean of the hold — neither of which is a three.js
+       scene — go over on exactly the same curve. */
+    airframe.group.rotation.z = THREE.MathUtils.degToRad(pose.exterior ? a.roll : 0);
 
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
@@ -948,7 +962,6 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      to pick up between frames: an aeroplane halfway through a barrel roll is
      a number this scene is carrying, not one it can be handed. */
   let manual: ManualControls = HANDS_OFF;
-  let rollShown = 0;
   const setControls = (controls: ManualControls) => { manual = controls; };
 
   const setOccupancy = (taken: ReadonlySet<string>) => {
