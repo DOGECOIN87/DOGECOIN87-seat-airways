@@ -949,6 +949,260 @@ await check('the preflight allows the headers the directory needs', async () => 
   assert(/authorization/i.test(res.headers.get('access-control-allow-headers') ?? ''), 'authorization is not allowed');
 });
 
+/* ── The logbook ──────────────────────────────────────────────────────────
+   One wallet's private notes, and the only route here that is not about
+   cabins at all.
+
+   The operator is a fixed keypair rather than a generated one, because
+   `wrangler.local.toml` has to name the address before the suite runs. Its
+   private half sits in this file in plain sight, which is fine precisely
+   because it has never held anything: it exists to prove one wallet gets in
+   and no other can tell the route is there.
+
+   And it is put on the sold-out list first, deliberately. Every case below
+   therefore runs against a wallet the chain says holds nothing — which is the
+   strongest version of what the exemption is for. The logbook belongs to a
+   wallet, not to a bag. */
+const ADMIN_PKCS8 = 'MC4CAQAwBQYDK2VwBCIEIGF+P8WPuT2hS0p/PgSJoKxiCKOSisbGYAlpDAHg8wxw';
+const adminKey = await crypto.subtle.importKey(
+  'pkcs8', Buffer.from(ADMIN_PKCS8, 'base64'), { name: 'Ed25519' }, false, ['sign'],
+);
+const admin = {
+  address: 'Ame7HoqEdhPsyuhtKR98J5onwUcQm96bNCViGfHprh8D',
+  sign: async (msg) => toBase58(new Uint8Array(
+    await crypto.subtle.sign({ name: 'Ed25519' }, adminKey, new TextEncoder().encode(msg)),
+  )),
+};
+soldOut.add(admin.address);
+
+let adminToken = '';
+let noted = '';
+
+await check('the operator signs in holding nothing at all', async () => {
+  /* The door is for holders, and this wallet is not one. It gets in anyway,
+     and that is the point: an operator locked out of their own notes by a
+     balance would be a failure with no error in it and nothing on the page
+     to read it off. */
+  const res = await api('/session', { method: 'POST', body: await signInBody(admin) });
+  const body = await res.json();
+  assert(res.status === 200, `status ${res.status}: ${JSON.stringify(body)}`);
+  adminToken = body.token;
+  assert(adminToken, 'no token came back');
+});
+
+await check('a holder who is not the operator cannot tell the route exists', async () => {
+  /* The whole design of the gate, in one assertion. Not "403 forbidden",
+     which would confirm there is something there worth guarding — the same
+     404 a misspelt path gets, byte for byte, so that guessing the URL and
+     guessing it wrong come back identical. */
+  const mine = await api('/logbook', { token: aliceToken });
+  const typo = await api('/lgobook', { token: aliceToken });
+  assert(mine.status === 404, `a stranger got ${mine.status} rather than a 404`);
+  assert(mine.status === typo.status, 'the real route and a typo answered with different statuses');
+  assert(await mine.text() === await typo.text(), 'the real route and a typo answered differently');
+});
+
+await check('nor can somebody with no session, or a made-up one', async () => {
+  const typo = await api('/lgobook');
+  for (const [what, res] of [
+    ['no token', await api('/logbook')],
+    ['a made-up token', await api('/logbook', { token: 'not-a-real-token' })],
+  ]) {
+    assert(res.status === 404, `${what} got ${res.status} rather than a 404`);
+    assert(await res.clone().text() === await typo.clone().text(), `${what} got a different answer from a typo`);
+  }
+});
+
+await check('and cannot write to it, amend it, or strike anything out', async () => {
+  /* A read that 404s and a write that 400s would give the game away just as
+     surely — the refusal has to come before anything looks at the request. */
+  const writes = [
+    await api('/logbook', { method: 'POST', token: aliceToken, body: { body: 'let me in' } }),
+    await api('/logbook', { method: 'PATCH', token: aliceToken, body: { id: 'x', status: 'acted' } }),
+    await api('/logbook?id=x', { method: 'DELETE', token: aliceToken }),
+  ];
+  for (const res of writes) {
+    assert(res.status === 404, `a stranger's write got ${res.status} rather than a 404`);
+    assert((await res.json()).error === 'No such route.', 'a stranger was told more than a typo would be');
+  }
+});
+
+await check('the operator writes one down and reads it back', async () => {
+  const res = await api('/logbook', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      body: '  Mabel says they are listing on a CEX next week.  ',
+      source: mabel.address,
+      tags: ' Listing , #listing,  CEX ',
+      conviction: 9,
+    },
+  });
+  const entry = await res.json();
+  assert(res.status === 200, `status ${res.status}: ${JSON.stringify(entry)}`);
+  noted = entry.id;
+  assert(entry.body === 'Mabel says they are listing on a CEX next week.', `body: ${entry.body}`);
+  assert(entry.source === mabel.address, 'the source did not survive');
+  /* Normalised on the way in rather than on the way out: three spellings of
+     two tags, and a rating past the top of the ladder. */
+  assert(entry.tags.join(',') === 'listing,cex', `tags: ${entry.tags}`);
+  assert(entry.conviction === 3, `conviction: ${entry.conviction}`);
+  assert(entry.status === 'open', `status: ${entry.status}`);
+
+  const back = await (await api('/logbook', { token: adminToken })).json();
+  assert(back.entries.some((e) => e.id === noted), 'the note was not in the logbook afterwards');
+});
+
+await check('a note needs a note in it', async () => {
+  const res = await api('/logbook', { method: 'POST', token: adminToken, body: { body: '   ' } });
+  assert(res.status === 400, `an empty note came back ${res.status}`);
+});
+
+await check('marking one acted on changes that and nothing else', async () => {
+  const res = await api('/logbook', { method: 'PATCH', token: adminToken, body: { id: noted, status: 'acted' } });
+  const entry = await res.json();
+  assert(res.status === 200, `status ${res.status}: ${JSON.stringify(entry)}`);
+  assert(entry.status === 'acted', `status: ${entry.status}`);
+  assert(entry.body === 'Mabel says they are listing on a CEX next week.', 'the note itself was rewritten');
+  assert(entry.tags.join(',') === 'listing,cex', 'the tags were lost');
+  assert(entry.updatedAt >= entry.createdAt, 'the amendment left no trace of when');
+});
+
+await check('a state nobody recognises is refused rather than read as open', async () => {
+  /* Reopening a line somebody closed, on a typo, is the kind of wrong that
+     looks right. */
+  const res = await api('/logbook', { method: 'PATCH', token: adminToken, body: { id: noted, status: 'warm' } });
+  assert(res.status === 400, `an unknown state came back ${res.status}`);
+  const still = await (await api('/logbook', { token: adminToken })).json();
+  assert(still.entries.find((e) => e.id === noted).status === 'acted', 'the refused amendment took effect anyway');
+});
+
+await check('an amendment to a note that is not there is a 404 about the note', async () => {
+  /* The one 404 here that is allowed to be informative: whoever is asking has
+     already proved they are the operator, so there is nothing left to hide. */
+  const res = await api('/logbook', { method: 'PATCH', token: adminToken, body: { id: 'nothing', status: 'cold' } });
+  assert(res.status === 404, `status ${res.status}`);
+  assert((await res.json()).error === 'No such entry.', 'the operator was told the route did not exist');
+});
+
+await check('the logbook still opens for a wallet holding nothing', async () => {
+  /* Belt and braces on the exemption: the session survived the sign-in, and
+     it has to survive the re-check on every request after it too. */
+  const res = await api('/logbook', { token: adminToken });
+  assert(res.status === 200, `the operator was shut out with ${res.status}`);
+});
+
+await check('a note can be struck out, and only once', async () => {
+  const gone = await api(`/logbook?id=${noted}`, { method: 'DELETE', token: adminToken });
+  assert(gone.status === 200, `status ${gone.status}`);
+  const again = await api(`/logbook?id=${noted}`, { method: 'DELETE', token: adminToken });
+  assert(again.status === 404, `striking out a struck-out note came back ${again.status}`);
+  const back = await (await api('/logbook', { token: adminToken })).json();
+  assert(!back.entries.some((e) => e.id === noted), 'the note was still there afterwards');
+});
+
+await check('the preflight allows the amendment the logbook is edited with', async () => {
+  const res = await fetch(`${BASE}/logbook`, {
+    method: 'OPTIONS',
+    headers: { origin: ORIGIN, 'access-control-request-method': 'PATCH', 'access-control-request-headers': 'authorization' },
+  });
+  assert(res.status === 204, `status ${res.status}`);
+  assert(/PATCH/.test(res.headers.get('access-control-allow-methods') ?? ''), 'PATCH is not allowed');
+});
+
+/* ── The flight controls ──────────────────────────────────────────────────
+   Read by everybody, written by one wallet. The opposite of the logbook on
+   purpose: an aeroplane that only its operator can see rolled is a
+   screensaver, so `GET` is public and says so. */
+
+await check('what the aeroplane is doing is public, and it starts hands off', async () => {
+  const res = await fetch(`${BASE}/flight`, { headers: { origin: ORIGIN } });
+  assert(res.status === 200, `status ${res.status}`);
+  const flight = await res.json();
+  assert(flight.halfRolls === 0 && flight.spin === 0, `not level: ${JSON.stringify(flight)}`);
+  assert(flight.flaps === null && flight.hour === null && flight.weather === null,
+    `something was overridden from nothing: ${JSON.stringify(flight)}`);
+  assert(/max-age/.test(res.headers.get('cache-control') ?? ''), 'every visitor polls this; it must be cacheable');
+});
+
+await check('a holder cannot fly the aeroplane', async () => {
+  /* A 403 rather than the logbook's 404, and deliberately so: this route is
+     not hidden. Everybody watching the aeroplane roll knows somebody did it. */
+  const res = await api('/flight', { method: 'PUT', token: aliceToken, body: { halfRolls: 1 } });
+  assert(res.status === 403, `a passenger got ${res.status}`);
+  const still = await (await fetch(`${BASE}/flight`, { headers: { origin: ORIGIN } })).json();
+  assert(still.halfRolls === 0, 'the refused roll happened anyway');
+});
+
+await check('and neither can somebody with no session at all', async () => {
+  const res = await api('/flight', { method: 'PUT', body: { halfRolls: 1 } });
+  assert(res.status === 403, `an anonymous request got ${res.status}`);
+});
+
+await check('the flight deck rolls it, and everybody reads the same answer', async () => {
+  const put = await api('/flight', {
+    method: 'PUT', token: adminToken,
+    body: { halfRolls: 1, spin: 6, flaps: 0.5, hour: 21, weather: 'storm' },
+  });
+  const flown = await put.json();
+  assert(put.status === 200, `status ${put.status}: ${JSON.stringify(flown)}`);
+  assert(flown.halfRolls === 1, `halfRolls: ${flown.halfRolls}`);
+
+  /* Read back with no credentials whatsoever, because that is who this is
+     for: the visitor who has never heard of the logbook and is looking at an
+     upside-down aeroplane. The warm snapshot is five seconds, so wait it
+     out rather than reading back the isolate's own memory. */
+  await new Promise((r) => setTimeout(r, 5200));
+  const seen = await (await fetch(`${BASE}/flight`, { headers: { origin: ORIGIN } })).json();
+  assert(seen.halfRolls === 1 && seen.spin === 6, `a stranger saw ${JSON.stringify(seen)}`);
+  assert(seen.weather === 'storm' && seen.hour === 21, `a stranger saw ${JSON.stringify(seen)}`);
+});
+
+await check('nothing gets past the clamp on the way in', async () => {
+  /* The failure this exists to prevent: a stored NaN is a rotation of NaN on
+     every open page at once — an aeroplane that disappears and a canvas that
+     never comes back. */
+  const put = await api('/flight', {
+    method: 'PUT', token: adminToken,
+    body: { halfRolls: 'banana', spin: 9e9, flaps: 40, hour: -5, weather: 'apocalypse' },
+  });
+  const flown = await put.json();
+  assert(put.status === 200, `status ${put.status}`);
+  assert(flown.halfRolls === 0, `halfRolls: ${flown.halfRolls}`);
+  assert(flown.spin === 45, `spin: ${flown.spin}`);
+  assert(flown.flaps === 1, `flaps: ${flown.flaps}`);
+  assert(flown.hour === 0, `hour: ${flown.hour}`);
+  assert(flown.weather === null, `weather: ${flown.weather}`);
+});
+
+await check('giving it back to the market leaves nothing behind', async () => {
+  const put = await api('/flight', {
+    method: 'PUT', token: adminToken,
+    body: { halfRolls: 0, spin: 0, flaps: null, hour: null, weather: null },
+  });
+  assert(put.status === 200, `status ${put.status}`);
+  await new Promise((r) => setTimeout(r, 5200));
+  const seen = await (await fetch(`${BASE}/flight`, { headers: { origin: ORIGIN } })).json();
+  assert(seen.halfRolls === 0 && seen.spin === 0 && seen.weather === null,
+    `the aeroplane kept flying itself: ${JSON.stringify(seen)}`);
+});
+
+await check('a body that is not a set of controls is refused', async () => {
+  const notJson = await fetch(`${BASE}/flight`, {
+    method: 'PUT',
+    headers: { origin: ORIGIN, 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+    body: 'not json at all',
+  });
+  assert(notJson.status === 400, `status ${notJson.status}`);
+  const notObject = await api('/flight', { method: 'PUT', token: adminToken, body: 'a string' });
+  assert(notObject.status === 400, `status ${notObject.status}`);
+});
+
+await check('the flight controls cannot be deleted, only levelled', async () => {
+  const res = await api('/flight', { method: 'DELETE', token: adminToken });
+  assert(res.status === 405, `status ${res.status}`);
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 holders.close();
 process.exit(fail ? 1 : 0);

@@ -3,6 +3,7 @@ import type { FlightFeed } from '../lib/flightFeed';
 import type { BandState } from '../lib/flightModel';
 import { formatCap } from '../lib/flightModel';
 import { useAttitude } from '../lib/useAttitude';
+import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
 import { CARGO_HOLD } from '../content/cabin';
 
 /**
@@ -42,10 +43,11 @@ interface CargoHoldProps {
   feed: FlightFeed;
   band: BandState;
   /** How many seats are sold, so the hold can say how many rode down here. */
-  belowCutoff: number;
+  belowCutoff: number;  /** Hand-flying, if anybody is. This room is inside the aeroplane. */
+  controls?: ManualControls;
 }
 
-const CargoHold = ({ feed, band, belowCutoff }: CargoHoldProps) => {
+const CargoHold = ({ feed, band, belowCutoff, controls = HANDS_OFF }: CargoHoldProps) => {
   const swayRef = useRef<SVGGElement>(null);
   const capRead = useRef<SVGTextElement>(null);
 
@@ -70,14 +72,17 @@ const CargoHold = ({ feed, band, belowCutoff }: CargoHoldProps) => {
   }, []);
 
   useAttitude(feed, (a, tick) => {
-    // Unpressurized and unsprung: the hold feels the aircraft more than the
-    // cabin does, so the whole room leans with the attitude.
+    /* Unpressurized and unsprung: the hold feels the aircraft more than the
+       cabin does, so the whole room leans with the attitude. Half the bank,
+       because that lean is turbulence and a room that matched every degree
+       of it would be seasick — but all of the hand-flown roll, because
+       inverted is inverted and there is nothing to damp about it. */
     swayRef.current?.setAttribute(
       'transform',
-      `rotate(${(a.bank * 0.5).toFixed(2)} 600 400) translate(0 ${(a.pitch * 1.6).toFixed(2)})`,
+      `rotate(${(a.bank * 0.5 + a.roll).toFixed(2)} 600 400) translate(0 ${(a.pitch * 1.6).toFixed(2)})`,
     );
     if (tick && capRead.current) capRead.current.textContent = formatCap(tick.marketCap);
-  });
+  }, controls);
 
   return (
     <div

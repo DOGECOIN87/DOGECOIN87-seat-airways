@@ -21,7 +21,24 @@ import { visibilityAwareInterval } from './visibility';
 const CLOCK_INTERVAL = 60_000;
 const WEATHER_INTERVAL = 15 * 60_000;
 
-export function useSky(): SkyState {
+/**
+ * Somebody flying by hand, overruling the sky.
+ *
+ * Applied by moving the *inputs* rather than by patching the result: an hour
+ * becomes a date, a weather becomes a weather, and `skyState` derives the
+ * elevation, the phase, the palette, where the sun sits and the label from
+ * those exactly as it does for the real ones. Overwriting `phase` on the way
+ * out would give you a midnight palette with the sun still overhead.
+ */
+export interface SkyOverride {
+  /** Force the hour of day, 0–23. Null or absent follows the clock. */
+  hour?: number | null;
+  weather?: WeatherKind | null;
+  /** Cloud cover to go with a forced weather, 0–1. */
+  cloudCover?: number | null;
+}
+
+export function useSky(override?: SkyOverride): SkyState {
   const [coords] = useState(coordsFromTimezone);
   const [weather, setWeather] = useState<{ weather: WeatherKind; cloudCover: number; live: boolean }>(
     () => ({ ...modelledWeather(new Date()), live: false }),
@@ -51,5 +68,18 @@ export function useSky(): SkyState {
     };
   }, [coords]);
 
-  return skyState(now, coords[0], coords[1], weather.weather, weather.cloudCover, weather.live);
+  const hour = override?.hour;
+  const at = typeof hour === 'number' ? new Date(now) : now;
+  if (typeof hour === 'number') at.setHours(hour, 0, 0, 0);
+
+  return skyState(
+    at,
+    coords[0],
+    coords[1],
+    override?.weather ?? weather.weather,
+    override?.weather ? override.cloudCover ?? weather.cloudCover : weather.cloudCover,
+    /* A forced sky is not a live reading, whatever the network said, and the
+       cabin's information strip says "live weather" off this flag. */
+    weather.live && !override?.weather && typeof hour !== 'number',
+  );
 }

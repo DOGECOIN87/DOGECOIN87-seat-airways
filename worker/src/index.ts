@@ -7,6 +7,8 @@
  *   POST /banner    put an advert up, if you can prove the wallet is yours
  *   GET  /holders   who is aboard, and the supply their bags are shares of
  *   GET  /holding   one wallet's balance, so no page has to carry an RPC key
+ *   GET  /flight    what the aeroplane is being told to do, if anything
+ *   PUT  /flight    tell it — the flight deck only
  *
  * The directory, behind a session that same wallet signature opens:
  *
@@ -16,6 +18,14 @@
  *   PUT    /profile    publish or amend your own
  *   GET    /messages   your introductions, both directions
  *   POST   /messages   send one, to your own section or one behind it
+ *
+ * And one route that is nobody's but the operator's:
+ *
+ *   GET/POST/PATCH/DELETE /logbook   one wallet's private notes
+ *
+ * It answers 404 to everybody else — the same 404 as a misspelt path, byte
+ * for byte — because a 403 tells whoever asked that there is something there
+ * to be refused. See its own section below.
  *
  * ── What this service knows about seats ───────────────────────────────────
  * For the wall, nothing, and it needs nothing: an advert is stored against
@@ -42,7 +52,12 @@ import {
   ANNOUNCEMENTS_PER_DAY, ANNOUNCEMENT_PAGE,
   MESSAGES_PER_HOUR, MESSAGE_PAGE, SESSION_TTL_MS, SIGNIN_MAX_AGE_MS,
 } from './networking';
+import {
+  entryId, isAdmin, packTags, readLogbookInput, readLogbookPatch, unpackTags,
+  LOGBOOK_PAGE, type LogEntry, type LogStatus,
+} from './logbook';
 import { cabinSize, canSeat, readLadder, rpcUrl } from './ladder';
+import { HANDS_OFF, clamped, handsOff, type ManualControls } from '../../src/lib/manualControls';
 import { CABIN_ZONES } from '../../src/content/cabin';
 import {
   ANNOUNCEMENT, canAnnounce, canMessage, canPostToChannel, canReadChannel, canViewContact,
@@ -104,6 +119,19 @@ export interface Env {
   OWNER_CACHE_MS?: string;
   /** Comma-separated origins allowed to call this. */
   ALLOWED_ORIGINS?: string;
+  /**
+   * The one wallet the logbook belongs to. Unset, there is no logbook.
+   *
+   * Not a secret, and not treated as one: it is a public key, on the chain,
+   * and drawn on the seat map if the operator holds the token. What guards
+   * those notes is the signature that opens a session — which needs the
+   * private key — and the route's refusal to admit it exists to anybody else.
+   *
+   * Unset means *nobody*, rather than everybody. A deployment that never
+   * named an operator has no logbook at all, which is the safe direction to
+   * fail in for a route whose answer is somebody's private notes.
+   */
+  ADMIN_WALLET?: string;
 }
 
 
@@ -256,7 +284,7 @@ function corsHeaders(env: Env, origin: string | null): Record<string, string> {
   const ok = origin && (allowed.length === 0 || allowed.includes(origin));
   return {
     'access-control-allow-origin': ok && origin ? origin : allowed[0] ?? '*',
-    'access-control-allow-methods': 'GET,HEAD,POST,PUT,DELETE,OPTIONS',
+    'access-control-allow-methods': 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS',
     'access-control-allow-headers': 'content-type,authorization',
     'access-control-max-age': '86400',
     vary: 'Origin',
@@ -348,6 +376,34 @@ function wallEtag(wall: Wall): string {
   return `"${Object.keys(wall).length}-${newest}"`;
 }
 
+/* ── The flight controls ─────────────────────────────────────────────────
+   One small record, read by every visitor and written by one wallet.
+
+   In KV rather than SQL because it is exactly one key with no history and no
+   relations, and behind a short warm-isolate snapshot for the same reason the
+   wall has one: this is the hottest read on the service — everybody's page
+   asks it, repeatedly, for as long as they have the tab open — and it changes
+   when somebody presses a button, which is rarely. */
+const FLIGHT_KEY = 'flight';
+const FLIGHT_CACHE_MS = 5_000;
+let flightCache: { value: ManualControls; expiresAt: number } | null = null;
+
+async function readFlight(env: Env): Promise<ManualControls> {
+  if (flightCache && flightCache.expiresAt > Date.now()) return flightCache.value;
+  let value = HANDS_OFF;
+  try {
+    const stored = await env.BANNERS.get(FLIGHT_KEY, 'json');
+    // Clamped on the way out as well as in. The way in is this deployment's
+    // own code; the way out is whatever is in the namespace today.
+    if (stored && typeof stored === 'object') value = clamped(stored as Partial<ManualControls>);
+  } catch {
+    /* An unreadable record is an aeroplane flying the market, which is what
+       it does when nobody has touched anything. Never a failed page. */
+  }
+  flightCache = { value, expiresAt: Date.now() + FLIGHT_CACHE_MS };
+  return value;
+}
+
 /* ── The cabin directory ────────────────────────────────────────────────────
    Profiles and introductions, in SQL, because they are rows: one card per
    wallet, and messages read back by recipient and by sender.
@@ -395,6 +451,24 @@ interface MessageRow {
   recipient: string;
   body: string;
   sent_at: string;
+}
+
+/**
+ * A logbook entry, as the column names have it.
+ *
+ * No `address` column, and that absence is the design: the logbook has one
+ * owner, named in the deployment rather than stored per row, so there is no
+ * ownership here for a query to get wrong. See `logbook.ts`.
+ */
+interface LogRow {
+  id: string;
+  body: string;
+  source: string;
+  tags: string;
+  conviction: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 /**
@@ -461,7 +535,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
     // client sends a compressed 384px image, so this is intentionally well
     // above the 512 KiB stored-image limit while still bounding an abuse case.
     const contentLength = Number(request.headers.get('content-length'));
-    const writes = request.method === 'POST' || request.method === 'PUT';
+    const writes = request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH';
     if (writes && Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
       return json({ error: 'That request is too large.' }, 413, cors);
     }
@@ -587,6 +661,208 @@ async function handle(request: Request, env: Env): Promise<Response> {
       return json(value, 200, { ...cors, 'cache-control': 'public, max-age=20' });
     }
 
+    /* ── The flight controls ────────────────────────────────────────────
+       What the aeroplane is doing, when somebody is flying it by hand.
+
+       The aircraft flies the market: pitch, bank, speed and altitude are all
+       read off the chart, on every visitor's page, from the same number.
+       These are the switches that take hold of it — invert, barrel roll, a
+       camera turntable, flaps, the hour, the weather — and they are read by
+       *everybody*, which is the entire reason they live here rather than in
+       one browser's storage. An aeroplane only one person can see upside
+       down is a screensaver. This is a flight everybody is on.
+
+       So `GET` is public and unauthenticated, like the wall and the holder
+       list, and `PUT` belongs to the wallet named in `ADMIN_WALLET` — the
+       same one the logbook belongs to. That one refuses with a 403 rather
+       than the logbook's 404, and the difference is deliberate: the logbook
+       is hidden, and this is not. Every visitor watching the aeroplane roll
+       already knows somebody rolled it.
+
+       Nothing in here can hurt anybody. It is an attitude, a camera rate and
+       a sky — no balances, no addresses, nothing written anywhere else — and
+       every field is clamped on the way in by the same function the page
+       clamps with, because the alternative is a stored NaN that becomes a
+       rotation of NaN on a hundred and seventy-eight people's screens. */
+    if (url.pathname === '/flight') {
+      if (request.method === 'GET') {
+        const flight = await readFlight(env);
+        return json(flight, 200, {
+          ...cors,
+          /* Short, because the point of a switch is that it does something
+             now. `stale-while-revalidate` lets the edge keep answering while
+             it refreshes, so a page polling this costs a revalidation rather
+             than a round trip most of the time. */
+          'cache-control': 'public, max-age=10, stale-while-revalidate=50',
+        });
+      }
+
+      if (request.method === 'PUT') {
+        const priv = { ...cors, 'cache-control': 'no-store' };
+        const db = env.DIRECTORY;
+        if (!db) return json({ error: 'This deployment has no cabin directory configured.' }, 503, priv);
+
+        const token = bearerToken(request.headers.get('authorization'));
+        const who = token ? await sessionAddress(db, token) : null;
+        if (!isAdmin(env.ADMIN_WALLET, who)) {
+          return json({ error: 'The flight controls belong to the flight deck.' }, 403, priv);
+        }
+
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+        if (!body || typeof body !== 'object') {
+          return json({ error: 'That was not a set of controls.' }, 400, priv);
+        }
+
+        const flight = clamped(body as Partial<ManualControls>);
+        /* Hands off is stored as an absence rather than as a record of zeroes,
+           so the common case — nobody flying — is a missing key that reads
+           back as the default, and giving the aeroplane back to the market
+           leaves nothing behind to go stale. */
+        if (handsOff(flight)) await env.BANNERS.delete(FLIGHT_KEY);
+        else await env.BANNERS.put(FLIGHT_KEY, JSON.stringify(flight));
+        flightCache = { value: flight, expiresAt: Date.now() + FLIGHT_CACHE_MS };
+        return json(flight, 200, priv);
+      }
+
+      return json({ error: `${request.method} is not allowed on ${url.pathname}.` }, 405, cors);
+    }
+
+    /* ── The logbook ────────────────────────────────────────────────────
+       One wallet's private notes: the things worth remembering out of a
+       cabin full of conversations.
+
+       Everything else in this service is a rule about cabins — your section
+       and every one behind it, decided from the holder list, true of whoever
+       is sitting there this minute. This is not that. It belongs to the
+       operator, named once in `ADMIN_WALLET`, and to nobody else at any
+       balance.
+
+       **It 404s rather than 403s**, and the 404 is the fallthrough's own,
+       byte for byte, headers and all. A 403 is an answer: it says there is
+       something here, it is worth guarding, and you have found the right
+       path. Against a route whose whole value is that nobody knows it is
+       there, that is the wrong thing to say to somebody who guessed — so a
+       request without the key gets what a misspelt path gets.
+
+       Order matters for the same reason. No database, no configured
+       operator, no token, an expired token, somebody else's token: one
+       refusal for all five, written once, so the shape of the failure never
+       tells the difference. And because the answer is the fallthrough's,
+       this block sits outside the directory's — inheriting its 401s and
+       503s would undo the whole thing. */
+    if (url.pathname === '/logbook') {
+      const db = env.DIRECTORY;
+      const nowhere = () => json({ error: 'No such route.' }, 404, cors);
+      if (!db || !env.ADMIN_WALLET) return nowhere();
+
+      const token = bearerToken(request.headers.get('authorization'));
+      const who = token ? await sessionAddress(db, token) : null;
+      if (!isAdmin(env.ADMIN_WALLET, who)) return nowhere();
+
+      const priv = { ...cors, 'cache-control': 'no-store' };
+      const asEntry = (row: LogRow): LogEntry => ({
+        id: row.id,
+        body: row.body,
+        source: row.source,
+        tags: unpackTags(row.tags),
+        conviction: row.conviction,
+        status: row.status as LogStatus,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      });
+
+      if (request.method === 'GET') {
+        /* The whole notebook, newest first, capped. One person's notes are
+           not a feed — there is no pagination here because there is nobody
+           to page past you, and the page filters what it has rather than
+           asking again per keystroke. */
+        const rows = await db
+          .prepare('SELECT * FROM logbook ORDER BY created_at DESC LIMIT ?')
+          .bind(LOGBOOK_PAGE)
+          .all<LogRow>();
+        return json({ entries: (rows.results ?? []).map(asEntry) }, 200, priv);
+      }
+
+      if (request.method === 'POST') {
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+        const read = readLogbookInput(body);
+        if ('error' in read) return json({ error: read.error }, 400, priv);
+
+        const now = new Date().toISOString();
+        const row: LogRow = {
+          id: entryId(),
+          body: read.entry.body,
+          source: read.entry.source,
+          tags: packTags(read.entry.tags),
+          conviction: read.entry.conviction,
+          status: read.entry.status,
+          created_at: now,
+          updated_at: now,
+        };
+        await db
+          .prepare(`INSERT INTO logbook (id, body, source, tags, conviction, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(row.id, row.body, row.source, row.tags, row.conviction, row.status, row.created_at, row.updated_at)
+          .run();
+        return json(asEntry(row), 200, priv);
+      }
+
+      if (request.method === 'PATCH') {
+        let body: { id?: unknown };
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: 'That request was not JSON.' }, 400, priv);
+        }
+        const id = typeof body.id === 'string' ? body.id : '';
+        if (!id) return json({ error: 'Which entry?' }, 400, priv);
+
+        const read = readLogbookPatch(body);
+        if ('error' in read) return json({ error: read.error }, 400, priv);
+
+        /* Written as columns rather than a built-up string: the fields are
+           known at compile time, so there is no reason for the set of things
+           this can write to depend on what arrived in the request. */
+        const patch = read.patch;
+        const sets: string[] = [];
+        const values: unknown[] = [];
+        if (patch.body !== undefined) { sets.push('body = ?'); values.push(patch.body); }
+        if (patch.source !== undefined) { sets.push('source = ?'); values.push(patch.source); }
+        if (patch.tags !== undefined) { sets.push('tags = ?'); values.push(packTags(patch.tags)); }
+        if (patch.conviction !== undefined) { sets.push('conviction = ?'); values.push(patch.conviction); }
+        if (patch.status !== undefined) { sets.push('status = ?'); values.push(patch.status); }
+        sets.push('updated_at = ?');
+        values.push(new Date().toISOString());
+
+        const updated = await db
+          .prepare(`UPDATE logbook SET ${sets.join(', ')} WHERE id = ? RETURNING *`)
+          .bind(...values, id)
+          .first<LogRow>();
+        if (!updated) return json({ error: 'No such entry.' }, 404, priv);
+        return json(asEntry(updated), 200, priv);
+      }
+
+      if (request.method === 'DELETE') {
+        const id = url.searchParams.get('id') ?? '';
+        if (!id) return json({ error: 'Which entry?' }, 400, priv);
+        const gone = await db.prepare('DELETE FROM logbook WHERE id = ?').bind(id).run();
+        if (!gone.meta.changes) return json({ error: 'No such entry.' }, 404, priv);
+        return json({ ok: true }, 200, priv);
+      }
+
+      return json({ error: `${request.method} is not allowed on ${url.pathname}.` }, 405, priv);
+    }
+
     /* ── The directory ──────────────────────────────────────────────────
        Nothing below is cacheable: every response is either a credential or
        somebody's private correspondence. */
@@ -634,7 +910,18 @@ async function handle(request: Request, env: Env): Promise<Response> {
           return json({ error: 'That sign-in has already been used. Try again.' }, 401, priv);
         }
 
-        if (!(await holdsToken(env, address))) {
+        /* The door: a session is for holders, because the directory is a room
+           for holders and a non-holder never gets a token to ask with.
+
+           The operator is the one exception, and it is not a privilege — it
+           is the difference between a rule about cabins and a name written in
+           the deployment. The logbook belongs to a wallet, not to a balance,
+           and an operator locked out of their own notes because a bag dipped
+           under the cutoff would be a failure with no error in it and no way
+           to read it off the page. What they hold still decides everything
+           else: the ladder seats them where their bag puts them, which for a
+           wallet holding nothing is the hold. */
+        if (!(await holdsToken(env, address)) && !isAdmin(env.ADMIN_WALLET, address)) {
           return json({ error: 'That wallet does not hold the token.' }, 403, priv);
         }
 
@@ -684,8 +971,11 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
          Being out-held is not selling. A holder who still holds anything
          keeps their session, their card, and their inbox; they are in the
-         hold, which is part of this aeroplane. */
-      if (!(await holdsToken(env, me))) {
+         hold, which is part of this aeroplane.
+
+         And the operator keeps theirs at any balance, for the reason the door
+         gives above: the logbook is a wallet's, not a bag's. */
+      if (!(await holdsToken(env, me)) && !isAdmin(env.ADMIN_WALLET, me)) {
         await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await tokenHash(token)).run();
         return json({ error: 'That wallet no longer holds the token.' }, 401, priv);
       }

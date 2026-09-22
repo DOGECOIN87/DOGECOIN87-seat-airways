@@ -6,6 +6,7 @@ import { formatChange, formatFeet, formatFeetShort, formatVerticalSpeed, phaseFo
 import type { BandState } from '../lib/flightModel';
 import type { SkyState } from '../lib/sky';
 import { paintTape, useAttitude } from '../lib/useAttitude';
+import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
 
 /**
  * The flight deck — the view from the jump seat, and what the top two holders
@@ -90,10 +91,11 @@ interface FlightDeckProps {
   feed: FlightFeed;
   lamps: Annunciators;
   sky: SkyState;
-  band: BandState;
+  band: BandState;  /** Hand-flying, if anybody is. This room is inside the aeroplane. */
+  controls?: ManualControls;
 }
 
-const FlightDeck = ({ feed, lamps, sky, band }: FlightDeckProps) => {
+const FlightDeck = ({ feed, lamps, sky, band, controls = HANDS_OFF }: FlightDeckProps) => {
   const world = useRef<SVGGElement>(null);
   const adi = useRef<SVGGElement>(null);
   const roll = useRef<SVGGElement>(null);
@@ -134,15 +136,21 @@ const FlightDeck = ({ feed, lamps, sky, band }: FlightDeckProps) => {
   const bases = useRef({ spd: NaN, alt: NaN, altStep: 0 });
 
   useAttitude(feed, (a, tick) => {
+    /* Hand-flying rolls the aeroplane, and this is a cockpit *in* it: the
+       horizon outside the glass and the one on the instrument both go over,
+       because that is what the crew would be looking at. The roll pointer
+       does not — it is painted on the aircraft and turns against the
+       horizon, which is the whole point of it. */
+    const over = a.bank + a.roll;
     world.current?.setAttribute(
       'transform',
-      `rotate(${a.bank.toFixed(2)} 0 ${GLASS_CY}) translate(0 ${(a.pitch * WORLD_DEG).toFixed(2)})`,
+      `rotate(${over.toFixed(2)} 0 ${GLASS_CY}) translate(0 ${(a.pitch * WORLD_DEG).toFixed(2)})`,
     );
     adi.current?.setAttribute(
       'transform',
-      `rotate(${a.bank.toFixed(2)} ${adiCx} ${adiCy}) translate(0 ${(a.pitch * PFD_DEG).toFixed(2)})`,
+      `rotate(${over.toFixed(2)} ${adiCx} ${adiCy}) translate(0 ${(a.pitch * PFD_DEG).toFixed(2)})`,
     );
-    roll.current?.setAttribute('transform', `rotate(${(-a.bank).toFixed(2)} ${adiCx} ${adiCy})`);
+    roll.current?.setAttribute('transform', `rotate(${(-over).toFixed(2)} ${adiCx} ${adiCy})`);
     rose.current?.setAttribute('transform', `rotate(${(-a.heading).toFixed(2)} ${ndCx} ${ndCy})`);
     vsi.current?.setAttribute(
       'transform',
@@ -179,7 +187,7 @@ const FlightDeck = ({ feed, lamps, sky, band }: FlightDeckProps) => {
       if (phaseRead.current) phaseRead.current.textContent = phaseFor(tick.change5m);
       if (paxRead.current) paxRead.current.textContent = tick.holders.toLocaleString('en-US');
     }
-  });
+  }, controls);
 
   const ticks = Array.from({ length: TICKS }, (_, i) => i);
   const half = (TICKS - 1) / 2;

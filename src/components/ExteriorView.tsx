@@ -5,6 +5,7 @@ import type { BandState } from '../lib/flightModel';
 import { formatCap, formatChange } from '../lib/flightModel';
 import type { SkyState } from '../lib/sky';
 import { useAttitude } from '../lib/useAttitude';
+import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
 import type { CabinSeat } from '../content/cabin';
 import Mark from './Mark';
 
@@ -31,9 +32,11 @@ interface ExteriorViewProps {
   claimed: CabinSeat | null;
   /** Where the walk-through camera is standing. */
   viewing: CabinSeat | null;
+  /** Hand-flying, if anybody is. Left out, the aeroplane flies the market. */
+  controls?: ManualControls;
 }
 
-const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorViewProps) => {
+const ExteriorView = ({ feed, sky, band, taken, claimed, viewing, controls = HANDS_OFF }: ExteriorViewProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const world = useRef<WorldHandles | null>(null);
   const capRead = useRef<HTMLSpanElement>(null);
@@ -74,9 +77,33 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
     world.current?.setOccupancy(taken);
   }, [taken]);
 
+  /* Pushed in on change rather than on every frame: the scene holds it, eases
+     toward it, and nothing here re-renders to make an aeroplane roll. */
+  useEffect(() => {
+    world.current?.setControls(controls);
+  }, [controls]);
+
   const pose = useRef<ViewPose>({ seatIndex: 0, row: 1, yaw: 0, id: '1A', exterior: true, orbit: 0 });
 
+  /* The turntable, advanced on the frame loop that is already running rather
+     than on a timer of its own. Held in a ref so changing the rate does not
+     restart the loop — and read through one, so the closure below is not
+     rebuilt on every render either. */
+  const spin = useRef(controls.spin);
+  spin.current = controls.spin;
+  const spunAt = useRef(0);
+
   useAttitude(feed, (a, tick) => {
+    if (spin.current && !orbit.current.active) {
+      const now = performance.now();
+      // Bounded, so a tab left in the background does not come back to an
+      // aeroplane that has whipped round forty times in one frame.
+      const dt = Math.min(0.1, spunAt.current ? (now - spunAt.current) / 1000 : 0);
+      spunAt.current = now;
+      orbit.current.angle = (orbit.current.angle + spin.current * dt) % 360;
+    } else {
+      spunAt.current = 0;
+    }
     pose.current.orbit = orbit.current.angle;
     world.current?.render(a, latest.current.sky, latest.current.band, pose.current);
     if (tick) {
@@ -86,7 +113,7 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing }: ExteriorView
         chgRead.current.style.color = tick.change5m >= 0 ? '#5BE86B' : '#FF5B4E';
       }
     }
-  });
+  }, controls);
 
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     orbit.current.active = true;

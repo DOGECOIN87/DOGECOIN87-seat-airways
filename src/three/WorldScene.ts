@@ -4,6 +4,7 @@ import { cloudTexture, earthTexture, farmlandTextures, moonTexture, radialTextur
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
+import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
 import { CABIN, createCabin, rowZ } from './cabin';
 import { createAirframe } from './airframe';
 
@@ -62,6 +63,15 @@ export interface WorldHandles {
   setOccupancy: (taken: ReadonlySet<string>) => void;
   /** The adverts showing on the row ahead, by seat id. */
   setAdverts: (bySeat: Readonly<Record<string, string>>) => void;
+  /**
+   * Fly it by hand.
+   *
+   * Pushed in rather than passed to `render`, like the occupancy and the
+   * adverts, because it is state the scene holds between frames: the roll
+   * eases toward what it is told over the better part of a second, which
+   * means the scene has to remember where it had got to.
+   */
+  setControls: (controls: ManualControls) => void;
   /** Metres of ground covered since the view opened. */
   travelled: () => number;
   dispose: () => void;
@@ -772,7 +782,43 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const climb = THREE.MathUtils.smoothstep(a.pitch, 8, 22) * 0.55;
     // Keep the control-surface cue visible but restrained; pitch and speed
     // should not make the exterior look as though the aircraft is landing.
-    airframe.setFlapDeployment(Math.max(lowSpeed, descent, climb) * 0.28);
+    airframe.setFlapDeployment(
+      manual.flaps ?? Math.max(lowSpeed, descent, climb) * 0.28,
+    );
+
+    /* Roll it by hand — and where that roll goes depends on where the camera
+       is standing, because "the aeroplane is inverted" is two different
+       pictures from two different places.
+
+       From outside, it goes on the airframe alone. The exterior camera is a
+       child of `aircraft`, so it rides the airframe: bank the whole group and
+       the aeroplane sits still in frame while the horizon turns — which is
+       what flying alongside something actually looks like, and exactly wrong
+       for a switch labelled "invert". Rolling the model instead, which the
+       camera is a sibling of rather than a passenger in, leaves the horizon
+       where it was and turns the aeroplane over in front of it.
+
+       From inside it goes on the camera, below, and the first attempt at that
+       got it wrong in an instructive way. Rolling the whole `aircraft` group
+       is what a passenger would actually experience — they go over *with* the
+       cabin, so the seat in front is still in front and the only thing that
+       changes is out of the window — and it is very nearly invisible: the
+       cabin renders identically and the one thing that moves is a hand-sized
+       rectangle of ground. Correct, and nobody would notice. Rolling the
+       camera turns the whole shot over instead: the seat backs swing above
+       the viewer, the ceiling comes up from below, and the ground still ends
+       up over the sky outside.
+
+       The market's own bank is deliberately not treated this way and stays on
+       the group, which is why `useAttitude` keeps `bank` and `roll` apart: a
+       two-degree lean should tilt the horizon past the window, not tip the
+       furniture.
+
+       Eased in `useAttitude` rather than here, so the horizon out of the
+       cockpit and the lean of the hold — neither of which is a three.js
+       scene — go over on exactly the same curve. */
+    airframe.group.rotation.z = THREE.MathUtils.degToRad(pose.exterior ? a.roll : 0);
+
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
       THREE.MathUtils.degToRad(a.pitch),
@@ -839,7 +885,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       const z = pose.seatIndex === null ? rowZ(1) - 4.2 : rowZ(pose.row);
       camera.position.set(x, CABIN.floorY + CABIN.eyeHeight, z + 0.02);
       cabinLight.position.set(x, CABIN.ceilingY - 0.3, z - 1.4);
-      camera.rotation.set(0, THREE.MathUtils.degToRad(-pose.yaw), 0, 'YXZ');
+      /* `YXZ`, so the roll is applied innermost — about the camera's own
+         line of sight rather than about any world axis. Which is what makes
+         it a roll of the shot and not a swing of the head. */
+      camera.rotation.set(0, THREE.MathUtils.degToRad(-pose.yaw), THREE.MathUtils.degToRad(a.roll), 'YXZ');
       if (camera.fov !== 70) {
         camera.fov = 70;
         camera.updateProjectionMatrix();
@@ -907,6 +956,14 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     camera.updateProjectionMatrix();
   };
 
+  /* Where the hand-flying switches are, and where the roll has got to.
+
+     Both live out here rather than in `render`, because the easing above has
+     to pick up between frames: an aeroplane halfway through a barrel roll is
+     a number this scene is carrying, not one it can be handed. */
+  let manual: ManualControls = HANDS_OFF;
+  const setControls = (controls: ManualControls) => { manual = controls; };
+
   const setOccupancy = (taken: ReadonlySet<string>) => {
     cabin.setOccupancy(taken);
     // A window lit from outside is a row somebody has genuinely booked.
@@ -953,5 +1010,5 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     renderer.dispose();
   };
 
-  return { render, resize, setOccupancy, setAdverts: cabin.setAdverts, travelled, dispose };
+  return { render, resize, setOccupancy, setAdverts: cabin.setAdverts, setControls, travelled, dispose };
 }

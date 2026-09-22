@@ -11,6 +11,7 @@
 import { useEffect, useRef } from 'react';
 import type { FlightFeed, FlightTick } from './flightFeed';
 import { airspeedFor, bankFor, pitchFor, verticalSpeedFor } from './flightModel';
+import type { ManualControls } from './manualControls';
 
 /** Eased, display-ready flight values. */
 export interface Attitude {
@@ -20,22 +21,43 @@ export interface Attitude {
   alt: number;
   vs: number;
   heading: number;
+  /**
+   * Roll flown by hand, in degrees, on top of everything above. 0 unless
+   * somebody has taken hold of the aeroplane.
+   *
+   * Eased here rather than by each view, so that the horizon out of the
+   * cockpit, the lean of the hold and the world outside a cabin window all
+   * go over together. It is kept apart from `bank` because the two are not
+   * the same thing: `bank` is what the market is doing and is read from the
+   * feed, this is what somebody asked for. A view that should show one and
+   * not the other — the exterior camera, which rides the airframe and would
+   * roll with it — can then tell them apart.
+   */
+  roll: number;
 }
 
 export type ApplyAttitude = (a: Attitude, tick: FlightTick | null) => void;
 
-export function useAttitude(feed: FlightFeed, apply: ApplyAttitude): void {
+export function useAttitude(
+  feed: FlightFeed,
+  apply: ApplyAttitude,
+  controls?: ManualControls,
+): void {
   // Held in a ref so callers can pass an inline closure without restarting
   // the loop (and losing the eased state) on every render.
   const applyRef = useRef(apply);
   applyRef.current = apply;
+  /* Likewise: changing the switches must not restart the loop, or every
+     change would snap the aeroplane back to level before rolling again. */
+  const rollTo = useRef(0);
+  rollTo.current = (controls?.halfRolls ?? 0) * 180;
 
   useEffect(() => {
     const reduced =
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    const target: Attitude = { pitch: 0, bank: 0, speed: 240, alt: 163_000, vs: 0, heading: 42 };
+    const target: Attitude = { pitch: 0, bank: 0, speed: 240, alt: 163_000, vs: 0, heading: 42, roll: 0 };
     const shown: Attitude = { ...target };
     // Seeded on the first tick rather than at zero: otherwise the opening
     // reading reads as a huge instantaneous rate of change and the aircraft
@@ -72,6 +94,11 @@ export function useAttitude(feed: FlightFeed, apply: ApplyAttitude): void {
       shown.speed += (target.speed - shown.speed) * k;
       shown.alt += (target.alt - shown.alt) * k;
       shown.vs += (target.vs - shown.vs) * k;
+      /* Read every frame rather than on a tick, because this one is not fed
+         by the market — it changes the moment somebody presses a switch.
+         Slower than the rest on purpose: half a turn takes about a second,
+         so a barrel roll is a roll rather than a jump cut. */
+      shown.roll += (rollTo.current - shown.roll) * (1 - Math.exp(-3.2 * dt));
       // Banking turns the aircraft, so the compass actually goes somewhere.
       shown.heading = (shown.heading + shown.bank * dt * 0.9 + 360) % 360;
       applyRef.current(shown, latest);
@@ -90,7 +117,7 @@ export function useAttitude(feed: FlightFeed, apply: ApplyAttitude): void {
          nothing drifts on its own, and the picture is redrawn at a slow,
          deliberate cadence — a readout that updates, not a scene in motion. */
       const paint = () => {
-        Object.assign(shown, target, { bank: 0 });
+        Object.assign(shown, target, { bank: 0, roll: rollTo.current });
         applyRef.current(shown, latest);
       };
       const id = setTimeout(paint, 80);

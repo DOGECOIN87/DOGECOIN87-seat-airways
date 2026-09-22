@@ -38,3 +38,12 @@ RPC_URL = "http://127.0.0.1:8788/rpc"
 # A fifth of a second rather than the default 45, so watching a holder stop
 # being one does not mean sitting through three quarters of a minute.
 OWNER_CACHE_MS = "200"
+
+# The logbook's owner, for the route suite.
+#
+# A throwaway keypair generated for this file and used nowhere else — the
+# suite carries its private half in plain sight, which is fine precisely
+# because it has never held anything and never will. The suite signs with it
+# to prove the operator gets in, and signs with the other wallets to prove
+# nobody else can tell the route exists.
+ADMIN_WALLET = "Ame7HoqEdhPsyuhtKR98J5onwUcQm96bNCViGfHprh8D"
