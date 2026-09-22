@@ -130,6 +130,27 @@ export class SessionExpired extends Error {
 }
 
 /**
+ * The server looked and said no, and said which no.
+ *
+ * It carries the status because one caller genuinely needs it: the logbook is
+ * refused as a 404 rather than a 403, so that a wallet without it cannot tell
+ * the route from a typo. That is a distinction the page has to be able to
+ * read — "you are not the operator" is a blank screen, "the service is down"
+ * is not — and reading it off the message text would be parsing English.
+ *
+ * Everything else keeps treating it as an ordinary `Error`, which it is, and
+ * keeps showing `message`.
+ */
+export class DirectoryRefused extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'DirectoryRefused';
+    this.status = status;
+  }
+}
+
+/**
  * The text the wallet signs. Must match `signInChallenge` in the Worker
  * byte for byte, or the signature verifies against nothing.
  */
@@ -198,10 +219,21 @@ async function call<T>(path: string, init: RequestInit & { token?: string } = {}
   }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `The directory refused that (${res.status}).`);
+    throw new DirectoryRefused(body?.error ?? `The directory refused that (${res.status}).`, res.status);
   }
   return (await res.json()) as T;
 }
+
+/**
+ * One request to the Worker, with the session on it.
+ *
+ * Exported for `logbookApi.ts`, which talks to the same service under the
+ * same token and should not grow its own copy of "a 401 means the session is
+ * gone, so drop it and say so". That handling is the thing worth having in
+ * one place: two copies of it is how one of them ends up leaving a dead token
+ * in storage for a day.
+ */
+export { call as workerRequest };
 
 /** Prove the wallet, and keep the token it hands back. */
 export async function signIn(

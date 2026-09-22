@@ -10,7 +10,7 @@
  * private, so there is nothing to show a visitor who has not signed in, and
  * asking for it anyway would only produce a 401 per page view.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   DirectoryUnreachable, SessionExpired,
   fetchDirectory, fetchMessages, hasDirectory, saveProfile, sendMessage,
@@ -80,18 +80,23 @@ export function useDirectory(
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const live = useRef(true);
-
-  /* Re-armed on mount, not only cleared on unmount. StrictMode mounts, tears
-     down and remounts every effect in development, so a ref that is only ever
-     set to false stays false for the rest of the page's life — and every
-     state update after an await is then dropped, leaving the panel sitting on
-     "Check your wallet…" while the request it is waiting for has long since
-     come back. */
-  useEffect(() => {
-    live.current = true;
-    return () => { live.current = false; };
-  }, []);
+  /* There used to be a "still mounted?" ref here, checked after every await.
+  
+     It was re-armed on mount rather than only cleared on unmount, because
+     StrictMode tears every effect down and builds it again in development and
+     a ref that is only ever set false stays false for the rest of the page's
+     life. That fixed the development case and left the one that actually bit:
+     this panel renders inside a `<Suspense>` boundary, and when a boundary
+     re-suspends React runs every effect's *cleanup* without unmounting
+     anything. A signature approved in that window came back to a ref saying
+     the component was gone, and the session was discarded — a token left in
+     storage, the panel stuck on "Check your wallet…", and no way out of it
+     but a reload.
+  
+     The guard was never buying anything either way: React 18 dropped the
+     warning it was written for, because an update to a component that has
+     genuinely gone is simply discarded. So it is gone, and every result below
+     is allowed to land. */
 
   // A session belongs to one wallet. Reconnecting as somebody else starts over.
   useEffect(() => {
@@ -110,7 +115,6 @@ export function useDirectory(
     setLoading(true);
     try {
       const [directory, messages] = await Promise.all([fetchDirectory(current), fetchMessages(current)]);
-      if (!live.current) return;
       setProfiles(directory);
       setInbox(messages.inbox);
       setSent(messages.sent);
@@ -119,11 +123,10 @@ export function useDirectory(
       setAnnouncements(messages.announcements ?? []);
       setError(null);
     } catch (e) {
-      if (!live.current) return;
       if (e instanceof SessionExpired) setSession(null);
       setError(reason(e) || null);
     } finally {
-      if (live.current) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
@@ -138,12 +141,12 @@ export function useDirectory(
     setError(null);
     try {
       const opened = await openSession(address, sign);
-      if (live.current) setSession(opened);
+      setSession(opened);
     } catch (e) {
       const message = reason(e);
-      if (live.current && message) setError(message);
+      if (message) setError(message);
     } finally {
-      if (live.current) setSigningIn(false);
+      setSigningIn(false);
     }
   }, [address, sign]);
 
@@ -166,19 +169,15 @@ export function useDirectory(
     setError(null);
     try {
       const published = await saveProfile(session, profile);
-      if (live.current) {
-        setProfiles((current) => ({ ...current, [published.address]: published }));
-        setNotice('Your card is published to the cabin directory.');
-      }
+      setProfiles((current) => ({ ...current, [published.address]: published }));
+      setNotice('Your card is published to the cabin directory.');
       return true;
     } catch (e) {
-      if (live.current) {
-        if (e instanceof SessionExpired) setSession(null);
-        setError(reason(e) || null);
-      }
+      if (e instanceof SessionExpired) setSession(null);
+      setError(reason(e) || null);
       return false;
     } finally {
-      if (live.current) setSaving(false);
+      setSaving(false);
     }
   }, [session]);
 
@@ -188,31 +187,27 @@ export function useDirectory(
     setError(null);
     try {
       const message = await sendMessage(session, to, body);
-      if (live.current) {
-        /* Put it where it will be read back from, so the page shows it
-           without waiting for the next poll. Three destinations, the same
-           three the server sorts by. */
-        const room = zoneOfChannel(to);
-        if (to === ANNOUNCEMENT) {
-          setAnnouncements((current) => [message, ...current]);
-          setNotice('Announcement made. The whole aircraft can hear it.');
-        } else if (room) {
-          setChannels((current) => ({ ...current, [room]: [message, ...(current[room] ?? [])] }));
-          setNotice('Posted to your section.');
-        } else {
-          setSent((current) => [message, ...current]);
-          setNotice('Introduction sent.');
-        }
+      /* Put it where it will be read back from, so the page shows it without
+         waiting for the next poll. Three destinations, the same three the
+         server sorts by. */
+      const room = zoneOfChannel(to);
+      if (to === ANNOUNCEMENT) {
+        setAnnouncements((current) => [message, ...current]);
+        setNotice('Announcement made. The whole aircraft can hear it.');
+      } else if (room) {
+        setChannels((current) => ({ ...current, [room]: [message, ...(current[room] ?? [])] }));
+        setNotice('Posted to your section.');
+      } else {
+        setSent((current) => [message, ...current]);
+        setNotice('Introduction sent.');
       }
       return true;
     } catch (e) {
-      if (live.current) {
-        if (e instanceof SessionExpired) setSession(null);
-        setError(reason(e) || null);
-      }
+      if (e instanceof SessionExpired) setSession(null);
+      setError(reason(e) || null);
       return false;
     } finally {
-      if (live.current) setSaving(false);
+      setSaving(false);
     }
   }, [session]);
 
@@ -222,14 +217,12 @@ export function useDirectory(
     try {
       // `rooms=all` is own *and* behind, so this replaces rather than merges.
       const messages = await fetchMessages(session, 'all');
-      if (live.current) setChannels(messages.channels ?? {});
+      setChannels(messages.channels ?? {});
     } catch (e) {
-      if (live.current) {
-        if (e instanceof SessionExpired) setSession(null);
-        setError(reason(e) || null);
-      }
+      if (e instanceof SessionExpired) setSession(null);
+      setError(reason(e) || null);
     } finally {
-      if (live.current) setLoading(false);
+      setLoading(false);
     }
   }, [session]);
 

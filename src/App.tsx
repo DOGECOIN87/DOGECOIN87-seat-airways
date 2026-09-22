@@ -27,6 +27,7 @@ import {
 import { useFlightState } from './lib/useFlightState';
 import { useAircraftAudio } from './lib/useAircraftAudio';
 import { useSky } from './lib/useSky';
+import { clamped, coverFor, keepControls, storedControls, type ManualControls } from './lib/manualControls';
 import { useWallet } from './lib/useWallet';
 import { holdingsSource, type Holding } from './lib/holdings';
 import { berthFromManifest } from './lib/seatLadder';
@@ -64,6 +65,37 @@ const NetworkingHub = lazy(() => import('./components/NetworkingHub'));
 const RadioLog = lazy(() => import('./components/RadioLog'));
 const prefetchFlightDeck = () => { void loadFlightDeck(); };
 const prefetchSeatMap = () => { void loadSeatMap(); };
+
+/**
+ * The logbook, which nothing on this page links to.
+ *
+ * Lazy like the rest, and that matters more here than anywhere else: the
+ * chunk is requested only when somebody types the fragment, so a visitor who
+ * never does downloads nothing that says the route exists. The gate itself is
+ * the Worker's, which answers everybody but one wallet the same 404 a
+ * misspelt path gets — this is only about not advertising the door.
+ */
+const Logbook = lazy(() => import('./components/Logbook'));
+const LOGBOOK_HASH = /^#\/?logbook$/i;
+
+function useLogbookFragment(): [boolean, () => void] {
+  const [open, setOpen] = useState(
+    () => typeof window !== 'undefined' && LOGBOOK_HASH.test(window.location.hash),
+  );
+  useEffect(() => {
+    const read = () => setOpen(LOGBOOK_HASH.test(window.location.hash));
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
+  }, []);
+  const close = useCallback(() => {
+    /* Replaced rather than pushed: closing should not leave a step in the
+       history that going back walks into, and should not leave the fragment
+       sitting in the URL bar of a browser somebody else might pick up. */
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    setOpen(false);
+  }, []);
+  return [open, close];
+}
 
 const Deferred = ({ children, minHeight = '6rem' }: { children: ReactNode; minHeight?: string }) => {
   const host = useRef<HTMLDivElement>(null);
@@ -175,7 +207,22 @@ export default function App() {
      not reporting anything. */
   const feed = useMemo(() => createLiveFeed(INITIAL_TICK), []);
   const { tick, lamps } = useFlightState(feed);
-  const sky = useSky();
+  /* The manual controls: cosmetic, local to this browser, and reachable only
+     from the hidden page. The aeroplane flies the market by default and this
+     is where somebody takes hold of it. */
+  const [controls, setControls] = useState<ManualControls>(storedControls);
+  const flyBy = useCallback((next: ManualControls) => {
+    // Through the same limits storage is read back through, so the barrel-roll
+    // button cannot queue more turns than a reload would keep.
+    const held = clamped(next);
+    setControls(held);
+    keepControls(held);
+  }, []);
+  const sky = useSky(
+    controls.weather
+      ? { hour: controls.hour, weather: controls.weather, cloudCover: coverFor(controls.weather) }
+      : { hour: controls.hour },
+  );
   const band = useMemo(() => bandFor(tick.marketCap), [tick.marketCap]);
   const aircraftAudio = useAircraftAudio(lamps, tick.change5m, band.band);
 
@@ -191,6 +238,7 @@ export default function App() {
 
   /* Check-in. The seat is not a choice: the wallet's holding decides it. */
   const wallet = useWallet();
+  const [logbookOpen, closeLogbook] = useLogbookFragment();
   const [holding, setHolding] = useState<Holding | null>(null);
   const [loadingHolding, setLoadingHolding] = useState(false);
   /* Demo only: a stand-in holding, so the ladder can be seen working with no
@@ -529,7 +577,7 @@ export default function App() {
                 <CargoHold feed={feed} band={band} belowCutoff={belowCutoff} />
               ) : camera === 'exterior' ? (
                 <Suspense fallback={<SceneLoading exterior />}>
-                  <ExteriorView feed={feed} sky={sky} band={band} taken={taken} claimed={claimedSeat} viewing={viewSeat} />
+                  <ExteriorView feed={feed} sky={sky} band={band} taken={taken} claimed={claimedSeat} viewing={viewSeat} controls={controls} />
                 </Suspense>
               ) : camera === 'deck' ? (
                 <FlightDeck feed={feed} lamps={lamps} sky={sky} band={band} />
@@ -896,6 +944,24 @@ export default function App() {
           }}
           onClose={() => setAdvertising(null)}
         />
+      )}
+
+      {/* Its own Suspense, with nothing for a fallback. The page's outer one
+          would blank the whole site while this chunk loaded — a flash of the
+          loading screen for anybody who typed the fragment, which is both bad
+          to look at and the one thing that would tell a stranger they had
+          guessed something real. */}
+      {logbookOpen && (
+        <Suspense fallback={null}>
+          <Logbook
+            manifest={manifest}
+            address={seatKey}
+            sign={wallet.signMessage}
+            controls={controls}
+            onControls={flyBy}
+            onClose={closeLogbook}
+          />
+        </Suspense>
       )}
       </div>
     </Suspense>

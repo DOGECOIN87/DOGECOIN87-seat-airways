@@ -362,6 +362,56 @@ to `getTokenLargestAccounts` looks like from outside.
 Abuse is bounded separately: 20 introductions per wallet per hour, 1,000
 characters each, and contact links that must be `http(s)`.
 
+## The logbook
+
+One route here is not about cabins at all. `/logbook` is the operator's own
+notebook — the things heard in a cabin full of conversations that might be
+worth something later, which otherwise get remembered for a day and are gone
+by the time they mattered. `GET` reads it, `POST` writes one down, `PATCH`
+amends one, `DELETE` strikes one out.
+
+It belongs to exactly one wallet, named in `ADMIN_WALLET`. Not a role, not a
+row in a table, and not a balance: everything else in this service is a rule
+about where somebody is sitting, which is true of whoever happens to be in
+that seat this minute, and a notebook that changed hands when somebody bought
+more of the token would not be a notebook. There is no `admins` table, so
+there is no grant here for a bug to get wrong.
+
+**It answers 404, not 403.** A 403 is an answer — it says there is something
+here, it is worth guarding, and you have found the right path. So every
+request that is not the operator's gets what a misspelt path gets, byte for
+byte, headers and all: no database, no configured operator, no token, an
+expired token, somebody else's token, a read or a write, all one refusal. The
+route suite asserts that against a deliberate typo rather than against a
+literal, because the two answers being *identical* is the whole feature.
+
+Unset, `ADMIN_WALLET` means nobody rather than everybody, and a malformed one
+matches nothing — not even itself. A deployment that never named an operator
+has no logbook, which is the safe direction to fail in for a route whose
+answer is somebody's private notes.
+
+The address itself is not a secret and is not kept as one. It is a public key:
+it is on the chain, and it is drawn on this aircraft's own seat map if the
+operator holds the token. What guards those notes is the signature that opens
+a session, which needs the private key. Set it as a `[vars]` entry, or with
+`wrangler secret put ADMIN_WALLET` if you would rather it were not in the
+repository; the code reads it the same either way.
+
+One exemption comes with it. A session is for holders, because the directory
+is a room for holders — but the operator's opens at any balance, and survives
+the re-check on every request after it. The logbook belongs to a wallet, not
+to a bag, and an operator locked out of their own notes because a holding
+dipped would be a failure with no error in it and nothing on the page to read
+it off. What they hold still decides everything else: the ladder seats them
+where their bag puts them, which for a wallet holding nothing is the hold.
+
+On the page it is at `/#logbook`, linked from nowhere and lazily loaded, so a
+visitor who never types the fragment does not even fetch the chunk. That is
+obscurity rather than security — the gate is the 404 above — and the page is
+careful not to give it away: until the server confirms, it draws a small card
+saying nothing about what it guards, and if the answer is no it draws nothing
+at all.
+
 ## Serving the artwork
 
 A record is keyed by the wallet that published it, but the **artwork is

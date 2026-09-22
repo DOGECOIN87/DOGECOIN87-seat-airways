@@ -4,6 +4,7 @@ import { cloudTexture, earthTexture, farmlandTextures, moonTexture, radialTextur
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
+import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
 import { CABIN, createCabin, rowZ } from './cabin';
 import { createAirframe } from './airframe';
 
@@ -62,6 +63,15 @@ export interface WorldHandles {
   setOccupancy: (taken: ReadonlySet<string>) => void;
   /** The adverts showing on the row ahead, by seat id. */
   setAdverts: (bySeat: Readonly<Record<string, string>>) => void;
+  /**
+   * Fly it by hand.
+   *
+   * Pushed in rather than passed to `render`, like the occupancy and the
+   * adverts, because it is state the scene holds between frames: the roll
+   * eases toward what it is told over the better part of a second, which
+   * means the scene has to remember where it had got to.
+   */
+  setControls: (controls: ManualControls) => void;
   /** Metres of ground covered since the view opened. */
   travelled: () => number;
   dispose: () => void;
@@ -772,7 +782,29 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const climb = THREE.MathUtils.smoothstep(a.pitch, 8, 22) * 0.55;
     // Keep the control-surface cue visible but restrained; pitch and speed
     // should not make the exterior look as though the aircraft is landing.
-    airframe.setFlapDeployment(Math.max(lowSpeed, descent, climb) * 0.28);
+    airframe.setFlapDeployment(
+      manual.flaps ?? Math.max(lowSpeed, descent, climb) * 0.28,
+    );
+
+    /* Roll it by hand, on the airframe alone.
+
+       The exterior camera is a child of `aircraft`, so it rides the airframe:
+       bank the whole group and the aeroplane sits still in frame while the
+       horizon turns, which is what flying alongside something looks like and
+       is exactly wrong for a switch labelled "invert" — you would see the
+       world flip and the aeroplane apparently not move.
+
+       So the extra roll goes on the model, which the camera is a sibling of
+       rather than a passenger in. The horizon stays where it was and the
+       aeroplane rolls over in front of it, which is what somebody who threw
+       the switch is asking to watch.
+
+       Eased rather than set, so half a turn takes about a second and a barrel
+       roll is a roll rather than a jump cut. Frame-rate independent, for the
+       same reason everything else here is. */
+    rollShown += (manual.halfRolls * 180 - rollShown) * (1 - Math.exp(-3.2 * dt));
+    airframe.group.rotation.z = THREE.MathUtils.degToRad(rollShown);
+
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
       THREE.MathUtils.degToRad(a.pitch),
@@ -907,6 +939,15 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     camera.updateProjectionMatrix();
   };
 
+  /* Where the hand-flying switches are, and where the roll has got to.
+
+     Both live out here rather than in `render`, because the easing above has
+     to pick up between frames: an aeroplane halfway through a barrel roll is
+     a number this scene is carrying, not one it can be handed. */
+  let manual: ManualControls = HANDS_OFF;
+  let rollShown = 0;
+  const setControls = (controls: ManualControls) => { manual = controls; };
+
   const setOccupancy = (taken: ReadonlySet<string>) => {
     cabin.setOccupancy(taken);
     // A window lit from outside is a row somebody has genuinely booked.
@@ -953,5 +994,5 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     renderer.dispose();
   };
 
-  return { render, resize, setOccupancy, setAdverts: cabin.setAdverts, travelled, dispose };
+  return { render, resize, setOccupancy, setAdverts: cabin.setAdverts, setControls, travelled, dispose };
 }

@@ -98,3 +98,15 @@ TOKEN_MINT = "AWJCyg9PrMtYju9yaQmdQLcwrGobHMTv9JU3mo4upump"
 # and does not exist for the other hundred and fifty-eight. `GET /health`
 # reports `seated` out of `cabin`, so that is a number to read rather than a
 # thing to suspect.
+
+# The one wallet the logbook belongs to — the operator's private notes, at
+# GET/POST/PATCH/DELETE /logbook. Unset, that route does not exist: no
+# logbook, and the same 404 for everybody.
+#
+# A public key rather than a secret, and deliberately kept in the open here.
+# It is on the chain, and drawn on this aircraft's own seat map if the
+# operator holds the token, so hiding it would buy nothing — what guards those
+# notes is the signature that opens a session, which needs the private key.
+# Move it to `wrangler secret put ADMIN_WALLET` if you would rather it were
+# not in the repository; the code reads it the same either way.
+ADMIN_WALLET = "Hn1i7bLb7oHpAL5AoyGvkn7YgwmWrVTbVsjXA1LYnELo"
