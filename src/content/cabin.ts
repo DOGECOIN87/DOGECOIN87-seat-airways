@@ -234,6 +234,29 @@ export const CALLOUTS = {
   turbulence: 'Rough air ahead. Seat belt sign is on.',
 } as const;
 
+/* ── The departure board ──────────────────────────────────────────────────
+   The split-flap board at the top of the page turns through these in order,
+   then starts again. The first is the airline's own line: the board boards
+   it first, holds it longest, and shows nothing else to anybody who has asked
+   their device for reduced motion.
+
+   Each entry is the board's rows, top to bottom: one line or two. The board
+   is as wide as the longest line in this list, so one long line shrinks every
+   flap on it — ten characters keeps them big enough to read on a phone. The
+   drums carry A–Z, 0–9 and  + - / : ( ) % . , ! ? & $ '  and anything else
+   comes up blank. */
+export const BOARD_PHRASES: readonly (readonly string[])[] = [
+  ['HOLD MORE', 'FLY HIGHER'],
+  ['TAKE A', 'SEAT'],
+  ['NETWORK'],
+  ['BUILD'],
+  ['RELAX'],
+  ['ADVERTISE'],
+  ['MOVE UP'],
+  ['NOW', 'BOARDING'],
+  ['TO THE', 'MOON'],
+];
+
 /* ── Turning your head ────────────────────────────────────────────────────
    What is beside you is not the same for every seat. From 8A the window is
    one turn to the left; from 8F the same window is the far side of the

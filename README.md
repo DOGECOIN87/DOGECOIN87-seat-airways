@@ -15,7 +15,7 @@ the whole cabin hears about it over the PA.
 
 | Input | Becomes |
 | ----- | ------- |
-| 24h price change | Pitch attitude; its rate of change becomes bank |
+| 5-minute price change | Pitch attitude; its rate of change becomes bank |
 | Market cap | Altitude, in feet, read straight off the number |
 | Holder count | Souls on board |
 | Attitude | Overhead annunciators, and the PA announcements they trigger |
@@ -158,6 +158,14 @@ or divided by 1.618 (or by its square root, where a whole step is too big a
 jump), and every measure of air is a rem stepped by the same number — so
 nothing on the page is nearly-but-not-quite related to anything else. The
 scale is `--t-xs` through `--t-5xl` and `--s-1` through `--s-6`.
+
+The headline is the other exception: a split-flap departure board
+(`src/components/SplitFlapBoard.tsx`), black flaps and white type like the
+ones in a terminal, turning each letter through every flap between the one
+showing and the one wanted. What it says is `BOARD_PHRASES` in
+`src/content/cabin.ts` — one or two lines per entry, first entry held longest
+and the only one shown to anybody who asks for reduced motion. The heading
+itself stays "Hold more. Fly higher." for screen readers.
 
 The aircraft keeps its own materials. Inside the dark screens the livery is
 still navy and the cabin lighting is still amber, because those are things the
@@ -524,6 +532,7 @@ src/
 │   ├── cabin.ts              the cabin interior, seat by seat
 │   └── terrain.ts            farmland, the lunar surface, clouds, Earth
 └── components/
+    ├── SplitFlapBoard.tsx    the hero's departure board, flap by flap
     ├── ViewFrame.tsx         zoom, pan, and the camera chrome
     ├── ExteriorView.tsx      the whole aircraft
     ├── CabinView3D.tsx       a seat, looking around

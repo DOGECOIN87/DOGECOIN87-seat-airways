@@ -4,9 +4,11 @@ import ContractBar from './components/ContractBar';
 import ViewFrame from './components/ViewFrame';
 import Annunciators from './components/Annunciators';
 import AdvertDialog from './components/AdvertDialog';
+import SplitFlapBoard from './components/SplitFlapBoard';
 import type { LogEntry } from './components/RadioLog';
 import {
   ALL_SEATS,
+  BOARD_PHRASES,
   CABIN_ZONES,
   CALLOUTS,
   CHATTER,
@@ -511,10 +513,12 @@ export default function App() {
                 <span className="sa-live" aria-hidden />
                 Live · SA350 · {band.label}
               </p>
-              <h1 id="hero-title" className="sa-display mt-4">
-                Hold more.
-                <br />
-                Fly higher.
+              {/* The board turns through the airline's lines; the heading
+                  keeps one. Assistive technology reads the fixed text, and
+                  the board beside it is a picture of words. */}
+              <h1 id="hero-title" className="sa-board-title mt-5">
+                <span className="sr-only">Hold more. Fly higher.</span>
+                <SplitFlapBoard phrases={BOARD_PHRASES} />
               </h1>
             </div>
             <div className="lg:pb-3">
