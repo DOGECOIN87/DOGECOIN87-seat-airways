@@ -149,21 +149,30 @@ html {
    and faded into the panel ground. Two offset repeat layers create staggered
    rows rather than a rigid checkerboard, so the pattern reads as atmosphere
    instead of decoration competing with the instruments. */
+/* The box stays still and holds the fade; only its ::before drifts. A
+   mask on the moving layer travels with it, so the top band faded out
+   over each cycle and popped back in at the loop — a seam the eye finds
+   even when the tiles themselves have none. */
 .sa-ground__pattern {
   position: absolute;
-  inset: -18rem 0 0 -18rem; /* one tile of bleed so the drift never exposes an edge */
+  inset: 0;
   pointer-events: none;
+  /* The mark is drawn at 50% white, so 0.95 here put a 47% white seat
+     over the headline and the body copy. At 0.16 it is about 8%: a
+     texture you notice, never a shape that sits on a letter. */
+  opacity: 0.16;
+  mask-image: linear-gradient(to bottom, transparent 0, black 10rem, black calc(100% - 10rem), transparent 100%);
+}
+.sa-ground__pattern::before {
+  content: '';
+  position: absolute;
+  inset: -18rem 0 0 -18rem; /* one tile of bleed so the drift never exposes an edge */
   background-image:
     url('/seat-airlines-mark-pattern.svg'),
     url('/seat-airlines-mark-pattern.svg');
   background-repeat: repeat;
   background-size: 18rem 18rem;
   background-position: 0 0, 9rem 9rem;
-  /* The mark is drawn at 50% white, so 0.95 here put a 47% white seat
-     over the headline and the body copy. At 0.16 it is about 8%: a
-     texture you notice, never a shape that sits on a letter. */
-  opacity: 0.16;
-  mask-image: linear-gradient(to bottom, transparent 0, black 10rem, black calc(100% - 10rem), transparent 100%);
   animation: sa-logo-drift 90s linear infinite;
   will-change: transform;
 }
@@ -938,7 +947,7 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .sd-shake, .sa-pulse-glow, .sa-shine::after, .sa-sweep, .sa-ground__pattern, .sa-view-loading__mark { animation: none !important; }
+  .sd-shake, .sa-pulse-glow, .sa-live, .sa-shine::after, .sa-sweep, .sa-ground__pattern::before, .sa-view-loading__mark { animation: none !important; }
 }
 
 /* ============================================================
@@ -1573,7 +1582,11 @@ dl,
 ol,
 ul { margin-block: 0; }
 
-p { text-wrap: pretty; }
+/* The longhand, not `text-wrap`: that is now a shorthand that also
+   resets the wrap mode, and as an unlayered rule it quietly beat every
+   `whitespace-nowrap` utility on a paragraph ("Market cap" broke in two
+   at 390px). Only the style of the wrap is this rule's business. */
+p { text-wrap-style: pretty; }
 
 .sa-topbar__fig dt,
 .sa-topbar__fig dd {
