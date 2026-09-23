@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="84 84 1240 1240" width="1240" height="1240" role="img" aria-labelledby="t">
+  <title id="t">Seat Airlines</title>
+  <!--
+    The Seat Airlines badge, drawn as geometry rather than traced: a glossy
+    navy disc with the seat raised off it in moulded white. Every piece of
+    the seat is a true line, arc or round-capped stroke, so the edges stay
+    clean at any size.
+
+    Pieces, back to front: the rear strut, frame and legs (one round-capped
+    tube); the seat back and cushion (one L); the armrest in its crook.
+  -->
+  <defs>
+    <!-- The disc: royal navy, a little brighter where the light falls. -->
+    <radialGradient id="face" cx="704" cy="620" r="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0C2D78"/>
+      <stop offset="0.55" stop-color="#0A286D"/>
+      <stop offset="0.86" stop-color="#072262"/>
+      <stop offset="1" stop-color="#051B50"/>
+    </radialGradient>
+    <!-- The bevel just inside the rim: lit up-left and down-left, shaded down-right. -->
+    <linearGradient id="bevel" x1="180" y1="200" x2="1230" y2="1210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7C98D4" stop-opacity="0.75"/>
+      <stop offset="0.35" stop-color="#2A4C99" stop-opacity="0.35"/>
+      <stop offset="0.7" stop-color="#0A2466" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#3C5FAE" stop-opacity="0.55"/>
+    </linearGradient>
+    <!-- A soft dome of light over the upper half. -->
+    <radialGradient id="dome" cx="640" cy="420" r="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <!-- The window reflection in the top-right shoulder. -->
+    <linearGradient id="reflect" x1="1180" y1="300" x2="900" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EEF3FC" stop-opacity="0.85"/>
+      <stop offset="0.45" stop-color="#B9C9EA" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#B9C9EA" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Light bounced into the bottom of the dome. -->
+    <linearGradient id="bounce" x1="0" y1="1294" x2="0" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4E72C2" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#4E72C2" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Specular streak along the left rim. -->
+    <linearGradient id="rimShine" x1="0" y1="330" x2="0" y2="1100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.35" stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="0.65" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Moulded white: bright where the light is, cooling to grey away from it. -->
+    <linearGradient id="white" x1="420" y1="280" x2="1060" y2="1060" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#F4F6FA"/>
+      <stop offset="1" stop-color="#E2E6EE"/>
+    </linearGradient>
+
+    <clipPath id="disc"><circle cx="704" cy="704" r="590"/></clipPath>
+
+    <!-- The whole badge sits on the page with a soft shadow. -->
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="9"/>
+      <feOffset dx="0" dy="8" result="s"/>
+      <feFlood flood-color="#0A1E4A" flood-opacity="0.28"/>
+      <feComposite in2="s" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- The seat is raised off the disc: a dark channel pressed round each
+         piece, a lit lip on the channel's far side, and a cast shadow. -->
+    <filter id="raise" x="-15%" y="-15%" width="130%" height="135%">
+      <feMorphology in="SourceAlpha" operator="dilate" radius="11" result="wide"/>
+      <feOffset in="wide" dx="3" dy="4" result="wideShift"/>
+      <feGaussianBlur in="wideShift" stdDeviation="2" result="lipBlur"/>
+      <feFlood flood-color="#3A63B8" flood-opacity="0.55"/>
+      <feComposite in2="lipBlur" operator="in" result="lip"/>
+
+      <feMorphology in="SourceAlpha" operator="dilate" radius="7" result="rim"/>
+      <feGaussianBlur in="rim" stdDeviation="1.6" result="rimBlur"/>
+      <feFlood flood-color="#03113A" flood-opacity="0.9"/>
+      <feComposite in2="rimBlur" operator="in" result="channel"/>
+
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8" result="castBlur"/>
+      <feOffset in="castBlur" dx="5" dy="10" result="castShift"/>
+      <feFlood flood-color="#020A26" flood-opacity="0.55"/>
+      <feComposite in2="castShift" operator="in" result="cast"/>
+
+      <feMerge>
+        <feMergeNode in="lip"/>
+        <feMergeNode in="cast"/>
+        <feMergeNode in="channel"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Rounded shading inside each white piece: grey on the edges that turn
+         away down-right, a white catch on the edges facing the light. -->
+    <filter id="mould" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="soft"/>
+      <feOffset in="soft" dx="-6" dy="-8" result="upLeft"/>
+      <feComposite in="SourceAlpha" in2="upLeft" operator="out" result="farEdge"/>
+      <feFlood flood-color="#8F9BB4" flood-opacity="0.85"/>
+      <feComposite in2="farEdge" operator="in" result="shade"/>
+
+      <feOffset in="soft" dx="4" dy="5" result="downRight"/>
+      <feComposite in="SourceAlpha" in2="downRight" operator="out" result="nearEdge"/>
+      <feFlood flood-color="#FFFFFF" flood-opacity="1"/>
+      <feComposite in2="nearEdge" operator="in" result="catch"/>
+
+      <feMerge>
+        <feMergeNode in="SourceGraphic"/>
+        <feMergeNode in="shade"/>
+        <feMergeNode in="catch"/>
+      </feMerge>
+    </filter>
+
+    <filter id="streak" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="2.4"/>
+    </filter>
+    <filter id="soft" x="-20%" y="-10%" width="140%" height="120%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <!-- ── The disc ─────────────────────────────────────────────── -->
+  <g filter="url(#badgeShadow)">
+    <circle cx="704" cy="704" r="590" fill="url(#face)"/>
+  </g>
+  <g clip-path="url(#disc)">
+    <circle cx="704" cy="704" r="590" fill="url(#bounce)"/>
+    <ellipse cx="660" cy="470" rx="470" ry="330" fill="url(#dome)"/>
+    <!-- Bevel ring just inside the edge. -->
+    <circle cx="704" cy="704" r="574" fill="none" stroke="url(#bevel)" stroke-width="26"/>
+    <circle cx="704" cy="704" r="557" fill="none" stroke="#041745" stroke-opacity="0.35" stroke-width="8" filter="url(#streak)"/>
+    <!-- Window reflection: a crescent in the top-right shoulder, with two
+         mullions faintly crossing it. -->
+    <path
+      d="M 876 140 A 592 592 0 0 1 1286 590 Q 1150 520 1060 400 Q 980 290 876 140 Z"
+      fill="url(#reflect)" filter="url(#soft)"/>
+    <path d="M 900 150 A 578 578 0 0 1 1268 560" fill="none" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="6" stroke-linecap="round" filter="url(#streak)"/>
+    <path d="M 972 196 L 1004 300" stroke="#E6EEFB" stroke-opacity="0.35" stroke-width="5" stroke-linecap="round" filter="url(#streak)"/>
+    <path d="M 1148 330 L 1156 520" stroke="#E6EEFB" stroke-opacity="0.28" stroke-width="5" stroke-linecap="round" filter="url(#streak)"/>
+    <!-- Specular streaks on the rim, left side and lower left. -->
+    <path d="M 196 470 A 575 575 0 0 0 190 920" fill="none" stroke="url(#rimShine)" stroke-width="18" stroke-opacity="0.45" stroke-linecap="round" filter="url(#soft)"/>
+    <path d="M 214 460 A 560 560 0 0 0 206 900" fill="none" stroke="url(#rimShine)" stroke-width="7" stroke-linecap="round" filter="url(#streak)"/>
+    <path d="M 262 1030 A 560 560 0 0 0 420 1190" fill="none" stroke="#9FB4E2" stroke-opacity="0.45" stroke-width="6" stroke-linecap="round" filter="url(#streak)"/>
+  </g>
+  <!-- The rim's outer edge. -->
+  <circle cx="704" cy="704" r="588" fill="none" stroke="#051A4E" stroke-width="5"/>
+
+  <!-- ── The seat ─────────────────────────────────────────────── -->
+  <g filter="url(#raise)">
+    <!-- Rear strut, frame and legs: one tube, round at every end. -->
+    <g filter="url(#mould)">
+      <path
+        d="M 411 484 L 497 838 Q 518 930 596 930 L 950 930 M 652 930 Q 606 930 574 966 L 478 1048 M 866 930 Q 912 930 938 966 L 1010 1048"
+        fill="none" stroke="url(#white)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <!-- Seat back and cushion: one L, the back leaning at 12.4°, its
+         inside corner cut round the end of the armrest. -->
+    <g filter="url(#mould)">
+      <path
+        d="M 458 283 L 553 283 Q 588 283 596 317 L 671 662 Q 674.6 676.7 658.6 681.6
+           A 60 60 0 0 0 684 796 L 1018 796 A 40 40 0 0 1 1018 876 L 640 876
+           Q 550.5 876 529.3 780 L 428.4 321 Q 420 283 458 283 Z"
+        fill="url(#white)"/>
+    </g>
+    <!-- Armrest, in the crook of the L. -->
+    <g filter="url(#mould)">
+      <rect x="646" y="698" width="436" height="76" rx="38" fill="url(#white)"/>
+    </g>
+  </g>
+
+  <!-- Specular streaks: the gloss that makes the white read as moulded. -->
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" filter="url(#streak)">
+    <path d="M 404 498 L 484 832" stroke-width="9" stroke-opacity="0.95"/>
+    <path d="M 604 918 L 930 918" stroke-width="7" stroke-opacity="0.9"/>
+    <path d="M 452 300 L 552 300" stroke-width="8" stroke-opacity="0.9"/>
+    <path d="M 440 330 L 540 772" stroke-width="10" stroke-opacity="0.85"/>
+    <path d="M 660 812 L 1010 812" stroke-width="9" stroke-opacity="0.9"/>
+    <path d="M 690 712 L 1046 712" stroke-width="9" stroke-opacity="0.95"/>
+  </g>
+</svg>
