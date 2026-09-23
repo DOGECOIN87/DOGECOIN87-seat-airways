@@ -43,7 +43,7 @@ function useBarcode(seed: string) {
 
 const Field = ({ label, value, big }: { label: string; value: string; big?: boolean }) => (
   <div className="min-w-0">
-    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-ui-faint">{label}</p>
+    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-ui-faint">{label}</p>
     <p
       className={`font-heading mt-1 truncate text-ui-ink ${big ? 'text-4xl leading-none' : 'text-xl leading-tight'}`}
       title={value}
@@ -73,7 +73,7 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
             <p className="font-heading text-lg tracking-tight text-ui-ink">
               SEAT <span className="text-ui-deep">AIRLINES</span>
             </p>
-            <span className="ml-auto text-[10px] uppercase tracking-[0.18em] text-ui-faint">Boarding pass</span>
+            <span className="ml-auto text-[11px] uppercase tracking-[0.18em] text-ui-faint">Boarding pass</span>
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">

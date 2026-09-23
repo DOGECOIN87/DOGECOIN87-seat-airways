@@ -81,7 +81,7 @@ const Gate = ({ children, onClose }: { children: React.ReactNode; onClose: () =>
   <div className="fixed bottom-4 right-4 z-[60] w-[min(20rem,calc(100vw-2rem))]">
     <div className="ui-card px-4 py-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Identify</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-deep">Identify</p>
         <button
           type="button"
           onClick={onClose}
@@ -131,7 +131,7 @@ const Switch = ({ on, onClick, children, title }: {
 
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="flex flex-wrap items-center gap-2">
-    <span className="w-[4.5rem] shrink-0 text-[10px] font-bold uppercase tracking-[0.18em] text-ui-faint">{label}</span>
+    <span className="w-[4.5rem] shrink-0 text-[11px] font-bold uppercase tracking-[0.18em] text-ui-faint">{label}</span>
     {children}
   </div>
 );
@@ -217,7 +217,7 @@ const Controls = ({ controls, onControls }: {
           <button
             type="button"
             onClick={() => onControls(HANDS_OFF)}
-            className="text-[10px] font-bold uppercase tracking-[0.16em] text-ui-faint hover:text-ui-ink"
+            className="text-[11px] font-bold uppercase tracking-[0.16em] text-ui-faint hover:text-ui-ink"
           >
             Hands off — give it back to the market
           </button>
@@ -391,7 +391,7 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
       <div className="fixed inset-x-0 bottom-0 z-[70] border-t border-ui-line bg-ui-surface/95 backdrop-blur">
         <div className="mx-auto w-full max-w-4xl px-4 py-3.5 sm:px-6">
           <div className="flex items-start justify-between gap-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Manual controls</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-deep">Manual controls</p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -425,7 +425,7 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
         {/* ── Header ── */}
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Logbook</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-deep">Logbook</p>
             <h1 className="sa-display sa-display--2 mt-2">Things worth remembering</h1>
             <p className="mt-2 text-[12px] text-ui-soft">
               {book.entries.length} logged · {counts.open} open · {counts.acted} acted on
@@ -474,7 +474,7 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
             folds everything else away so the aeroplane is visible. */}
         <section className="ui-card mt-6">
           <div className="flex items-center justify-between gap-3 border-b border-ui-line px-5 py-3 sm:px-6">
-            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Manual controls</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-deep">Manual controls</p>
             <p className="text-[11px] text-ui-faint">
               {handsOff(controls) ? 'Flying the market' : 'Flown by hand'}
             </p>
@@ -502,7 +502,7 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-ui-faint">Source</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-faint">Source</span>
                 <input
                   value={source}
                   onChange={(e) => setSource(e.target.value)}
@@ -512,7 +512,7 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
                 />
               </label>
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-ui-faint">Tags</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-faint">Tags</span>
                 <input
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
@@ -524,7 +524,7 @@ const Logbook = ({ manifest, address, sign, controls, onControls, onClose }: Log
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-ui-faint">Conviction</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-faint">Conviction</span>
                 {CONVICTIONS.map((rung) => (
                   <button
                     key={rung.value}
@@ -630,7 +630,7 @@ const Entry = ({ entry, seat, onStatus, onConviction, onStrike }: EntryProps) =>
   return (
     <article className={`ui-card px-4 py-4 sm:px-5 ${entry.status === 'cold' ? 'opacity-60' : ''}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone[entry.status]}`}>
+        <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] ${statusTone[entry.status]}`}>
           {STATUS_LABELS[entry.status]}
         </span>
         <span className={`text-[11px] font-semibold ${convictionTone[entry.conviction] ?? 'text-ui-faint'}`}>
@@ -658,7 +658,7 @@ const Entry = ({ entry, seat, onStatus, onConviction, onStrike }: EntryProps) =>
       {entry.tags.length > 0 && (
         <p className="mt-2 flex flex-wrap gap-1.5">
           {entry.tags.map((t) => (
-            <span key={t} className="rounded-full border border-ui-line px-2 py-0.5 text-[10px] text-ui-faint">#{t}</span>
+            <span key={t} className="rounded-full border border-ui-line px-2 py-0.5 text-[11px] text-ui-faint">#{t}</span>
           ))}
         </p>
       )}
@@ -669,7 +669,7 @@ const Entry = ({ entry, seat, onStatus, onConviction, onStrike }: EntryProps) =>
             key={s}
             type="button"
             onClick={() => onStatus(s)}
-            className="rounded-full border border-ui-line px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ui-soft hover:text-ui-ink"
+            className="rounded-full border border-ui-line px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ui-soft hover:text-ui-ink"
           >
             {s === 'open' ? 'Reopen' : s === 'acted' ? 'Acted on' : 'Cold'}
           </button>
@@ -682,7 +682,7 @@ const Entry = ({ entry, seat, onStatus, onConviction, onStrike }: EntryProps) =>
             type="button"
             onClick={() => onConviction(c.value)}
             title={`Mark ${c.label.toLowerCase()}`}
-            className="rounded-full border border-ui-line px-2 py-1 text-[10px] text-ui-faint hover:text-ui-ink"
+            className="rounded-full border border-ui-line px-2 py-1 text-[11px] text-ui-faint hover:text-ui-ink"
           >
             {c.value}
           </button>
@@ -693,14 +693,14 @@ const Entry = ({ entry, seat, onStatus, onConviction, onStrike }: EntryProps) =>
             <button
               type="button"
               onClick={onStrike}
-              className="rounded-full bg-[#C2185B] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white"
+              className="rounded-full bg-[#C2185B] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white"
             >
               Delete
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="text-[10px] uppercase tracking-[0.12em] text-ui-faint"
+              className="text-[11px] uppercase tracking-[0.12em] text-ui-faint"
             >
               Keep
             </button>
@@ -709,7 +709,7 @@ const Entry = ({ entry, seat, onStatus, onConviction, onStrike }: EntryProps) =>
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className="ml-auto text-[10px] uppercase tracking-[0.12em] text-ui-faint hover:text-[#C2185B]"
+            className="ml-auto text-[11px] uppercase tracking-[0.12em] text-ui-faint hover:text-[#C2185B]"
           >
             Strike out
           </button>

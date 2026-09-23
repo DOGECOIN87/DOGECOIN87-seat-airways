@@ -142,10 +142,10 @@ const CabinView3D = ({ feed, sky, band, seat, zone, facing, taken, adverts, cont
       <canvas ref={canvasRef} className="block h-full w-full" />
 
       {/* Where you are, and how to look around */}
-      <p className="pointer-events-none absolute bottom-3 left-3 border border-white/12 bg-[#05070F]/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-seat-amber backdrop-blur-sm">
+      <p className="pointer-events-none absolute bottom-3 left-3 border border-white/12 bg-[#05070F]/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-seat-amber backdrop-blur-sm">
         {seat.id} · {zone.name}
       </p>
-      <p className="pointer-events-none absolute bottom-3 right-3 text-[10px] uppercase tracking-[0.18em] text-white/45">
+      <p className="pointer-events-none absolute bottom-3 right-3 text-[11px] uppercase tracking-[0.18em] text-white/45">
         Drag to look
       </p>
     </div>

@@ -173,7 +173,7 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing, controls = HAN
         <Mark size={22} background="none" />
         <span className="font-heading text-[15px] leading-none tracking-normal text-white/90">SA350</span>
         <span aria-hidden className="hidden h-3.5 w-px bg-white/25 sm:block" />
-        <span className="hidden font-mono text-[10px] uppercase tracking-[0.2em] text-white/50 sm:inline">
+        <span className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-white/50 sm:inline">
           Souls on board <span className="tabular-nums text-white/80">{taken.size}</span>
         </span>
       </div>
@@ -187,31 +187,31 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing, controls = HAN
       <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-wrap items-end justify-between gap-2 sm:inset-x-5 sm:bottom-4">
         <div className="flex items-end gap-4 rounded-xl border border-white/12 bg-[#05070F]/75 px-3 py-2 backdrop-blur-sm sm:gap-6 sm:px-4 sm:py-2.5">
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">Altitude</p>
+            <p className="whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.16em] text-white/45">Market cap</p>
             <p className="mt-0.5 font-mono text-lg leading-none text-white sm:text-xl">
               <span ref={capRead} />
             </p>
           </div>
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/45">5m</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/45">5m</p>
             <p className="mt-0.5 font-mono text-sm leading-none sm:text-base">
               <span ref={chgRead} />
             </p>
           </div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#7FE3F7]">{band.label}</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#7FE3F7]">{band.label}</p>
         </div>
 
         {/* Where your seat is, in words — the drawn view is aria-hidden. */}
         <div className="ml-auto text-right">
           {claimed && (
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#00C9F1]">Your seat · {claimed.id}</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#00C9F1]">Your seat · {claimed.id}</p>
           )}
           {viewing && viewing.id !== claimed?.id && (
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-white/50">
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.2em] text-white/50">
               Camera · {viewing.id}
             </p>
           )}
-          <p className="mt-1 hidden font-mono text-[10px] uppercase tracking-[0.2em] text-white/35 sm:block">
+          <p className="mt-1 hidden font-mono text-[11px] uppercase tracking-[0.2em] text-white/35 sm:block">
             Drag to walk around
           </p>
         </div>

@@ -193,7 +193,7 @@ const SceneLoading = ({ exterior = false }: { exterior?: boolean }) => (
     aria-live="polite"
   >
     <div className="sa-view-loading__mark" aria-hidden />
-    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7FE3F7]">
+    <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7FE3F7]">
       Preparing {exterior ? 'exterior' : 'cabin'} view
     </p>
   </div>
@@ -458,10 +458,10 @@ export default function App() {
           while you are reading the seat map. */}
       <header className="sa-topbar sticky top-0 z-40">
         <div className="mx-auto flex max-w-[94rem] flex-wrap items-center gap-x-7 gap-y-2 px-5 py-2.5 sm:px-8">
-          <a href="#top" className="flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-blue">
+          <a href="#top" className="sa-brand flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-blue">
             <Mark size={34} variant="badge" title="SEAT AIRLINES" />
             <span className="whitespace-nowrap font-heading text-lg leading-none text-ui-ink">Seat Airlines</span>
-            <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-ui-faint sm:inline">
+            <span className="hidden font-mono text-[11px] uppercase tracking-[0.16em] text-ui-faint sm:inline">
               SA350 · Nonstop
             </span>
           </a>
@@ -476,7 +476,7 @@ export default function App() {
               { k: 'Seated', v: `${manifest.entries.length}/${MANIFEST_SIZE}`, tone: 'text-ui-ink' },
             ].map((f) => (
               <div key={f.k} className="sa-topbar__fig shrink-0">
-                <dt className="text-[8.5px] font-semibold uppercase tracking-[0.2em] text-ui-faint">{f.k}</dt>
+                <dt className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ui-faint">{f.k}</dt>
                 <dd className={`font-mono text-[15px] leading-tight ${f.tone}`}>{f.v}</dd>
               </div>
             ))}
@@ -484,7 +484,7 @@ export default function App() {
         </div>
       </header>
 
-      <main id="top" className="sa-shell mx-auto max-w-[94rem] px-5 pb-28 sm:px-8">
+      <main id="top" className="sa-shell mx-auto max-w-[94rem] px-5 sm:px-8">
         {/* ══════════════════════════════════════════════════════════════
             01 · The aeroplane
             The page opens on the whole aircraft, from outside, because that
@@ -492,19 +492,22 @@ export default function App() {
             other camera on the page is a step inward from this frame.
             ══════════════════════════════════════════════════════════════ */}
         <section className="sa-hero pt-10 sm:pt-14" aria-labelledby="hero-title">
-          <p className="sa-eyebrow">
-            <span className="sa-eyebrow__no">01</span> The aeroplane
-            <span className="sa-eyebrow__live">
-              <span className="sa-live" aria-hidden />
-              Live · SA350 · {band.label}
-            </span>
-          </p>
-          <div className="mt-4 grid gap-x-14 gap-y-6 lg:grid-cols-[minmax(0,1.618fr)_minmax(0,1fr)] lg:items-end">
-            <h1 id="hero-title" className="sa-display">
-              Hold more.
-              <br />
-              Fly higher.
-            </h1>
+          {/* The label belongs to the headline, so it lives in the headline's
+              column: it can never be stranded above a gap when the column
+              beside it runs taller. It carries the live state rather than a
+              section number — the page's sections are places, not steps. */}
+          <div className="grid gap-x-14 gap-y-6 lg:grid-cols-[minmax(0,1.618fr)_minmax(0,1fr)] lg:items-end">
+            <div>
+              <p className="sa-eyebrow">
+                <span className="sa-live" aria-hidden />
+                Live · SA350 · {band.label}
+              </p>
+              <h1 id="hero-title" className="sa-display mt-4">
+                Hold more.
+                <br />
+                Fly higher.
+              </h1>
+            </div>
             <div className="lg:pb-3">
               <p className="sa-lead">
                 A flight simulator flown by one number. Market cap is altitude and the 5-minute change is
@@ -520,16 +523,7 @@ export default function App() {
                   onClick={() => { setCamera('seat'); setFacing('forward'); showView(); }}
                   className="sa-ghost"
                 >
-                  Step inside the cabin
-                </button>
-                <button
-                  type="button"
-                  onClick={aircraftAudio.toggle}
-                  aria-pressed={aircraftAudio.enabled}
-                  className={chip(aircraftAudio.enabled)}
-                  title="Enable engine, airflow, cabin, and warning sounds"
-                >
-                  {aircraftAudio.enabled ? 'Sound on' : 'Sound off'}
+                  Step inside
                 </button>
               </div>
             </div>
@@ -550,7 +544,11 @@ export default function App() {
               onZoomOutBeyond={camera === 'exterior' ? undefined : () => setCamera('exterior')}
               zoomOutHint="Zoom out of the aircraft"
               actions={
-                camera === 'seat' ? (
+                /* Sound belongs to the view it scores, not to the hero's call
+                   to action: in the hero row it wrapped onto a line of its own
+                   and pushed the headline down away from its eyebrow. */
+                <>
+                {camera === 'seat' ? (
                   <div className="sd-chrome flex shrink-0 items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible" role="group" aria-label="Turn your head">
                     {FACINGS.map((f) => (
                       <button
@@ -568,7 +566,17 @@ export default function App() {
                   <button type="button" onClick={() => setCamera('seat')} className={chip(false)}>
                     {camera === 'exterior' ? 'Step inside' : 'Back to your seat'}
                   </button>
-                )
+                )}
+                <button
+                  type="button"
+                  onClick={aircraftAudio.toggle}
+                  aria-pressed={aircraftAudio.enabled}
+                  className="ui-pill sm:ml-auto"
+                  title="Enable engine, airflow, cabin, and warning sounds"
+                >
+                  {aircraftAudio.enabled ? 'Sound on' : 'Sound off'}
+                </button>
+                </>
               }
             >
               {camera === 'hold' ? (
@@ -647,15 +655,16 @@ export default function App() {
 
           {/* ── Where the flight is ── */}
           <section className="sa-flight-state" aria-label="Flight state">
-            <dl className="sa-flight-summary grid grid-cols-2 sm:grid-cols-4">
+            {/* No Band cell: the climb meter below already reads the band
+                and the next one, word for word, at each end of its track. */}
+            <dl className="sa-flight-summary grid grid-cols-2 sm:grid-cols-3">
               {[
                 { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, s: formatCap(tick.marketCap) },
                 { k: '5m', v: formatChange(tick.change5m), s: tick.change5m >= 0 ? 'Climbing' : 'Descending' },
                 { k: 'Outside', v: sky.label, s: sky.live ? 'Live weather' : 'Modelled weather' },
-                { k: 'Band', v: band.label, s: band.next ?? 'Nowhere higher to go' },
               ].map((cell) => (
-                <div key={cell.k} className="px-4 py-3.5">
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.2em] text-ui-faint">{cell.k}</dt>
+                <div key={cell.k} className={`px-4 py-3.5 ${cell.k === 'Outside' ? 'col-span-2 sm:col-span-1' : ''}`}>
+                  <dt className="text-[11px] font-bold uppercase tracking-[0.2em] text-ui-faint">{cell.k}</dt>
                   <dd className="mt-1 text-base font-semibold leading-snug text-ui-ink sm:text-lg">{cell.v}</dd>
                   <dd className="mt-0.5 text-[11px] leading-snug text-ui-soft">{cell.s}</dd>
                 </div>
@@ -664,7 +673,7 @@ export default function App() {
 
             {/* Climb meter toward the next band */}
             <div className="sa-progress px-4 py-3">
-              <div className="flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-[0.16em] text-ui-faint">
+              <div className="flex items-baseline justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-ui-faint">
                 <span>{band.label}</span>
                 <span>{band.next ?? 'The moon'}</span>
               </div>
@@ -690,32 +699,25 @@ export default function App() {
             ══════════════════════════════════════════════════════════════ */}
         <section id="wall" className="sa-wall scroll-mt-24" aria-labelledby="wall-title">
           <div className="sa-wall__inner">
-            <header className="sa-section-head">
-              <p className="sa-eyebrow sa-eyebrow--amber">
-                <span className="sa-eyebrow__no">02</span> The wall
-              </p>
-              <h2 id="wall-title" className="sa-display sa-display--2 mt-3">
-                Every seat is a billboard
-              </h2>
-              <div className="mt-5 grid gap-x-12 gap-y-4 lg:grid-cols-2">
-                <p className="sa-lead">
-                  Seats are not booked. The top {MANIFEST_SIZE} holders are seated in rank order and the rest
-                  of the aeroplane stays empty, so the only way to move forward is to out-hold whoever is
-                  already there.
-                </p>
-                <p className="sa-lead">
-                  Each seat is a square, and a square somebody holds is theirs to fill: a 1:1 image, shown here
-                  and on the seat itself. Row 1 is the best placement on the aircraft, and it is not for sale at
-                  any price — only for holding.
-                </p>
+            <header className="sa-section-head sa-section-head--split">
+              <div>
+                <p className="sa-eyebrow">The wall</p>
+                <h2 id="wall-title" className="sa-display sa-display--2 mt-3">
+                  Every seat is a billboard
+                </h2>
               </div>
+              <p className="sa-lead">
+                Seats are not booked. The top {MANIFEST_SIZE} holders are seated in rank order and the rest
+                of the aeroplane stays empty, so the only way to move forward is to out-hold whoever is
+                already there.
+              </p>
             </header>
 
             <ol className="sa-steps">
               {[
                 { n: '01', h: 'Hold', b: 'Connect a wallet. Your balance is your bag, and nothing else counts.' },
                 { n: '02', h: 'Get seated', b: 'The manifest ranks every holder and seats them from row 1 back. Out-hold someone and you take their seat.' },
-                { n: '03', h: 'Advertise', b: 'Put a square image on the seat you hold. It goes up on the wall, at the position you earned.' },
+                { n: '03', h: 'Advertise', b: 'Put a 1:1 image on the seat you hold. It goes up on the wall at the position you earned — and row 1 is never for sale, only for holding.' },
               ].map((step) => (
                 <li key={step.n} className="sa-step">
                   <span className="sa-step__no">{step.n}</span>
@@ -744,14 +746,14 @@ export default function App() {
             03 · Section network
             ══════════════════════════════════════════════════════════════ */}
         <section id="network" className="sa-section scroll-mt-24" aria-labelledby="network-title">
-          <header className="sa-section-head">
-            <p className="sa-eyebrow">
-              <span className="sa-eyebrow__no">03</span> Section network
-            </p>
-            <h2 id="network-title" className="sa-display sa-display--2 mt-3">
-              Your seat is how far you can see
-            </h2>
-            <p className="sa-lead mt-4">
+          <header className="sa-section-head sa-section-head--split">
+            <div>
+              <p className="sa-eyebrow">Section network</p>
+              <h2 id="network-title" className="sa-display sa-display--2 mt-3">
+                Your seat is how far you can see
+              </h2>
+            </div>
+            <p className="sa-lead">
               Everybody is on the roster. What the seat buys is the view aft: the contact details of your own
               section and every cabin behind it, and the conversations those cabins are having. Look forward and
               there is nothing — the rows ahead of you keep their cards and their messages to themselves.
@@ -768,14 +770,14 @@ export default function App() {
             04 · Your pass
             ══════════════════════════════════════════════════════════════ */}
         <section id="check-in" className="sa-section scroll-mt-24" aria-labelledby="pass-title">
-          <header className="sa-section-head">
-            <p className="sa-eyebrow">
-              <span className="sa-eyebrow__no">03</span> Check in
-            </p>
-            <h2 id="pass-title" className="sa-display sa-display--2 mt-3">
-              The aircraft seats you
-            </h2>
-            <p className="sa-lead mt-4">
+          <header className="sa-section-head sa-section-head--split">
+            <div>
+              <p className="sa-eyebrow">Check in</p>
+              <h2 id="pass-title" className="sa-display sa-display--2 mt-3">
+                The aircraft seats you
+              </h2>
+            </div>
+            <p className="sa-lead">
               You do not pick a seat. Connect a wallet, and where you sit is whatever your holding says it is —
               recomputed the moment anybody else&apos;s changes.
             </p>
@@ -839,37 +841,16 @@ export default function App() {
             </a>
           </div>
 
-          <div className="sa-footer__grid">
-            <nav aria-labelledby="foot-aircraft">
-              <p className="sa-footer__h" id="foot-aircraft">The aircraft</p>
-              <div className="sa-footer__links">
-                <a href="#top">Outside · the whole aeroplane</a>
-                <a href="#wall">The wall · {MANIFEST_SIZE} seats, {manifest.open} open</a>
-                <a href="#network">Section network · read the cabins behind you</a>
-                <a href="#check-in">Check in · where you sit</a>
-              </div>
-            </nav>
-
-            <div>
-              <p className="sa-footer__h">What flies it</p>
-              <dl className="sa-footer__list">
-                <div><dt>Market cap</dt><dd>Altitude</dd></div>
-                <div><dt>5m change</dt><dd>Pitch, and its rate is bank</dd></div>
-                <div><dt>Holders</dt><dd>Souls on board</dd></div>
-                <div><dt>Your bag</dt><dd>Your seat</dd></div>
-              </dl>
-            </div>
-
-            <div>
-              <p className="sa-footer__h">Reading now</p>
-              <dl className="sa-footer__list">
-                <div><dt>Altitude</dt><dd className="font-mono">{formatFeet(tick.marketCap)} ft</dd></div>
-                <div><dt>Band</dt><dd>{band.label}</dd></div>
-                <div><dt>Outside</dt><dd>{sky.live ? 'Live weather' : 'Modelled sky'}</dd></div>
-                <div><dt>Souls on board</dt><dd className="font-mono">{tick.holders || '—'}</dd></div>
-              </dl>
-            </div>
-          </div>
+          {/* One row of places to go. The two columns that used to sit beside
+              it repeated the hero (what flies the aircraft) and the gate sign
+              (the live figures, a fourth time), so the footer now only does
+              the job nothing above it does. */}
+          <nav className="sa-footer__nav" aria-label="On this page">
+            <a href="#top">The aircraft</a>
+            <a href="#wall">The wall</a>
+            <a href="#network">Section network</a>
+            <a href="#check-in">Check in</a>
+          </nav>
 
           <div className="sa-footer__bar">
             <span>Seat Airlines · SA350 · Nonstop</span>
