@@ -412,7 +412,10 @@ Alchemy all support it.
 
 The production mint is kept in two deploy-time consumers: the frontend's
 committed fallback in `src/lib/token.ts`, and the Worker's `TOKEN_MINT` value in
-`worker/wrangler.toml`. To rotate them together, run:
+`worker/wrangler.toml`. The documentation in `docs/` prints it too, and a
+contract address left stale in the docs is how somebody buys the wrong token,
+so the script moves every copy of the old address there as well. To rotate
+them together, run:
 
 ```bash
 npm run token:update -- <new-solana-mint-address>
@@ -488,6 +491,16 @@ the browser with a CORS error and nothing useful in the response:
 ```toml
 ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 ```
+
+### The documentation
+
+The public documentation is `docs/`, published by GitBook through Git Sync:
+`.gitbook.yaml` points GitBook at that folder, `docs/SUMMARY.md` is its table
+of contents, and this README stays the developer's. Connect a GitBook space to
+this repository and branch with Git Sync, and make the **first** sync GitHub →
+GitBook, so the pages are imported rather than overwritten by an empty space.
+After that, edits made in GitBook come back as commits — and a push that only
+touches `docs/` does not redeploy the site.
 
 ## Running it
 

@@ -3,6 +3,13 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # The documentation is published by GitBook, not by this workflow, and
+    # GitBook commits every edit made there back to this branch. A push that
+    # touches nothing but the docs has nothing here to rebuild; one that
+    # touches anything else still deploys.
+    paths-ignore:
+      - 'docs/**'
+      - '.gitbook.yaml'
   # So a config change can be shipped without an empty commit.
   workflow_dispatch:
 

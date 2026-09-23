@@ -1,0 +1,10 @@
+# GitBook Git Sync reads this file from the root of the repository.
+#
+# The documentation lives in docs/ so that GitBook never touches the app:
+# the repository's own README.md stays the developer README, and docs/README.md
+# is the GitBook landing page. Every path below is relative to `root`.
+root: ./docs/
+
+structure:
+  readme: README.md
+  summary: SUMMARY.md
