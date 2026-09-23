@@ -32,7 +32,7 @@
   --phi: 1.618;
 
   /* Type: 15px body, stepped by φ and by √φ. */
-  --t-xs: 0.58rem;      /* 9.3px  — units, micro labels */
+  --t-xs: 0.6875rem;   /* 11px   — floor: units, micro labels (was 9.3px, below legible) */
   --t-sm: 0.737rem;     /* 11.8px — captions, legends */
   --t-base: 0.9375rem;  /* 15px   — body */
   --t-md: 1.193rem;     /* 19.1px — lead, card headings */
@@ -149,19 +149,31 @@ html {
    and faded into the panel ground. Two offset repeat layers create staggered
    rows rather than a rigid checkerboard, so the pattern reads as atmosphere
    instead of decoration competing with the instruments. */
+/* The box stays still and holds the fade; only its ::before drifts. A
+   mask on the moving layer travels with it, so the top band faded out
+   over each cycle and popped back in at the loop — a seam the eye finds
+   even when the tiles themselves have none. */
 .sa-ground__pattern {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* The mark is drawn at 50% white, so 0.95 here put a 47% white seat
+     over the headline and the body copy. At 0.16 it is about 8%: a
+     texture you notice, never a shape that sits on a letter. */
+  opacity: 0.16;
+  mask-image: linear-gradient(to bottom, transparent 0, black 10rem, black calc(100% - 10rem), transparent 100%);
+}
+.sa-ground__pattern::before {
+  content: '';
+  position: absolute;
+  inset: -18rem 0 0 -18rem; /* one tile of bleed so the drift never exposes an edge */
   background-image:
     url('/seat-airlines-mark-pattern.svg'),
     url('/seat-airlines-mark-pattern.svg');
   background-repeat: repeat;
   background-size: 18rem 18rem;
   background-position: 0 0, 9rem 9rem;
-  opacity: 0.95;
-  mask-image: linear-gradient(to bottom, transparent 0, black 10rem, black calc(100% - 10rem), transparent 100%);
-  animation: sa-logo-drift 10s ease-in-out infinite alternate;
+  animation: sa-logo-drift 90s linear infinite;
   will-change: transform;
 }
 /* A barely perceptible cabin-at-cruise drift: the two vector layers move
@@ -169,8 +181,10 @@ html {
    airborne quality. The long duration keeps it atmospheric rather than
    attention-seeking. */
 @keyframes sa-logo-drift {
-  from { transform: translate3d(18rem, 18rem, 0); }
-  to { transform: translate3d(-18rem, -18rem, 0); }
+  /* Exactly one pattern period, linear: the loop has no seam and no
+     turnaround, and 90s keeps it below the threshold of noticing. */
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(18rem, 18rem, 0); }
 }
 /* The dark theme's grid and scanlines do not survive the move to a
    light panel — a panel face is a panel face, not a CRT. */
@@ -276,30 +290,12 @@ html {
   font-size: var(--t-sm);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.24em;
+  letter-spacing: 0.16em;
   color: var(--accent-deep);
 }
-.sa-eyebrow--amber { color: var(--accent-deep); }
-.sa-eyebrow__no {
-  padding-right: 0.6rem;
-  border-right: 1px solid currentColor;
-  opacity: 0.55;
-}
-/* The section number is the label; the live state is a lamp riding
-   at the far end of the same line, recessed into the page the way a
-   status readout is recessed into a panel. */
-.sa-eyebrow__live {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-  border-radius: 999px;
-  padding: 0.4rem 0.85rem;
-  background: var(--ui-bg);
-  box-shadow: var(--e-press);
-  letter-spacing: 0.2em;
-  color: var(--ui-soft);
-}
+/* Section labels name a place on the aircraft, not a step in a
+   sequence, so they carry no number. The page's only numbered run is
+   the three steps under The wall, where the order is real. */
 /* The live lamp. Small, and the only thing on the page that blinks. */
 .sa-live {
   width: 7px;
@@ -313,7 +309,7 @@ html {
 .sa-section {
   padding-top: var(--sa-section);
   content-visibility: auto;
-  contain-intrinsic-size: 0 900px;
+  contain-intrinsic-size: auto 900px;
 }
 /* Body copy: the base size, set on a golden leading — 1.618 line
    height is the one place the ratio is also the most readable answer. */
@@ -404,7 +400,7 @@ html {
   border-radius: 999px;
   background: var(--face);
   padding: 0.55rem 0.95rem;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -433,7 +429,7 @@ html {
 .sa-strip-label {
   flex: none;
   margin-right: 0.4rem;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -469,7 +465,7 @@ html {
   border-radius: 999px;
   background: var(--face);
   padding: 0.5rem 0.95rem;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -505,7 +501,7 @@ html {
   position: relative;
   display: flex;
   gap: 0.75rem;
-  padding: 0.95rem 1.15rem;
+  padding: 0.95rem 1.15rem 0.95rem 1.5rem;
 }
 /* The accent lights the leading edge, so the groove between strips
    stays one unbroken line. */
@@ -521,7 +517,6 @@ html {
   background: var(--g-accent);
   opacity: 0.85;
 }
-.sa-deck__strip { padding-left: 1.5rem; }
 
 /* ── The viewport ─────────────────────────────────────────────
    The one place the aircraft itself shows through. A screen is not
@@ -578,7 +573,7 @@ html {
 /* The control rail under the glass, moulded into the same bezel. */
 .sd-controls {
   min-height: 48px;
-  margin-top: 12px !important;
+  margin-top: 12px;
   border-radius: 999px;
   padding: 7px 10px;
   background: var(--ui-bg);
@@ -709,7 +704,9 @@ html {
 }
 .sa-step__b {
   margin-top: var(--s-1);
-  font-size: var(--t-sm);
+  /* Body copy, not a caption: at 11.8px the three steps read as fine
+     print under 19px headings and beside 16px lead copy. */
+  font-size: var(--t-base);
   line-height: 1.618;
   color: var(--ui-soft);
 }
@@ -757,55 +754,6 @@ html {
   color: var(--ui-ink);
 }
 
-.sa-footer__grid {
-  display: grid;
-  gap: 1.25rem;
-  margin-top: clamp(2.75rem, 5vw, 4rem);
-}
-@media (min-width: 720px) { .sa-footer__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-/* Each column is its own raised card — the kit does not put bare text
-   on a ground, it puts it on a panel. */
-.sa-footer__grid > * {
-  border-radius: var(--r-lg);
-  padding: 1.35rem 1.4rem 1.5rem;
-  background: var(--face);
-  box-shadow: var(--e-sm);
-}
-.sa-footer__h {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.24em;
-  color: var(--accent-deep);
-}
-.sa-footer__list {
-  display: grid;
-  gap: var(--s-1);
-  margin-top: var(--s-2);
-  font-size: var(--t-sm);
-  color: var(--ui-soft);
-}
-.sa-footer__list a {
-  color: inherit;
-  border-radius: var(--r-sm);
-  transition: color 0.15s ease;
-}
-.sa-footer__list a:hover { color: var(--accent-deep); }
-.sa-footer__list a:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
-.sa-footer__list > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 1px 0 rgba(163, 167, 180, 0.28);
-}
-.sa-footer__list > div:last-child { border-bottom: 0; box-shadow: none; padding-bottom: 0; }
-.sa-footer__list dt { color: var(--ui-faint); }
-.sa-footer__list dd { text-align: right; color: var(--ui-ink); font-weight: 500; }
-
 .sa-close__note {
   max-width: var(--sa-measure);
   margin-top: clamp(var(--s-3), 3.5vw, var(--s-4));
@@ -824,7 +772,7 @@ html {
   border-top: 1px solid rgba(255, 255, 255, 0.85);
   box-shadow: 0 -1px 0 rgba(163, 167, 180, 0.3) inset;
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
   color: var(--ui-faint);
@@ -999,7 +947,7 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .sd-shake, .sa-pulse-glow, .sa-shine::after, .sa-sweep, .sa-logo-drift, .sa-ground__pattern, .sa-view-loading__mark { animation: none !important; }
+  .sd-shake, .sa-pulse-glow, .sa-live, .sa-shine::after, .sa-sweep, .sa-ground__pattern::before, .sa-view-loading__mark { animation: none !important; }
 }
 
 /* ============================================================
@@ -1083,7 +1031,7 @@ html {
   background: rgba(255, 255, 255, 0.62);
   box-shadow: var(--e-press);
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: var(--ui-soft);
@@ -1100,7 +1048,7 @@ html {
   display: block;
   margin-top: 0.16rem;
   overflow: hidden;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-overflow: ellipsis;
@@ -1111,7 +1059,7 @@ html {
 .sa-zone-head--plain h3 { color: var(--ui-faint); }
 .sa-zone-head__note {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--ui-faint);
@@ -1211,7 +1159,7 @@ html {
 .sa-gap__show {
   margin-left: auto;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
   color: var(--ui-faint);
@@ -1233,10 +1181,10 @@ html {
 .sa-map__card { padding: 0; }
 .sa-map__label {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.24em;
+  letter-spacing: 0.16em;
   color: var(--accent-deep);
 }
 /* The advert preview is a screen, so it is sunk like one. */
@@ -1253,7 +1201,7 @@ html {
 .sa-map__preview img { width: 100%; height: 100%; object-fit: cover; }
 .sa-map__preview-empty {
   padding: 0 0.75rem;
-  font-size: 10px;
+  font-size: 11px;
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -1281,7 +1229,7 @@ html {
   box-shadow: 1px 2px 7px rgba(0, 105, 194, 0.3);
 }
 .sa-map__unsold {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -1299,7 +1247,7 @@ html {
 }
 .sa-map__facts > div:last-child { border-bottom: 0; box-shadow: none; padding-bottom: 0; }
 .sa-map__facts dt {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.18em;
@@ -1327,7 +1275,7 @@ html {
   padding: 0.7rem;
   background: var(--g-accent-text);
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -1345,7 +1293,7 @@ html {
   gap: 0.55rem 1.1rem;
   margin-top: 1.1rem;
   padding: 0 0.35rem;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--ui-faint);
@@ -1413,7 +1361,7 @@ html {
 .sa-lamp__detail {
   display: block;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.13em;
   color: var(--ui-faint);
@@ -1436,8 +1384,8 @@ html {
 @media (max-width: 720px) {
   .sa-lamps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sa-lamp { padding: 0.75rem 0.8rem; gap: 0.55rem; }
-  .sa-lamp__label { font-size: 10px; letter-spacing: 0.12em; }
-  .sa-lamp__detail { font-size: 9px; letter-spacing: 0.09em; }
+  .sa-lamp__label { font-size: 11px; letter-spacing: 0.12em; }
+  .sa-lamp__detail { font-size: 11px; letter-spacing: 0.09em; }
 }
 
 /* ============================================================
@@ -1507,57 +1455,9 @@ html {
   font-size: 12px;
   color: var(--ui-ink);
 }
+@media (max-width: 640px) { .ui-field { font-size: 16px; } }
 .ui-field::placeholder { color: var(--ui-faint); }
 .ui-field:focus { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
-
-/* ── How full the cabin is, by zone ───────────────────────────
-   The same meter as the climb bar, at a quarter the size: a track
-   sunk into the panel with a lit fill in it. Four of them stacked
-   is a picture of the aircraft filling from the front. */
-.sa-fill { margin-top: var(--s-3); }
-.sa-fill__list { display: grid; gap: var(--s-1); margin-top: var(--s-2); }
-.sa-fill__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 0.15rem 0.6rem;
-}
-.sa-fill__name {
-  font-size: var(--t-sm);
-  font-weight: 600;
-  color: var(--ui-ink);
-}
-.sa-fill__note {
-  grid-column: 1;
-  font-size: var(--t-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ui-faint);
-}
-.sa-fill__n {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: var(--t-sm);
-  color: var(--ui-soft);
-}
-.sa-fill__track {
-  grid-column: 1 / -1;
-  height: 5px;
-  margin-top: 0.3rem;
-  border-radius: 999px;
-  background: var(--ui-sink);
-  box-shadow: inset -1px -1px 2px rgba(255, 255, 255, 0.9), inset 2px 2px 4px rgba(160, 164, 178, 0.7);
-}
-.sa-fill__bar {
-  display: block;
-  height: 100%;
-  min-width: 3px;
-  border-radius: 999px;
-  background: var(--g-accent);
-  box-shadow: 0 0 6px rgba(0, 160, 230, 0.5);
-}
 
 /* ── The contract address ─────────────────────────────────────────────
    Above everything, including the gate sign, because it is the first
@@ -1584,7 +1484,7 @@ html {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: var(--t-xs);
   font-weight: 600;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.16em;
   color: var(--ui-faint);
 }
 /* The address itself. It wins the row's space, and only gives way at the
@@ -1662,13 +1562,6 @@ html {
 .sa-lamp__detail { margin-top: 0.22rem; }
 .sa-lamp__copy { min-width: 0; }
 .sa-lamp__state { margin-right: 0.45rem; font-weight: 800; letter-spacing: 0.16em; }
-@media (max-width: 720px) {
-  .sa-lamps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sa-lamp { padding: 0.75rem 0.8rem; gap: 0.55rem; }
-  .sa-lamp__label { font-size: 10px; letter-spacing: 0.12em; }
-  .sa-lamp__detail { font-size: 9px; letter-spacing: 0.09em; }
-}
-
 
 /* ============================================================
    Typography pass
@@ -1689,7 +1582,11 @@ dl,
 ol,
 ul { margin-block: 0; }
 
-p { text-wrap: pretty; }
+/* The longhand, not `text-wrap`: that is now a shorthand that also
+   resets the wrap mode, and as an unlayered rule it quietly beat every
+   `whitespace-nowrap` utility on a paragraph ("Market cap" broke in two
+   at 390px). Only the style of the wrap is this rule's business. */
+p { text-wrap-style: pretty; }
 
 .sa-topbar__fig dt,
 .sa-topbar__fig dd {
@@ -1705,30 +1602,24 @@ p { text-wrap: pretty; }
   white-space: nowrap;
 }
 
-.sa-eyebrow {
-  min-height: 1.9rem;
-  line-height: 1.15;
-}
-.sa-eyebrow__no { line-height: 1.15; }
-.sa-eyebrow__live {
-  line-height: 1;
-  white-space: nowrap;
-}
+.sa-eyebrow { line-height: 1.2; }
 
+/* Heavy all-caps crowd each other long before lowercase does, so the
+   display face is tightened only a little: at -0.035em the counters of
+   "HIGHER" and "BILLBOARD" were closing up. */
 .sa-display {
   line-height: 0.92;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
   text-wrap: balance;
 }
-.sa-display--2 { line-height: 0.98; }
+.sa-display--2 { line-height: 0.98; letter-spacing: -0.012em; }
 
 .sa-lead {
-  max-width: 43rem;
+  max-inline-size: var(--sa-measure);
   font-size: clamp(0.96rem, 1.05vw, 1.05rem);
   line-height: 1.62;
   text-wrap: pretty;
 }
-.sa-section-head > .sa-lead { max-width: 42rem; }
 
 .sa-cta,
 .sa-ghost,
@@ -1745,9 +1636,9 @@ p { text-wrap: pretty; }
 .sa-flight-summary dd:last-of-type { margin-top: 0.2rem; }
 .sa-progress { line-height: 1.2; }
 
-.sa-steps {
-  grid-auto-rows: 1fr;
-}
+/* No forced row height: cards in one row already stretch to match, and
+   stacked on a phone \`1fr\` rows made every card as tall as the longest,
+   leaving blank panel under the short ones. */
 .sa-step {
   display: grid;
   grid-template-rows: auto auto 1fr;
@@ -1755,8 +1646,8 @@ p { text-wrap: pretty; }
 }
 .sa-step__h { line-height: 1.05; }
 .sa-step__b {
-  max-width: 34ch;
-  line-height: 1.58;
+  max-width: 36ch;
+  line-height: 1.55;
   text-wrap: pretty;
 }
 
@@ -1778,32 +1669,14 @@ p { text-wrap: pretty; }
 .sa-map__note,
 .sa-map__alt { line-height: 1.6; }
 
-.sa-footer__grid {
-  align-items: stretch;
-}
-.sa-footer__grid > * {
-  display: flex;
-  flex-direction: column;
-}
-.sa-footer__h { line-height: 1.2; }
-.sa-footer__list {
-  line-height: 1.5;
-}
-.sa-footer__list > div {
-  min-height: 1.8rem;
-  line-height: 1.35;
-}
 .sa-footer__bar {
   line-height: 1.4;
 }
 
 @media (max-width: 639px) {
-  .sa-display { letter-spacing: -0.028em; }
+  .sa-display { letter-spacing: -0.015em; }
   .sa-lead { font-size: 0.96rem; line-height: 1.58; }
-  .sa-eyebrow { min-height: 1.7rem; }
-  .sa-eyebrow__live { margin-left: 0; }
 }
-
 
 /* Live wallet activity in the selected-seat inspector. */
 .sa-activity {
@@ -1821,7 +1694,7 @@ p { text-wrap: pretty; }
 .sa-activity__status {
   color: var(--accent-deep);
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   line-height: 1.2;
@@ -1879,7 +1752,7 @@ p { text-wrap: pretty; }
 .sa-activity__meta,
 .sa-activity__updated {
   color: var(--ui-faint);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
 }
 .sa-activity__empty {
@@ -1892,4 +1765,120 @@ p { text-wrap: pretty; }
   margin-top: 0.7rem;
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
   letter-spacing: 0.03em;
+}
+
+/* ============================================================
+   Design pass — elevation on the dark ground
+   ────────────────────────────────────────────────────────────
+   The soft-UI shadows assume a light ground: a white highlight
+   up-left, grey shade down-right. The page ground is navy, so
+   every panel sitting directly on it (hero deck, view bezel,
+   section cards) wore a 16–30px white halo. On the dark ground a
+   raised thing is lit by a deep drop shadow and a faint rim, not
+   by a white bloom. Inside a light panel the original light-ground
+   vocabulary is restored, so chips and wells nested in cards are
+   unchanged.
+   ============================================================ */
+.sa-hero,
+.sa-section {
+  --e-sm: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 4px 10px rgba(0, 0, 0, 0.35);
+  --e:    0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 10px 24px rgba(0, 0, 0, 0.42);
+  --e-lg: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 18px 44px rgba(0, 0, 0, 0.5);
+}
+.sa-hero :is(.sa-deck, .sd-viewframe, .ui-card, .sa-map) > *,
+.sa-section :is(.sa-deck, .ui-card, .sa-map) > *,
+.sa-wall,
+.sa-footer {
+  --e-sm:    -3px -3px 8px var(--lit),    3px 3px 8px var(--shade);
+  --e:       -6px -6px 16px var(--lit),   7px 7px 18px var(--shade);
+  --e-lg:    -12px -12px 30px var(--lit), 14px 14px 34px var(--shade);
+}
+/* The ghost button on navy: a quiet glass pill, not a lit plastic one. */
+.sa-hero > div .sa-ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: #E8EEF6;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+.sa-hero > div .sa-ghost:hover { background: rgba(255, 255, 255, 0.14); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34); }
+
+/* ── Controls: one height per tier, and touchable ─────────────
+   Primary actions 48px; chips and pills 36px with pointer, 44px
+   on touch. Buttons that share a row now share a height. */
+.sa-cta, .sa-ghost { min-height: 3rem; }
+.sa-chip, .ui-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 2.25rem; }
+.sa-ca__copy, .sa-pump { min-height: 2rem; display: inline-flex; align-items: center; }
+@media (pointer: coarse) {
+  .sa-chip, .ui-pill, .ui-round, .sa-ca__copy, .sa-pump { min-height: 2.75rem; }
+  .ui-round { width: 2.75rem; height: 2.75rem; }
+}
+
+/* ── Section heads: the hero's composition, at section scale ────────
+   Label and heading on the left, the intro on the right, their last
+   lines level — the same φ columns and gutter the hero uses, so every
+   section opens the way the page does. A left-aligned head stacked
+   alone left the right half of a wide screen empty; centring it would
+   have floated the type off the left edge every panel below it shares.
+   On a phone it is one column: label, heading, intro. */
+.sa-section-head--split {
+  display: grid;
+  row-gap: 1.25rem;
+}
+@media (min-width: 1024px) {
+  .sa-section-head--split {
+    grid-template-columns: minmax(0, 1.618fr) minmax(0, 1fr);
+    column-gap: 3.5rem;
+    align-items: end;
+  }
+  /* The intro's line box carries half-leading below its last baseline;
+     lift it by that much so the two last lines sit on one line. */
+  .sa-section-head--split > .sa-lead { margin-bottom: -0.3em; }
+}
+
+
+/* ── Footer navigation ────────────────────────────────────────
+   One centred row under the closing line: the footer's only job is
+   somewhere to go next, so it is set as a row of places, not as a
+   card of them. Touch-sized, and the same ink as the rest of the
+   footer's quiet type. */
+.sa-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem 2rem;
+  margin-top: clamp(2.5rem, 5vw, 3.5rem);
+}
+.sa-footer__nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  font-size: var(--t-base);
+  font-weight: 600;
+  color: var(--ui-soft);
+  border-radius: var(--r-sm);
+  transition: color 0.15s ease;
+}
+.sa-footer__nav a:hover { color: var(--accent-deep); }
+.sa-footer__nav a:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
+
+/* ── Measured fixes (layout audit at 360–1440px) ─────────────────────
+   Seat labels are sized from the tile in SeatMap.tsx: the old
+   max(7px, 0.26em) resolved against the inherited 15px, so every seat on
+   every screen was labelled at the 7px floor. */
+
+/* Cabin subtitles ("PRIVATE SUITE / 08 SEATS") were cut to an ellipsis on
+   phones by the note beside them. Let them wrap under the name instead. */
+@media (max-width: 640px) {
+  .sa-zone-head { align-items: flex-start; }
+  .sa-zone-head__title { flex: 1 1 0; min-width: 0; }
+  .sa-zone-head__visual { white-space: normal; text-overflow: clip; text-wrap: balance; overflow-wrap: break-word; }
+  /* The note keeps its own width up to a cap, so "ROWS 1–2" stays on one
+     line and only a long note ("Everyone below the cutoff") wraps. */
+  .sa-zone-head__note { flex: none; max-width: 42%; text-align: right; text-wrap: balance; }
+}
+
+/* The last three controls under 44px on a touch screen. */
+.sa-skip { display: inline-flex; align-items: center; min-height: 2.75rem; }
+@media (pointer: coarse) {
+  .sa-brand { min-height: 2.75rem; }
+  .sa-pump { min-width: 2.75rem; justify-content: center; }
 }

@@ -17,7 +17,7 @@ export default {
            they are the same palette reached two different ways. */
         ui: {
           bg:      '#DFE0E4',  // the ground everything is pressed out of
-          sink:    '#D3D4D8',  // a recess: search fields, empty sockets
+          sink:    '#D6D7DC',  // a recess: search fields, empty sockets
           surface: '#EDEEF1',  // a raised panel
           hi:      '#F7F7F9',  // the lit top edge of one
           off:     '#D0D1D3',  // a control that is off

@@ -43,7 +43,7 @@ const BoardingLadder = ({ berth, holding, address, manifestSize }: BoardingLadde
     >
       <header className="flex items-baseline gap-3 ui-rule-b px-5 py-3.5">
         <h3 className="font-heading text-lg leading-none text-ui-ink">Boarding ladder</h3>
-        <p className="ml-auto whitespace-nowrap text-[10px] uppercase tracking-[0.18em] text-ui-faint">
+        <p className="ml-auto whitespace-nowrap text-[11px] uppercase tracking-[0.18em] text-ui-faint">
           By rank
         </p>
       </header>
@@ -67,13 +67,15 @@ const BoardingLadder = ({ berth, holding, address, manifestSize }: BoardingLadde
                 aria-hidden
                 className={`absolute inset-y-0 left-0 w-[3px] ${here ? 'bg-ui-blue' : 'bg-transparent'}`}
               />
+              {/* The boarding group, labelled as one. A bare "1, 1, 2" down the
+                  edge of an <ol> reads as a list that miscounted. */}
               <span
-                className={`w-6 shrink-0 text-center text-[11px] tabular-nums ${
+                className={`w-7 shrink-0 text-center font-mono text-[11px] tabular-nums ${
                   reached ? 'text-ui-deep' : 'text-ui-faint'
                 }`}
-                aria-hidden
+                title={zone?.group ? `Boarding group ${zone.group}` : undefined}
               >
-                {zone?.group ?? '—'}
+                {zone?.group ? <><span aria-hidden>G{zone.group}</span><span className="sr-only">Boarding group {zone.group}</span></> : '—'}
               </span>
               <span className="min-w-0 flex-1">
                 <span className={`block text-sm font-bold ${here ? 'text-ui-ink' : 'text-ui-soft'}`}>
@@ -111,7 +113,7 @@ const BoardingLadder = ({ berth, holding, address, manifestSize }: BoardingLadde
             aria-hidden
             className={`absolute inset-y-0 left-0 w-[3px] ${berth.hold && address ? 'bg-ui-blue' : 'bg-transparent'}`}
           />
-          <span className="w-6 shrink-0 text-center text-[11px] text-ui-faint" aria-hidden>—</span>
+          <span className="w-7 shrink-0 text-center text-[11px] text-ui-faint" aria-hidden>—</span>
           <span className="min-w-0 flex-1">
             <span className={`block text-sm font-bold ${berth.hold && address ? 'text-ui-ink' : 'text-ui-soft'}`}>
               Cargo hold

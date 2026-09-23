@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type CSSProperties } from 'react';
+import { memo, useState, type CSSProperties } from 'react';
 import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, type CabinRow, type ZoneKey } from '../content/cabin';
 import { safeHref, type Banner, type BannerSet } from '../lib/banners';
 import { shortAddress, type Manifest, type ManifestEntry } from '../lib/manifest';
@@ -77,11 +77,11 @@ const Seat = ({ id, zone, entry, banner, mine, onVisit, onSelect, onInspect }: S
         // No advert up yet, so the seat advertises itself: rank, then the
         // seat number under it, at a size somebody can actually read.
         <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-          <span className="sa-seat__rank font-mono text-[max(10px,0.42em)] font-semibold">{entry.rank}</span>
-          <span className="sa-seat__id mt-[0.15em] font-mono text-[max(7px,0.26em)]">{id}</span>
+          <span className="sa-seat__rank font-mono text-[length:clamp(12px,calc(var(--seat)*0.34),22px)] font-semibold">{entry.rank}</span>
+          <span className="sa-seat__id mt-[0.15em] font-mono text-[length:clamp(11px,calc(var(--seat)*0.2),13px)]">{id}</span>
         </span>
       ) : (
-        <span className="sa-seat__id absolute inset-0 grid place-items-center font-mono text-[max(7px,0.26em)] opacity-70">
+        <span className="sa-seat__id absolute inset-0 grid place-items-center font-mono text-[length:clamp(11px,calc(var(--seat)*0.2),13px)] opacity-70">
           {id}
         </span>
       )}
@@ -121,18 +121,6 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
      somebody works out their own landing spot from. Put beside the map
      rather than under it, it also gives the readout column something to be
      when nothing is under the cursor. */
-  const zoneFill = useMemo(
-    () =>
-      CABIN_ZONES.map((zone) => {
-        const ids = zone.rows.flatMap((row) =>
-          [...row.left, ...row.right].map((c) => (row.n === null ? c : `${row.n}${c}`)),
-        );
-        const held = ids.filter((id) => manifest.seats.has(id)).length;
-        return { key: zone.key, name: zone.name, note: zone.note, held, total: ids.length };
-      }),
-    [manifest],
-  );
-
   /* Runs of rows with nobody in them collapse into one line.
 
      The aircraft fills from the front, so an unexpanded map is mostly empty
@@ -218,9 +206,13 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
                   <span className="sa-zone-head__mark" aria-hidden>{zone.code}</span>
                   <div className="sa-zone-head__title">
                     <h3>{zone.name}</h3>
-                    <span className="sa-zone-head__visual">{zone.visual}</span>
+                    {/* Keep "/ 08 seats" in one piece so a wrapped subtitle breaks after
+                        the name, never before the slash or inside the count. */}
+                    <span className="sa-zone-head__visual">{zone.visual.replace(' / ', '\u00a0/ ').replace(/(\d+) /, '$1\u00a0')}</span>
                   </div>
-                  <span className="sa-zone-head__note">{zone.note}</span>
+                  {/* A word joiner after each dash, so a range ("Rows 1–2") never splits
+                    across a line on a phone while the note itself may wrap. */}
+                  <span className="sa-zone-head__note">{zone.note.replace(/–/g, '–\u2060')}</span>
                 </header>
 
                 <div
@@ -249,7 +241,7 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
                     ) : (
                       <div key={block.row.n ?? 'deck'} className="flex items-center justify-center gap-[5px]">
                         {block.row.n !== null && (
-                          <span className="sa-rownum w-6 flex-none text-right font-mono text-[10px]">{block.row.n}</span>
+                          <span className="sa-rownum w-6 flex-none text-right font-mono text-[11px]">{block.row.n}</span>
                         )}
                         {[block.row.left, block.row.right].map((bank, side) => (
                           <div key={side} className="contents">
@@ -273,7 +265,7 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
                           </div>
                         ))}
                         {block.row.n !== null && (
-                          <span className="sa-rownum w-6 flex-none font-mono text-[10px]">{block.row.n}</span>
+                          <span className="sa-rownum w-6 flex-none font-mono text-[11px]">{block.row.n}</span>
                         )}
                       </div>
                     ),
@@ -289,7 +281,7 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
               <span className="sa-zone-head__mark" aria-hidden>CRG</span>
               <div className="sa-zone-head__title">
                 <h3>{CARGO_HOLD.name}</h3>
-                <span className="sa-zone-head__visual">Below the cutoff / unpressurized</span>
+                <span className="sa-zone-head__visual">Below the cutoff&nbsp;/ unpressurized</span>
               </div>
               <span className="sa-zone-head__note">{CARGO_HOLD.note}</span>
             </header>
@@ -434,27 +426,6 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
           <li className="sa-map__count tabular-nums">{manifest.entries.length} seated · {manifest.open} open</li>
         </ul>
 
-        {/* ── How full the aircraft is, by zone ── */}
-        <div className="sa-fill">
-          <p className="sa-map__label">Cabin</p>
-          <ul className="sa-fill__list">
-            {zoneFill.map((zone) => (
-              <li key={zone.key} className="sa-fill__row">
-                <span className="sa-fill__name">{zone.name}</span>
-                <span className="sa-fill__note">{zone.note}</span>
-                <span aria-hidden className="sa-fill__track">
-                  <span
-                    className="sa-fill__bar"
-                    style={{ width: `${Math.round((zone.held / zone.total) * 100)}%` }}
-                  />
-                </span>
-                <span className="sa-fill__n tabular-nums">
-                  {zone.held}/{zone.total}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
         </div>
       </aside>
     </div>

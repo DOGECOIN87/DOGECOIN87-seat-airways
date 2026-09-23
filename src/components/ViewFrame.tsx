@@ -201,7 +201,7 @@ const ViewFrame = ({ children, label, actions, onZoomOutBeyond, zoomOutHint }: V
         {/* The view draws its own callsign at the top left, so this badge is
             capped at a share of the width and allowed to wrap rather than
             run into it — on a phone the two were colliding. */}
-        <p className="pointer-events-none absolute right-3 top-3 max-w-[46%] rounded-2xl border border-white/12 bg-black/55 px-2.5 py-1 text-right text-[9px] font-bold uppercase leading-tight tracking-[0.16em] text-[#7FE3F7] backdrop-blur-sm sm:max-w-[60%] sm:px-3 sm:text-[10px] sm:tracking-[0.18em]">
+        <p className="pointer-events-none absolute right-3 top-3 max-w-[46%] rounded-2xl border border-white/12 bg-black/55 px-2.5 py-1 text-right text-[11px] font-bold uppercase leading-tight tracking-[0.16em] text-[#7FE3F7] backdrop-blur-sm sm:max-w-[60%] sm:px-3 sm:text-[11px] sm:tracking-[0.18em]">
           {label}
         </p>
       </div>

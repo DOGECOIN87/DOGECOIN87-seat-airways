@@ -48,7 +48,6 @@ const when = (iso: string) => {
 const Shell = ({ children }: { children: React.ReactNode }) => (
   <section className="ui-card" aria-label="Section networking">
     <div className="px-5 py-6 sm:px-7">
-      <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Section network</p>
       {children}
     </div>
   </section>
@@ -176,11 +175,9 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
   if (!manifest.entries.length) {
     return (
       <Shell>
-        <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The cabin network opens at boarding</h3>
+        <h3 className="font-heading text-2xl leading-tight text-ui-ink">The cabin network opens at boarding</h3>
         <p className="mt-2 max-w-[58ch] text-[13px] leading-relaxed text-ui-soft">
-          Connect a wallet to see the live roster. Where you sit decides what you can read: the contact details of
-          your own section and every cabin behind it, and the conversations happening back there. The rows in front
-          of you are closed, which is what makes the next seat up worth taking.
+          Connect a wallet to see the live roster, and which cabins your seat opens to you.
         </p>
       </Shell>
     );
@@ -189,7 +186,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
   if (!directory.available) {
     return (
       <Shell>
-        <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The directory is not connected</h3>
+        <h3 className="font-heading text-2xl leading-tight text-ui-ink">The directory is not connected</h3>
         <p className="mt-2 max-w-[58ch] text-[13px] leading-relaxed text-ui-soft">
           This deployment has no directory service configured, so cards and introductions have nowhere to live.
           Set <code className="font-mono text-[12px]">VITE_DIRECTORY_API</code> to a Worker with its database bound.
@@ -206,8 +203,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
       <header className="ui-rule-b px-5 py-5 sm:px-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">Section network</p>
-            <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">The cabin, from your seat</h3>
+            <h3 className="font-heading text-2xl leading-tight text-ui-ink">The cabin, from your seat</h3>
             <p className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-ui-soft">
               {sections ? (
                 <>
@@ -219,13 +215,12 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                 </>
               ) : (
                 <>
-                  Every holder is on the roster. Claim a seat and it decides how far up the aircraft you can read:
-                  your own section and every cabin behind it, and none of the ones in front.
+                  You are not seated yet. Connect a wallet and your seat decides which of these cabins open to you.
                 </>
               )}
             </p>
           </div>
-          <div className="rounded-full border border-[#FFB300]/40 bg-[#FFF9E8] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8A5A00]">
+          <div className="rounded-full border border-[#FFB300]/40 bg-[#FFF9E8] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8A5A00]">
             {viewerZone ? `${sectionLabel(viewerZone)} access` : 'Connect to unlock'}
           </div>
         </div>
@@ -251,13 +246,13 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
           long before there was anywhere to keep it. */}
       {directory.session && (directory.announcements.length > 0 || canAnnounce(viewerZone)) && (
         <div className="border-t border-ui-line bg-[#FFFBEA] px-5 py-5 sm:px-7">
-          <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#8A6D00]">The PA</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8A6D00]">The PA</p>
           {directory.announcements.length > 0 ? (
             <ul className="mt-3 space-y-2">
               {directory.announcements.map((message) => (
                 <li key={message.id} className="rounded-xl border border-[#E6D08A] bg-white/70 px-3.5 py-3">
                   <p className="text-[13px] leading-relaxed text-ui-ink">{message.body}</p>
-                  <p className="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-ui-faint">
+                  <p className="mt-1.5 text-[11px] uppercase tracking-[0.14em] text-ui-faint">
                     {senders(message.from)} · {when(message.sentAt)}
                   </p>
                 </li>
@@ -269,7 +264,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
 
           {canAnnounce(viewerZone) && (
             <div className="mt-4 rounded-xl border border-[#E6D08A] bg-white/70 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#8A6D00]">Yours to use</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8A6D00]">Yours to use</p>
               <p className="mt-1 text-[11px] leading-relaxed text-ui-soft">
                 One announcement a day, heard by every cabin and by the hold. Use it well.
               </p>
@@ -307,13 +302,13 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                   <span className="min-w-0">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="font-heading text-lg text-ui-ink">{card?.displayName || holderName(entry)}</span>
-                      {entry.address === address && <span className="rounded-full bg-ui-ink px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-white">You</span>}
+                      {entry.address === address && <span className="rounded-full bg-ui-ink px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white">You</span>}
                     </span>
                     <span className="mt-1 block text-[11px] uppercase tracking-[0.14em] text-ui-soft">
                       {sectionLabel(entry.seat.zone)} · seat {entry.seat.id} · {card?.role || defaultRole(entry.seat.zone)}
                     </span>
                   </span>
-                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-ui-deep">{active ? 'Close' : 'Open'}</span>
+                  <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-ui-deep">{active ? 'Close' : 'Open'}</span>
                 </button>
 
                 {active && (
@@ -349,7 +344,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                         )}
                         {messageable && directory.session && (
                           <div className="mt-4 rounded-xl border border-[#FF668F]/30 bg-white/70 p-3">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B3265E]">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#B3265E]">
                               {entry.seat.zone === viewerZone ? 'Same-section introduction' : `Introduction to ${sectionLabel(entry.seat.zone)}`}
                             </p>
                             {/* Nobody should learn this from the seat in front
@@ -384,7 +379,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
         </div>
 
         <aside className="rounded-2xl border border-ui-line bg-ui-bg p-4 sm:p-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-ui-deep">Your networking card</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ui-deep">Your networking card</p>
 
           {!address ? (
             <p className="mt-4 text-[12px] leading-relaxed text-ui-soft">Connect a wallet and claim a seat to publish a networking card.</p>
@@ -409,7 +404,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                 ['website', 'Website URL'],
                 ['linkedin', 'LinkedIn URL'],
               ] as const).map(([key, label]) => (
-                <label key={key} className="block text-[10px] font-bold uppercase tracking-[0.14em] text-ui-faint">
+                <label key={key} className="block text-[11px] font-bold uppercase tracking-[0.14em] text-ui-faint">
                   {label}
                   <input value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-ui-line bg-white px-3 py-2 text-[12px] font-normal normal-case tracking-normal text-ui-ink outline-none focus:border-ui-blue" />
                 </label>
@@ -438,7 +433,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
 
           {directory.session && (
             <div className="mt-5 border-t border-ui-line pt-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-ui-deep">Introductions</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ui-deep">Introductions</p>
               {directory.loading ? (
                 <p className="mt-3 text-[11px] text-ui-soft">Reading your inbox…</p>
               ) : directory.inbox.length ? (
@@ -447,7 +442,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                     <li key={message.id} className="rounded-xl border border-ui-line bg-white px-3 py-2.5">
                       <p className="text-[11px] font-semibold text-ui-ink">{senders(message.from)}</p>
                       <p className="mt-1 text-[12px] leading-relaxed text-ui-soft">{message.body}</p>
-                      <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
+                      <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
                     </li>
                   ))}
                 </ul>
@@ -463,7 +458,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                   of it. */}
               {directory.overheard.length > 0 && (
                 <div className="mt-5 border-t border-ui-line pt-4">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-ui-deep">From behind you</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ui-deep">From behind you</p>
                   <p className="mt-1.5 text-[11px] leading-relaxed text-ui-soft">
                     Conversations between wallets seated aft of {sectionLabel(viewerZone as ZoneKey)}. They cannot
                     read yours.
@@ -475,13 +470,13 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                           {senders(message.from)} <span className="font-normal text-ui-faint">to</span> {senders(message.to)}
                         </p>
                         <p className="mt-1 text-[12px] leading-relaxed text-ui-soft">{message.body}</p>
-                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
+                        <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
-              <button type="button" onClick={() => void directory.signOut()} className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep underline">
+              <button type="button" onClick={() => void directory.signOut()} className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-ui-deep underline">
                 Sign out of the directory
               </button>
             </div>
@@ -513,7 +508,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
         <div className="border-t border-ui-line px-5 py-6 sm:px-7">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-ui-deep">The rooms</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-deep">The rooms</p>
               <h3 className="font-heading mt-1 text-xl leading-tight text-ui-ink">
                 {sectionLabel(viewerZone)} is talking
               </h3>
@@ -531,7 +526,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                   if (next) void directory.hearAft();
                 }}
                 aria-pressed={listeningAft}
-                className="rounded-full border border-ui-line px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep transition-colors hover:bg-black/5"
+                className="rounded-full border border-ui-line px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-ui-deep transition-colors hover:bg-black/5"
               >
                 {listeningAft
                   ? `Just ${sectionLabel(viewerZone)}`
@@ -568,7 +563,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
               const said = directory.channels[zone];
               return (
                 <div key={zone} className={`rounded-2xl border p-4 ${zoneAccent[zone]}`}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ui-deep">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ui-deep">
                     {sectionLabel(zone)}
                     {zone === viewerZone
                       ? ' · yours'
@@ -582,7 +577,7 @@ const NetworkingHub = ({ manifest, address, viewerZone, sign }: NetworkingHubPro
                         <li key={message.id} className="rounded-xl border border-ui-line bg-white/80 px-3 py-2.5">
                           <p className="text-[11px] font-semibold text-ui-ink">{senders(message.from)}</p>
                           <p className="mt-1 text-[12px] leading-relaxed text-ui-soft">{message.body}</p>
-                          <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
+                          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-ui-faint">{when(message.sentAt)}</p>
                         </li>
                       ))}
                     </ul>

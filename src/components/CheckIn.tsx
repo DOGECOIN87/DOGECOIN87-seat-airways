@@ -31,11 +31,10 @@ const CheckIn = ({ wallet, holding, berth, loading }: CheckInProps) => {
     return (
       <section className="ui-card ui-card--accent" aria-label="Check in">
         <div className="px-5 py-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-ui-deep">Boarding</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-deep">Boarding</p>
           <h3 className="font-heading mt-2 text-2xl leading-tight text-ui-ink">Where do you sit?</h3>
           <p className="mt-2 max-w-[42ch] text-[13px] leading-relaxed text-ui-soft">
-            Connect a wallet and the manifest answers it: bigger bag, further forward. Everyone under the
-            last cutoff rides in the hold.
+            Bigger bag, further forward. Everyone under the last cutoff rides in the hold.
           </p>
 
           <button
@@ -71,13 +70,13 @@ const CheckIn = ({ wallet, holding, berth, loading }: CheckInProps) => {
           className="h-2 w-2 shrink-0 bg-ui-blue"
           style={{ borderRadius: '9999px', boxShadow: '0 0 10px #FFB300' }}
         />
-        <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-ui-soft">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ui-soft">
           {`Checked in${walletName ? ` · ${walletName}` : ''}`}
         </p>
         <button
           type="button"
           onClick={disconnect}
-          className="ml-auto text-[10px] uppercase tracking-[0.16em] text-ui-faint underline-offset-4 transition-colors hover:text-ui-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-blue"
+          className="ml-auto text-[11px] uppercase tracking-[0.16em] text-ui-faint underline-offset-4 transition-colors hover:text-ui-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-blue"
         >
           Sign out
         </button>
@@ -91,7 +90,7 @@ const CheckIn = ({ wallet, holding, berth, loading }: CheckInProps) => {
           { k: 'Share of supply', v: holding ? formatShare(holding.share) : loading ? '—' : 'unread' },
         ].map((cell) => (
           <div key={cell.k} className="bg-transparent px-5 py-3.5">
-            <dt className="text-[10px] font-bold uppercase tracking-[0.18em] text-ui-faint">{cell.k}</dt>
+            <dt className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-faint">{cell.k}</dt>
             <dd className="mt-1 break-words text-[15px] leading-snug text-ui-ink">{cell.v}</dd>
           </div>
         ))}
