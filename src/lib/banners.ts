@@ -39,7 +39,7 @@
  * Drop off the manifest entirely and it comes down on its own.
  */
 
-import { MARK_PATH } from '../components/Mark';
+import { LOGO_FRAME } from '../components/Mark';
 import { resolveWorkerApi } from './workerBase';
 
 export interface Banner {
@@ -467,10 +467,14 @@ const HOUSE_INK = {
   cloth: '#8E939E',  // the neutral
 } as const;
 
-/** The mark, scaled and placed on the 200-square house-advert canvas. */
-const houseMark = (x: number, y: number, size: number, fill: string) =>
-  `<g transform="translate(${x} ${y}) scale(${size / 1536})">` +
-  `<path d="${MARK_PATH}" fill="${fill}" fill-rule="evenodd"/></g>`;
+/**
+ * The logo, framed to its disc and placed on the 200-square house-advert
+ * canvas. It is the supplied file's own markup, nested whole: an advert is a
+ * self-contained data URL, and an image cannot reach out to another file. Until
+ * the markup has loaded the place is left empty, and the advert is redrawn.
+ */
+const houseLogo = (logo: string | null, x: number, y: number, size: number) =>
+  logo ? `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="${LOGO_FRAME}">${logo}</svg>` : '';
 
 /** Stacked display type. One line per entry, set tight, as a lockup would be. */
 const stack = (
@@ -495,13 +499,14 @@ const micro = (text: string, x: number, y: number, fill: string, size = 9, ancho
 interface HouseAd {
   /** What the advert says, for anyone who cannot see it. */
   line: string;
-  svg: string;
+  /** The artwork, given the logo's markup if it has loaded. */
+  svg: (logo: string | null) => string;
 }
 
 const HOUSE_ADS: HouseAd[] = [
   {
     line: 'Your bag is your seat',
-    svg:
+    svg: () =>
       `<rect width="200" height="200" fill="${HOUSE_INK.navy}"/>` +
       `<rect x="0" y="0" width="200" height="6" fill="${HOUSE_INK.amber}"/>` +
       stack(['YOUR', 'BAG IS', 'YOUR', 'SEAT'], { x: 18, y: 62, size: 32, fill: HOUSE_INK.bone }) +
@@ -509,15 +514,15 @@ const HOUSE_ADS: HouseAd[] = [
   },
   {
     line: 'Seat Airlines — SA350, nonstop',
-    svg:
+    svg: (logo) =>
       `<rect width="200" height="200" fill="${HOUSE_INK.bone}"/>` +
-      houseMark(58, 26, 84, HOUSE_INK.navy) +
+      houseLogo(logo, 58, 26, 84) +
       stack(['SEAT', 'AIRLINES'], { x: 100, y: 148, size: 26, fill: HOUSE_INK.navy, anchor: 'middle' }) +
       micro('SA350 · NONSTOP', 100, 182, HOUSE_INK.cloth, 9, 'middle'),
   },
   {
     line: 'This square is for sale — out-hold whoever is in it',
-    svg:
+    svg: () =>
       `<rect width="200" height="200" fill="${HOUSE_INK.amber}"/>` +
       stack(['THIS', 'SQUARE', 'IS FOR', 'SALE'], { x: 18, y: 58, size: 33, fill: HOUSE_INK.night }) +
       `<rect x="18" y="168" width="164" height="2" fill="${HOUSE_INK.night}" opacity="0.55"/>` +
@@ -525,17 +530,17 @@ const HOUSE_ADS: HouseAd[] = [
   },
   {
     line: 'Hold more. Fly higher.',
-    svg:
+    svg: (logo) =>
       `<rect width="200" height="200" fill="${HOUSE_INK.night}"/>` +
       `<circle cx="100" cy="86" r="52" fill="none" stroke="${HOUSE_INK.cyan}" stroke-width="2" opacity="0.4"/>` +
-      houseMark(66, 52, 68, HOUSE_INK.cyan) +
+      houseLogo(logo, 66, 52, 68) +
       stack(['HOLD MORE.', 'FLY HIGHER.'], {
         x: 100, y: 166, size: 15, fill: HOUSE_INK.bone, anchor: 'middle', spacing: 1.18,
       }),
   },
   {
     line: 'Row 1 is better — the front of the cabin is the front of the wall',
-    svg:
+    svg: () =>
       `<rect width="200" height="200" fill="${HOUSE_INK.cloth}"/>` +
       // The seat map itself, as a motif: the one square at the front is lit.
       [0, 1, 2, 3].map((r) =>
@@ -551,7 +556,7 @@ const HOUSE_ADS: HouseAd[] = [
   },
   {
     line: 'Market cap is altitude — $50M is the moon',
-    svg:
+    svg: () =>
       `<rect width="200" height="200" fill="${HOUSE_INK.night}"/>` +
       `<path d="M -20 178 A 150 150 0 0 1 220 178 Z" fill="${HOUSE_INK.navy}"/>` +
       `<circle cx="150" cy="46" r="17" fill="${HOUSE_INK.bone}" opacity="0.9"/>` +
@@ -562,7 +567,7 @@ const HOUSE_ADS: HouseAd[] = [
   },
   {
     line: 'Cabin crew, arm doors and cross-check',
-    svg:
+    svg: () =>
       `<rect width="200" height="200" fill="${HOUSE_INK.bone}"/>` +
       `<rect x="0" y="0" width="200" height="42" fill="${HOUSE_INK.navy}"/>` +
       micro('CABIN CREW', 14, 27, HOUSE_INK.bone, 12) +
@@ -573,7 +578,7 @@ const HOUSE_ADS: HouseAd[] = [
   },
   {
     line: 'Boarding pass — seats go to the top holders, in order',
-    svg:
+    svg: () =>
       `<rect width="200" height="200" fill="${HOUSE_INK.cyan}"/>` +
       `<rect x="0" y="120" width="200" height="80" fill="${HOUSE_INK.bone}"/>` +
       // The tear line, punched the way a real stub is.
@@ -596,15 +601,21 @@ const HOUSE_ADS: HouseAd[] = [
  * opens on a working billboard wall rather than an argument that one could
  * exist. A holder's upload, and the published set, both beat them.
  */
-export function houseAdverts(seats: readonly string[]): Record<string, Banner> {
+export function houseAdverts(seats: readonly string[], logo: string | null = null): Record<string, Banner> {
+  /* Each layout is drawn and encoded once, and every seat that carries it
+     shares the one string — the logo makes two of them large, and the cabin's
+     screens cache their textures by it. */
+  const images = HOUSE_ADS.map((ad) => {
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">${ad.svg(logo)}</svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  });
   const out: Record<string, Banner> = {};
   seats.forEach((seat, i) => {
-    const ad = HOUSE_ADS[i % HOUSE_ADS.length];
-    const svg =
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">${ad.svg}</svg>`;
+    const n = i % HOUSE_ADS.length;
     out[seat] = {
-      image: `data:image/svg+xml,${encodeURIComponent(svg)}`,
-      alt: `Seat Airlines house advert: ${ad.line}. This seat's holder can replace it.`,
+      image: images[n],
+      alt: `Seat Airlines house advert: ${HOUSE_ADS[n].line}. This seat's holder can replace it.`,
       house: true,
     };
   });

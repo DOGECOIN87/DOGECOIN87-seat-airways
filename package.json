@@ -12,7 +12,8 @@
     "test": "npm run build:test && node test/banners.test.mjs && node test/sectionAccess.test.mjs && node test/networking.test.mjs && node test/holderList.test.mjs && node test/holdings.test.mjs && node test/logbook.test.mjs && node test/manualControls.test.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "typecheck": "tsc --noEmit",
-    "token:update": "node scripts/update-token.mjs"
+    "token:update": "node scripts/update-token.mjs",
+    "icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
     "@types/three": "^0.185.4",

@@ -69,7 +69,7 @@ const BoardingPass = ({ passenger, seat, zone, boardedAt }: BoardingPassProps) =
         {/* Upper stub */}
         <div className="px-5 pb-5 pt-5">
           <div className="flex items-center gap-2.5">
-            <Mark size={22} background="none" color="#0087EA" className="flex-none" />
+            <Mark size={22} className="flex-none" />
             <p className="font-heading text-lg tracking-tight text-ui-ink">
               SEAT <span className="text-ui-deep">AIRLINES</span>
             </p>

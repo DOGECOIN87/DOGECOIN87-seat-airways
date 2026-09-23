@@ -57,6 +57,18 @@ check('every house advert decodes rather than throwing', () => {
   }
 });
 
+check('the logo is drawn into the two house adverts that carry it, and they still decode', () => {
+  const logo = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><circle id="logo-probe" cx="250" cy="250" r="200"/></svg>';
+  const ads = houseAdverts(['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B'], logo);
+  const carrying = Object.values(ads).filter((ad) => new TextDecoder().decode(dataUrlBytes(ad.image)).includes('logo-probe'));
+  assert(carrying.length === 2, `the logo is in ${carrying.length} adverts, expected 2`);
+});
+
+check('seats that share a layout share one image, so it is encoded once', () => {
+  const ads = houseAdverts(['1A', '2A', '3A', '4A', '5A', '6A', '7A', '8A', '9A']);
+  assert(ads['1A'].image === ads['9A'].image, 'the ninth seat re-encoded the first layout');
+});
+
 check('house adverts are marked as house, so the dialog can tell', () => {
   const ads = houseAdverts(['1A']);
   assert(ads['1A'].house === true, 'house flag missing — the dialog would seed itself from it');

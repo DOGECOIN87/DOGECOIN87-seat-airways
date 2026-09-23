@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import Mark from './components/Mark';
+import Mark, { logoMarkup } from './components/Mark';
 import ContractBar from './components/ContractBar';
 import ViewFrame from './components/ViewFrame';
 import Annunciators from './components/Annunciators';
@@ -288,12 +288,21 @@ export default function App() {
     }
     return out;
   }, [byOwner, manifest.entries]);
+  /* Two of the house adverts below carry the logo inside their own artwork,
+     which needs the logo's markup rather than its address: they draw without
+     it for the moment it takes to arrive, then again with it. */
+  const [logo, setLogo] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    logoMarkup().then((markup) => { if (live) setLogo(markup); }, () => {});
+    return () => { live = false; };
+  }, []);
   /* Held seats with nothing on them yet carry the airline's own campaigns, the
      way unsold inventory does on a real aircraft. A holder's own upload, and
      the published set, both beat them. */
   const house = useMemo(
-    () => houseAdverts(manifest.entries.map((e) => e.seat.id)),
-    [manifest.entries],
+    () => houseAdverts(manifest.entries.map((e) => e.seat.id), logo),
+    [manifest.entries, logo],
   );
   const banners = useMemo(
     () => ({ ...house, ...local, ...ownerSeats, ...published }),
@@ -459,7 +468,7 @@ export default function App() {
       <header className="sa-topbar sticky top-0 z-40">
         <div className="mx-auto flex max-w-[94rem] flex-wrap items-center gap-x-7 gap-y-2 px-5 py-2.5 sm:px-8">
           <a href="#top" className="sa-brand flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-blue">
-            <Mark size={34} variant="badge" title="SEAT AIRLINES" />
+            <Mark size={34} title="SEAT AIRLINES" />
             <span className="whitespace-nowrap font-heading text-lg leading-none text-ui-ink">Seat Airlines</span>
             <span className="hidden font-mono text-[11px] uppercase tracking-[0.16em] text-ui-faint sm:inline">
               SA350 · Nonstop
@@ -834,7 +843,7 @@ export default function App() {
       <footer className="sa-footer">
         <div className="mx-auto max-w-[94rem] px-5 sm:px-8">
           <div className="sa-close">
-            <Mark size={40} variant="badge" />
+            <Mark size={40} />
             <p className="sa-close__line">Hold more. Fly higher.</p>
             <a href="#wall" className="sa-cta sa-shine mt-2" onMouseEnter={prefetchSeatMap} onFocus={prefetchSeatMap}>
               Claim a seat <span aria-hidden>→</span>

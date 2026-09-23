@@ -1,4 +1,4 @@
-const CACHE = 'seat-airways-assets-v3';
+const CACHE = 'seat-airways-assets-v4';
 const STATIC_DESTINATIONS = new Set(['script', 'style', 'font', 'image', 'audio', 'worker']);
 
 self.addEventListener('install', () => self.skipWaiting());

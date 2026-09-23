@@ -170,7 +170,7 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing, controls = HAN
           twice in two type sizes. What belongs here is what an aviation
           photograph is captioned with: which aeroplane, and who is on it. */}
       <div className="pointer-events-none absolute left-3 top-3 flex max-w-[52%] items-center gap-2 sm:left-5 sm:top-4 sm:max-w-none sm:gap-2.5">
-        <Mark size={22} background="none" />
+        <Mark size={22} />
         <span className="font-heading text-[15px] leading-none tracking-normal text-white/90">SA350</span>
         <span aria-hidden className="hidden h-3.5 w-px bg-white/25 sm:block" />
         <span className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-white/50 sm:inline">
