@@ -17,6 +17,49 @@ function noise2(x: number, y: number, seed: number): number {
   return h / 4294967296;
 }
 
+/** Metres to one repeat of the ground tile: the plate is 120 km at 40 repeats. */
+export const TILE_METRES = 3000;
+/** Metres from the lowest valley floor to the highest hilltop. */
+export const HILL_HEIGHT = 280;
+
+const smooth01 = (t: number) => {
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * (3 - 2 * c);
+};
+
+/**
+ * Value noise that tiles: a lattice of `cells` × `cells` random heights,
+ * wrapped at the edge and blended with a quintic, so the field joins itself
+ * at the repeat exactly. Whole-number frequencies per tile are the whole
+ * trick — a periodic lattice is periodic noise.
+ */
+function periodicNoise(res: number, cells: number, seed: number): Float32Array {
+  const lattice = new Float32Array(cells * cells);
+  for (let j = 0; j < cells; j++) {
+    for (let i = 0; i < cells; i++) lattice[j * cells + i] = noise2(i, j, seed);
+  }
+  const ease = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
+  const out = new Float32Array(res * res);
+  for (let y = 0; y < res; y++) {
+    const fy = (y / res) * cells;
+    const iy = Math.floor(fy);
+    const ty = ease(fy - iy);
+    const y0 = (iy % cells) * cells;
+    const y1 = ((iy + 1) % cells) * cells;
+    for (let x = 0; x < res; x++) {
+      const fx = (x / res) * cells;
+      const ix = Math.floor(fx);
+      const tx = ease(fx - ix);
+      const x0 = ix % cells;
+      const x1 = (ix + 1) % cells;
+      const top = lattice[y0 + x0] + (lattice[y0 + x1] - lattice[y0 + x0]) * tx;
+      const bottom = lattice[y1 + x0] + (lattice[y1 + x1] - lattice[y1 + x0]) * tx;
+      out[y * res + x] = top + (bottom - top) * ty;
+    }
+  }
+  return out;
+}
+
 /**
  * Farmland: irregular fields, woodland, water and the lanes between them.
  *
@@ -34,6 +77,14 @@ export interface GroundTextures {
   night: THREE.CanvasTexture;
   /** Transparent low-altitude water bodies that sit over the land tile. */
   water: THREE.CanvasTexture;
+  /**
+   * The relief: grey, 0 at the valley floors to 1 at the tops, scaled by
+   * `HILL_HEIGHT`. Smooth enough to be sampled every hundred metres or so
+   * by a displaced mesh without crawling as it scrolls.
+   */
+  height: THREE.CanvasTexture;
+  /** The same relief, with finer detail, as a tangent-space normal map. */
+  normal: THREE.CanvasTexture;
 }
 
 export function farmlandTextures(size = 2048): GroundTextures {
@@ -75,6 +126,87 @@ export function farmlandTextures(size = 2048): GroundTextures {
     seed ^= seed << 5; seed >>>= 0;
     return seed / 4294967296;
   };
+
+  /* ── The lie of the land ────────────────────────────────────────────────
+     One height field for the tile, shared by everything that should follow
+     the relief: the displaced ground mesh, the normal map that lights its
+     slopes, the lakes that settle in its hollows, the river that runs down
+     its valley and the woods that climb its high ground. Two resolutions
+     of it: `heights`, smooth enough for geometry, and `detail`, the finer
+     undulation only the light is shown. */
+  const HR = 256;
+  /** The river's course, in tile units: v along the tile, for u across it. */
+  const riverAt = (u: number) => 0.62 + Math.sin(u * Math.PI * 2) * 0.1;
+  const heights = new Float32Array(HR * HR);
+  const detail = new Float32Array(HR * HR);
+  {
+    const o1 = periodicNoise(HR, 4, 0x51ed);
+    const o2 = periodicNoise(HR, 8, 0x2bd1);
+    const o3 = periodicNoise(HR, 16, 0x7a3c);
+    const o4 = periodicNoise(HR, 32, 0x1e97);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < heights.length; i++) {
+      const v = o1[i] + o2[i] * 0.45;
+      heights[i] = v;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+      detail[i] = (o3[i] - 0.5) * 0.2 + (o4[i] - 0.5) * 0.08;
+    }
+    for (let y = 0; y < HR; y++) {
+      const v = y / HR;
+      for (let x = 0; x < HR; x++) {
+        const i = y * HR + x;
+        // Normalised, then shaped: broad valley floors, rounded tops.
+        const h = Math.pow((heights[i] - lo) / (hi - lo), 1.3);
+        // The river owns its valley: the ground falls to it from ~600 m out.
+        let d = Math.abs(v - riverAt(x / HR));
+        d = Math.min(d, 1 - d);
+        const valley = smooth01((d - 0.025) / 0.18);
+        heights[i] = h * valley;
+        detail[i] *= valley;
+      }
+    }
+  }
+  const heightAt = (u: number, v: number) => {
+    const x = ((Math.floor(u * HR) % HR) + HR) % HR;
+    const y = ((Math.floor(v * HR) % HR) + HR) % HR;
+    return heights[y * HR + x];
+  };
+
+  /* Lakes settle where water would: in the hollows, clear of the river and
+     of each other. Each gets a flat basin carved well past its shore — wide
+     enough that a mesh sampling the ground every hundred metres still lays
+     the lake bed flat, rather than burying the water under a slope. */
+  interface Lake { u: number; v: number; r: number; aspect: number }
+  const lakes: Lake[] = [];
+  const wrapped = (a: number) => Math.min(Math.abs(a), 1 - Math.abs(a));
+  for (let tries = 0; tries < 600 && lakes.length < 9; tries++) {
+    const u = rand();
+    const v = rand();
+    if (heightAt(u, v) > 0.2) continue;
+    if (wrapped(v - riverAt(u)) < 0.08) continue;
+    if (lakes.some((l) => Math.hypot(wrapped(l.u - u), wrapped(l.v - v)) < 0.16)) continue;
+    lakes.push({ u, v, r: 0.012 + rand() * 0.03, aspect: 0.42 + rand() * 0.92 });
+  }
+  for (const lake of lakes) {
+    const flat = lake.r + 0.05;
+    const reach = flat + 0.1;
+    const span = Math.ceil(reach * HR);
+    const cx = lake.u * HR;
+    const cy = lake.v * HR;
+    for (let dy = -span; dy <= span; dy++) {
+      for (let dx = -span; dx <= span; dx++) {
+        const dist = Math.hypot(dx, dy) / HR;
+        if (dist > reach) continue;
+        const x = ((Math.round(cx + dx) % HR) + HR) % HR;
+        const y = ((Math.round(cy + dy) % HR) + HR) % HR;
+        const k = smooth01((dist - flat) / 0.1);
+        heights[y * HR + x] *= k;
+        detail[y * HR + x] *= k;
+      }
+    }
+  }
 
   interface Field { x: number; y: number; w: number; h: number }
   const fields: Field[] = [];
@@ -182,36 +314,47 @@ export function farmlandTextures(size = 2048): GroundTextures {
     }
   }
 
-  /* ── Relief ───────────────────────────────────────────────────────────
-     Rolling ground, painted rather than displaced: long soft ridges lit from
-     the north-west and shaded on their far side, laid diagonally so they
-     never line up with the field lattice. At altitude this is what separates
-     land that undulates from a printed tablecloth — the fields stay the
-     subject, the light across them gains a slow rhythm. */
-  for (let i = 0; i < 9; i++) {
-    const cx = rand() * size;
-    const cy = rand() * size;
-    const len = size * (0.3 + rand() * 0.45);
-    const wide = size * (0.05 + rand() * 0.08);
-    const a = -0.5 + rand() * 0.5; // NW–SE-ish, jittered
-    for (const [off, tone, alpha] of [
-      [-wide * 0.5, '255,248,230', 0.05 + rand() * 0.04],
-      [wide * 0.55, '14,20,12', 0.06 + rand() * 0.04],
-    ] as const) {
-      g.save();
-      g.translate(cx, cy);
-      g.rotate(a);
-      const ridge = g.createRadialGradient(0, off, 0, 0, off, wide);
-      ridge.addColorStop(0, `rgba(${tone},${alpha})`);
-      ridge.addColorStop(1, `rgba(${tone},0)`);
-      g.fillStyle = ridge;
-      g.save();
-      g.scale(len / wide, 1);
-      g.beginPath();
-      g.arc(0, off, wide, 0, Math.PI * 2);
-      g.fill();
-      g.restore();
-      g.restore();
+  /* ── The land's shape, in its colours ─────────────────────────────────
+     The tops read a shade paler and drier than the valleys under them, and
+     woods climb the high ground, where the plough gives up first. Both come
+     off the same height field the mesh is displaced by, so the woods really
+     are on the hills and the lushest fields really are in the valleys. */
+  {
+    const tint = document.createElement('canvas');
+    tint.width = tint.height = HR;
+    const tg = tint.getContext('2d') as CanvasRenderingContext2D;
+    const img = tg.createImageData(HR, HR);
+    for (let i = 0; i < heights.length; i++) {
+      const v = Math.round(Math.min(1, Math.max(0, 0.5 + (heights[i] + detail[i] - 0.3) * 0.9)) * 255);
+      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+      img.data[i * 4 + 3] = 255;
+    }
+    tg.putImageData(img, 0, 0);
+    g.save();
+    g.globalCompositeOperation = 'soft-light';
+    g.globalAlpha = 0.36;
+    g.drawImage(tint, 0, 0, size, size);
+    g.restore();
+
+    const GRID = 64;
+    g.fillStyle = '#243d1d';
+    for (let gy = 0; gy < GRID; gy++) {
+      for (let gx = 0; gx < GRID; gx++) {
+        const u = (gx + rand()) / GRID;
+        const v = (gy + rand()) / GRID;
+        if (rand() > smooth01((heightAt(u, v) - 0.45) / 0.3) * 0.8) continue;
+        const r = size * (0.005 + rand() * 0.011);
+        g.beginPath();
+        for (let a = 0; a < 9; a++) {
+          const t = (a / 9) * Math.PI * 2;
+          const rr = r * (0.65 + rand() * 0.7);
+          const px = u * size + Math.cos(t) * rr;
+          const py = v * size + Math.sin(t) * rr;
+          if (a === 0) g.moveTo(px, py); else g.lineTo(px, py);
+        }
+        g.closePath();
+        g.fill();
+      }
     }
   }
 
@@ -222,11 +365,11 @@ export function farmlandTextures(size = 2048): GroundTextures {
   const water = ['#2f7792', '#286b87', '#3b8ca0', '#245e7b'];
   w.lineJoin = 'round';
   w.lineCap = 'round';
-  for (let i = 0; i < 11; i++) {
-    const x = size * (0.04 + rand() * 0.92);
-    const y = size * (0.06 + rand() * 0.88);
-    const rx = size * (0.012 + rand() * 0.045);
-    const ry = rx * (0.42 + rand() * 0.92);
+  for (const [i, lake] of lakes.entries()) {
+    const x = size * lake.u;
+    const y = size * lake.v;
+    const rx = size * lake.r;
+    const ry = rx * lake.aspect;
     const points = 13;
     w.beginPath();
     for (let p = 0; p < points; p++) {
@@ -372,7 +515,50 @@ export function farmlandTextures(size = 2048): GroundTextures {
   waterTex.anisotropy = 16;
   waterTex.colorSpace = THREE.SRGBColorSpace;
 
-  return { day: tex, night: nightTex, water: waterTex };
+  /* The relief, as textures. Grey for the displacement; for the light, a
+     tangent-space normal map from central differences over the fine field.
+     The canvas is uploaded flipped, so +v runs up the image: the green
+     channel takes +dh/dy where the red takes −dh/dx. */
+  const hc = document.createElement('canvas');
+  hc.width = hc.height = HR;
+  const hg = hc.getContext('2d') as CanvasRenderingContext2D;
+  const himg = hg.createImageData(HR, HR);
+  const ncv = document.createElement('canvas');
+  ncv.width = ncv.height = HR;
+  const ng = ncv.getContext('2d') as CanvasRenderingContext2D;
+  const nimg = ng.createImageData(HR, HR);
+  const slope = HILL_HEIGHT / (TILE_METRES / HR) / 2;
+  const fine = (x: number, y: number) => {
+    const i = ((y + HR) % HR) * HR + ((x + HR) % HR);
+    return heights[i] + detail[i];
+  };
+  for (let y = 0; y < HR; y++) {
+    for (let x = 0; x < HR; x++) {
+      const i = y * HR + x;
+      const hv = Math.round(Math.min(1, Math.max(0, heights[i])) * 255);
+      himg.data[i * 4] = himg.data[i * 4 + 1] = himg.data[i * 4 + 2] = hv;
+      himg.data[i * 4 + 3] = 255;
+      const nx = -(fine(x + 1, y) - fine(x - 1, y)) * slope;
+      const ny = (fine(x, y + 1) - fine(x, y - 1)) * slope;
+      const len = Math.hypot(nx, ny, 1);
+      nimg.data[i * 4] = Math.round((nx / len * 0.5 + 0.5) * 255);
+      nimg.data[i * 4 + 1] = Math.round((ny / len * 0.5 + 0.5) * 255);
+      nimg.data[i * 4 + 2] = Math.round((1 / len * 0.5 + 0.5) * 255);
+      nimg.data[i * 4 + 3] = 255;
+    }
+  }
+  hg.putImageData(himg, 0, 0);
+  ng.putImageData(nimg, 0, 0);
+  const heightTex = new THREE.CanvasTexture(hc);
+  heightTex.wrapS = heightTex.wrapT = THREE.RepeatWrapping;
+  heightTex.generateMipmaps = false;
+  heightTex.minFilter = THREE.LinearFilter;
+  heightTex.magFilter = THREE.LinearFilter;
+  const normalTex = new THREE.CanvasTexture(ncv);
+  normalTex.wrapS = normalTex.wrapT = THREE.RepeatWrapping;
+  normalTex.anisotropy = 8;
+
+  return { day: tex, night: nightTex, water: waterTex, height: heightTex, normal: normalTex };
 }
 
 /**

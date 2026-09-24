@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { cloudTexture, earthTexture, farmlandTextures, moonTexture, oceanTextures, radialTexture } from './terrain';
+import { cloudTexture, earthTexture, farmlandTextures, HILL_HEIGHT, moonTexture, oceanTextures, radialTexture } from './terrain';
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
@@ -400,6 +400,67 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const ground = new THREE.Mesh(groundGeometry, groundMat);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
+
+  /* ── Relief ─────────────────────────────────────────────────────────────
+     The plate is flat, and from a kilometre up that read as a tablecloth.
+     The hills live in a second, denser mesh laid over the middle of it —
+     26 km across, a vertex every hundred-odd metres — displaced by the
+     tile's own height field. The displacement map scrolls with the fields
+     (same repeat, same offset), so the hills travel with the land on them
+     rather than the land sliding over fixed bumps. Toward its rim the
+     relief fades to nothing and the flat plate carries on to the horizon,
+     two metres lower so the two never fight — invisible from up here. Both
+     are lit through the normal map, so even the flat far country keeps the
+     light and shade of its slopes. */
+  const NEAR = 26000;
+  const NEAR_SEG = lowPower ? 150 : 220;
+  const nearGeometry = new THREE.PlaneGeometry(NEAR, NEAR, NEAR_SEG, NEAR_SEG);
+  {
+    // UVs matched to the plate's, so the same textures land in the same place.
+    const uv = nearGeometry.attributes.uv;
+    const k = NEAR / GROUND;
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, (uv.getX(i) - 0.5) * k + 0.5, (uv.getY(i) - 0.5) * k + 0.5);
+    }
+    // How much of the relief each vertex carries: all of it in the middle,
+    // none at the rim.
+    const pos = nearGeometry.attributes.position;
+    const fade = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) {
+      const r = Math.hypot(pos.getX(i), pos.getY(i)) / (NEAR / 2);
+      fade[i] = 1 - THREE.MathUtils.smoothstep(r, 0.55, 0.95);
+    }
+    nearGeometry.setAttribute('fade', new THREE.BufferAttribute(fade, 1));
+  }
+  farmland.height.repeat.set(40, 40);
+  farmland.normal.repeat.set(40, 40);
+  const nearMat = new THREE.MeshStandardMaterial({
+    map: farmland.day,
+    emissive: new THREE.Color(0xffffff),
+    emissiveMap: farmland.night,
+    emissiveIntensity: 0,
+    roughness: 1,
+    metalness: 0,
+    displacementMap: farmland.height,
+    displacementScale: HILL_HEIGHT,
+    normalMap: farmland.normal,
+  });
+  nearMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float fade;')
+      .replace(
+        '#include <displacementmap_vertex>',
+        `#ifdef USE_DISPLACEMENTMAP
+          transformed += normalize( objectNormal ) * ( texture2D( displacementMap, vDisplacementMapUv ).x * displacementScale * fade + displacementBias );
+        #endif`,
+      );
+  };
+  const near = new THREE.Mesh(nearGeometry, nearMat);
+  near.rotation.x = -Math.PI / 2;
+  scene.add(near);
+  ground.position.y = -2;
+  groundMat.normalMap = farmland.normal;
+  groundMat.needsUpdate = true;
   const waterMat = new THREE.MeshPhysicalMaterial({
     map: farmland.water,
     color: 0x9ed9e5,
@@ -730,6 +791,26 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       groundMat.roughness = plateMap === ocean.day ? 0.62 : 1;
       groundMat.needsUpdate = true;
     }
+    /* The relief belongs to the farmland: none on the moon, and the hills
+       sink as the coast arrives, so the sea has somewhere flat to come in
+       over. Normal map and displacement go down together. */
+    const reliefOn = plateMap === farmland.day;
+    const relief = reliefOn ? 1 - THREE.MathUtils.smoothstep(seaBlend, 0, 0.6) : 0;
+    const wantNormal = reliefOn ? farmland.normal : null;
+    if (groundMat.normalMap !== wantNormal) {
+      groundMat.normalMap = wantNormal;
+      groundMat.needsUpdate = true;
+    }
+    if (nearMat.map !== groundMat.map || nearMat.emissiveMap !== groundMat.emissiveMap || nearMat.normalMap !== wantNormal) {
+      nearMat.map = groundMat.map;
+      nearMat.emissiveMap = groundMat.emissiveMap;
+      nearMat.normalMap = wantNormal;
+      nearMat.roughness = groundMat.roughness;
+      nearMat.needsUpdate = true;
+    }
+    groundMat.normalScale.setScalar(relief);
+    nearMat.normalScale.setScalar(relief);
+    nearMat.displacementScale = HILL_HEIGHT * relief;
     sea.visible = !onMoon && !inSpace && seaBlend > 0.001 && seaBlend < 0.999;
     seaMat.opacity = seaBlend;
     /* Lights up through dusk, out by mid-morning. Civil twilight is about
@@ -740,7 +821,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       ? 0
       : 1 - THREE.MathUtils.smoothstep(skyState.elevation, -8, 3);
     seaMat.emissiveIntensity = groundMat.emissiveIntensity;
+    nearMat.emissiveIntensity = groundMat.emissiveIntensity;
     ground.visible = !inSpace;
+    near.visible = !inSpace;
     limb.visible = limbAir.visible = inSpace;
     if (inSpace) {
       /* The radius shrinks as you climb, so the horizon bends further the
@@ -862,6 +945,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       /* The emissive map has to travel with the diffuse one to the pixel.
          Drifting them apart slides every town's lights off the town. */
       groundMat.emissiveMap?.offset.copy(map.offset);
+      // The relief rides the same offset, so the hills go with their fields.
+      farmland.height.offset.copy(map.offset);
+      farmland.normal.offset.copy(map.offset);
       /* The sea rides the same shift — the coast must not slide against the
          fields while both are on screen mid-crossfade. */
       ocean.day.offset.copy(map.offset);
@@ -950,7 +1036,13 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
        Eased in `useAttitude` rather than here, so the horizon out of the
        cockpit and the lean of the hold — neither of which is a three.js
        scene — go over on exactly the same curve. */
-    airframe.group.rotation.z = THREE.MathUtils.degToRad(pose.exterior ? a.roll : 0);
+    /* From outside, the bank goes on the model too — for the same reason
+       the hand-flown roll always has. The exterior camera rides the
+       aircraft group, so banking the group banked the camera with it: the
+       aeroplane sat level in frame and only the horizon tilted, usually out
+       of shot, and nobody could see the turn. With the group held level
+       from out here, the wings visibly tip into every turn. */
+    airframe.group.rotation.z = THREE.MathUtils.degToRad(pose.exterior ? a.roll - a.bank : 0);
 
     /* Fans, beacon, contrails. The contrail is the air's decision: none in
        the warm air low down, thin ones near the top of the weather, solid
@@ -963,13 +1055,13 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         : inSpace
           ? Math.max(0, 1 - band.progress * 2.4) * 0.7
           : THREE.MathUtils.smoothstep(height, 2100, 2600) * 0.5;
-    airframe.update(dt, contrail, groundSpeed);
+    airframe.update(dt, contrail, groundSpeed, a.bank - a.roll);
 
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
       THREE.MathUtils.degToRad(a.pitch),
       THREE.MathUtils.degToRad(-a.heading),
-      THREE.MathUtils.degToRad(-a.bank),
+      THREE.MathUtils.degToRad(pose.exterior ? 0 : -a.bank),
     );
     // Keep the shadow camera centred on the aircraft rather than on ground
     // zero, so the wing, pylons and nacelles can shadow one another at every
@@ -1144,6 +1236,11 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     airframe.dispose();
     farmland.day.dispose();
     farmland.night.dispose();
+    farmland.water.dispose();
+    farmland.height.dispose();
+    farmland.normal.dispose();
+    nearGeometry.dispose();
+    nearMat.dispose();
     ocean.day.dispose();
     ocean.night.dispose();
     ocean.glint.dispose();

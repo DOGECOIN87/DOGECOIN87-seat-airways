@@ -22,6 +22,8 @@ The weather reads as _Clear_, _Scattered cloud_, _Overcast_, _Fog_, _Rain_, _Sno
 
 The ground is always going past — that movement is the one thing that says the aircraft is flying, so it never stops, and asking your device for reduced motion calms the sway and the banking without parking the aeroplane. Every few minutes the flight crosses a coast: a long leg over farmland — fields, hedgerows, orchards, a river with its tributaries, towns that light up through dusk — then a shorter one over open water, with swell, current lines, the glint of the sun and the odd ship's light after dark. Every view crosses the same coastline at the same moment, cockpit and cabin windows included.
 
+The land is not flat: it rolls, with woods on the high ground and the river and lakes down in the valleys, and the hills travel past with the fields on them. Every half-minute or so the aircraft banks gently into a turn — right, level, then back left — and from outside you can watch it happen: the wings tip, the ailerons work, the rudder swings into the turn and the elevators lift to hold the height.
+
 ## Live or modelled
 
 If the weather cannot be fetched — you are offline, the request is blocked, or your time zone is not one the page recognises — a modelled sky for the date stands in, and the page never waits for it. The **Outside** reading says which you are seeing: **Live weather** or **Modelled weather**.

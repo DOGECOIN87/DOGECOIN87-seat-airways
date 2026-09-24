@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CABIN, rowZ } from './cabin';
 import { MARK_PATH } from '../components/Mark';
 
@@ -266,6 +267,174 @@ function controlSeams(
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   return g;
 }
+
+/* ── Cutting control surfaces out of the panels ───────────────────────────
+   The ailerons, elevators and rudder used to be seam lines drawn on solid
+   panels — fine until one is supposed to move. So those panels are now
+   lofted in pieces: the fixed surface with the control surface's chord cut
+   away over its span, and the control surface itself as a separate solid,
+   hung on its true hinge line. Same aerofoil as `panelGeometry`, split into
+   its two skins so any chord range can be cut out of it. */
+type Station = readonly [number, number];
+const UPPER: readonly Station[] = [
+  [0, 0], [0.045, 0.56], [0.13, 0.94], [0.34, 1.07], [0.62, 0.785], [0.84, 0.378], [1, 0.045],
+];
+const LOWER: readonly Station[] = [
+  [0, 0], [0.045, -0.292], [0.13, -0.546], [0.34, -0.635], [0.62, -0.455], [0.84, -0.242], [1, 0.045],
+];
+
+function surfaceAt(table: readonly Station[], f: number): number {
+  for (let i = 0; i < table.length - 1; i++) {
+    const [a0, v0] = table[i];
+    const [a1, v1] = table[i + 1];
+    if (f >= a0 && f <= a1) return THREE.MathUtils.lerp(v0, v1, (f - a0) / (a1 - a0));
+  }
+  return table[table.length - 1][1];
+}
+
+/** Either skin's height, as a fraction of half-thickness. A fin or a
+    tailplane is a symmetric section; only the wing is cambered. */
+function surfaceY(f: number, upper: boolean, symmetric: boolean): number {
+  if (!symmetric) return surfaceAt(upper ? UPPER : LOWER, f);
+  const half = (surfaceAt(UPPER, f) - surfaceAt(LOWER, f)) / 2;
+  return upper ? half : -half;
+}
+
+function panelPoint(p: Panel, t: number, f: number, yf: number): THREE.Vector3 {
+  const chord = THREE.MathUtils.lerp(p.rootChord, p.tipChord, t);
+  const half = THREE.MathUtils.lerp(p.rootThick, p.tipThick, t) / 2;
+  return new THREE.Vector3(
+    p.originX + p.span * t,
+    p.originY + p.rise * t + yf * half,
+    THREE.MathUtils.lerp(p.rootZ, p.tipZ, t) + f * chord,
+  );
+}
+
+/**
+ * One piece of a lifting surface — span t0 to t1, chord f0 to f1 — as a
+ * closed solid. Each face group (the two skins, the cut faces, the end
+ * caps) gets its own vertices, so the aerofoil shades smooth while its cut
+ * edges stay crisp. Wound like `panelGeometry`: along the upper skin, back
+ * along the lower.
+ */
+function panelSection(p: Panel, t0: number, t1: number, f0: number, f1: number, symmetric: boolean): THREE.BufferGeometry {
+  const stations = [f0, ...UPPER.map(([f]) => f).filter((f) => f > f0 + 1e-6 && f < f1 - 1e-6), f1];
+  const upperRun: Station[] = stations.map((f) => [f, surfaceY(f, true, symmetric)]);
+  const lowerRun: Station[] = [...stations].reverse().map((f) => [f, surfaceY(f, false, symmetric)]);
+  const pos: number[] = [];
+  const idx: number[] = [];
+  const flip = p.span < 0;
+
+  const loft = (run: readonly Station[]) => {
+    const base = pos.length / 3;
+    for (const [f, yf] of run) {
+      const a = panelPoint(p, t0, f, yf);
+      const b = panelPoint(p, t1, f, yf);
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    }
+    for (let i = 0; i < run.length - 1; i++) {
+      const a = base + i * 2;
+      const c = a + 1;
+      const b = a + 2;
+      const d = a + 3;
+      if (!flip) idx.push(a, b, c, b, d, c);
+      else idx.push(a, c, b, b, c, d);
+    }
+  };
+  loft(upperRun);
+  loft(lowerRun);
+  // The cut faces, wherever a chord range stops short of the nose or tail.
+  const same = (a: Station, b: Station) => Math.abs(a[1] - b[1]) < 1e-6;
+  const aftUp = upperRun[upperRun.length - 1];
+  const aftLow = lowerRun[0];
+  if (!same(aftUp, aftLow)) loft([aftUp, aftLow]);
+  const foreLow = lowerRun[lowerRun.length - 1];
+  const foreUp = upperRun[0];
+  if (!same(foreLow, foreUp)) loft([foreLow, foreUp]);
+
+  // The end caps, fanned from the section's centre.
+  let low = lowerRun;
+  if (same(aftUp, aftLow)) low = low.slice(1);
+  if (same(foreLow, foreUp)) low = low.slice(0, -1);
+  const ring = [...upperRun, ...low];
+  for (const [t, outer] of [[t0, false], [t1, true]] as const) {
+    const pts = ring.map(([f, yf]) => panelPoint(p, t, f, yf));
+    const centre = pts.reduce((sum, v) => sum.add(v), new THREE.Vector3()).divideScalar(pts.length);
+    const base = pos.length / 3;
+    pos.push(centre.x, centre.y, centre.z);
+    for (const v of pts) pos.push(v.x, v.y, v.z);
+    const faceOut = outer !== flip;
+    for (let i = 0; i < pts.length; i++) {
+      const a = base + 1 + i;
+      const b = base + 1 + ((i + 1) % pts.length);
+      if (faceOut) idx.push(base, a, b);
+      else idx.push(base, b, a);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A panel with a control surface's chord cut away between t0 and t1. */
+function cutPanel(p: Panel, t0: number, t1: number, hinge: number, symmetric: boolean): THREE.BufferGeometry {
+  const parts = [
+    panelSection(p, 0, t0, 0, 1, symmetric),
+    panelSection(p, t0, t1, 0, hinge, symmetric),
+    panelSection(p, t1, 1, 0, 1, symmetric),
+  ];
+  const merged = mergeGeometries(parts);
+  parts.forEach((g) => g.dispose());
+  if (!merged) throw new Error('control surface cut-out did not merge');
+  return merged;
+}
+
+/** The hinge: mid-thickness at the hinge chord, from inboard to outboard. */
+function hingeLine(p: Panel, t0: number, t1: number, f: number, symmetric: boolean) {
+  const mid = (surfaceY(f, true, symmetric) + surfaceY(f, false, symmetric)) / 2;
+  const pivot = panelPoint(p, t0, f, mid);
+  const axis = panelPoint(p, t1, f, mid).sub(pivot).normalize();
+  return { pivot, axis };
+}
+
+/**
+ * The outline of a cut-out control surface, drawn on both skins of the
+ * fixed panel: the hinge line and the two ends. It is what makes a surface
+ * legible as a separate part at a glance, even at rest — and it stays put
+ * on the fixed panel while the surface moves, so the movement reads
+ * against it.
+ */
+function hingeSeams(p: Panel, t0: number, t1: number, f: number, symmetric: boolean): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const LIFT = 0.012;
+  const on = (t: number, ff: number, upper: boolean) => {
+    const yf = surfaceY(ff, upper, symmetric);
+    const v = panelPoint(p, t, ff, yf);
+    v.y += upper ? LIFT : -LIFT;
+    return v;
+  };
+  for (const upper of [true, false]) {
+    const steps = 8;
+    for (let i = 0; i < steps; i++) {
+      const a = on(THREE.MathUtils.lerp(t0, t1, i / steps), f, upper);
+      const b = on(THREE.MathUtils.lerp(t0, t1, (i + 1) / steps), f, upper);
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    }
+    for (const t of [t0, t1]) {
+      const a = on(t, f, upper);
+      const b = on(t, 0.995, upper);
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return g;
+}
+
+/** Where the ailerons are: outboard, spanwise, and their hinge chord. */
+const AILERON = { t0: 0.72, t1: 0.95, hinge: 0.74 };
 
 /** A separate trailing-edge surface that can rotate around its hinge. */
 function flapGeometry(
@@ -671,7 +840,7 @@ export interface AirframeHandles {
    * flashes, and the contrails stream at `contrail` strength (0 where the
    * air is too warm to hold one, 1 in the cold above the deck).
    */
-  update(dt: number, contrail: number, stream?: number): void;
+  update(dt: number, contrail: number, stream?: number, bank?: number): void;
   dispose(): void;
 }
 
@@ -718,6 +887,27 @@ export function createAirframe(): AirframeHandles {
   const track = <T extends { dispose(): void }>(x: T) => (dispose.push(() => x.dispose()), x);
   const flapGroups: THREE.Group[] = [];
   const fans: THREE.Group[] = [];
+
+  /* A control surface: its own solid, in a group sitting on its hinge line
+     and turned about it. */
+  interface Hinge { group: THREE.Group; axis: THREE.Vector3 }
+  const hinged = (
+    p: Panel, t0: number, t1: number, f: number, symmetric: boolean,
+    material: THREE.Material, parent: THREE.Object3D,
+  ): Hinge => {
+    const { pivot, axis } = hingeLine(p, t0, t1, f, symmetric);
+    const geo = track(panelSection(p, t0, t1, f, 1, symmetric));
+    geo.translate(-pivot.x, -pivot.y, -pivot.z);
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.castShadow = mesh.receiveShadow = true;
+    const hinge = new THREE.Group();
+    hinge.position.copy(pivot);
+    hinge.add(mesh);
+    parent.add(hinge);
+    return { group: hinge, axis };
+  };
+  const ailerons: Hinge[] = [];
+  const elevators: { hinge: Hinge; side: number }[] = [];
   let flapDeployment = 0;
 
   // Airline white is barely off-white and only gently glossy. A restrained
@@ -769,7 +959,7 @@ export function createAirframe(): AirframeHandles {
       rootZ: WING.rootZ, rootChord: WING.rootChord, rootThick: 0.86,
       tipZ: WING.tipZ, tipChord: WING.tipChord, tipThick: 0.16,
     };
-    const wing = new THREE.Mesh(track(panelGeometry(wingPanel)), wingMat);
+    const wing = new THREE.Mesh(track(cutPanel(wingPanel, AILERON.t0, AILERON.t1, AILERON.hinge, false)), wingMat);
     wing.castShadow = wing.receiveShadow = true;
     group.add(wing);
 
@@ -777,7 +967,7 @@ export function createAirframe(): AirframeHandles {
        flaps — the three things that move on a wing, and the three lines
        that stop it reading as a slab. */
     group.add(new THREE.LineSegments(
-      track(controlSeams(wingPanel, 0.74, [[0.1, 0.42], [0.46, 0.66], [0.72, 0.95]])),
+      track(controlSeams(wingPanel, 0.74, [[0.1, 0.42], [0.46, 0.66]])),
       seamMat,
     ));
 
@@ -799,6 +989,10 @@ export function createAirframe(): AirframeHandles {
       flapGroups.push(flap);
       group.add(flap);
     }
+
+    // The aileron: a real surface now, cut out of the wing and hinged.
+    ailerons.push(hinged(wingPanel, AILERON.t0, AILERON.t1, AILERON.hinge, false, flapMat, group));
+    group.add(new THREE.LineSegments(track(hingeSeams(wingPanel, AILERON.t0, AILERON.t1, AILERON.hinge, false)), seamMat));
 
     // Winglet, raked up off the tip.
     const winglet = new THREE.Mesh(
@@ -839,14 +1033,12 @@ export function createAirframe(): AirframeHandles {
       rootZ: 28.0, rootChord: 3.2, rootThick: 0.4,
       tipZ: 30.2, tipChord: 1.1, tipThick: 0.1,
     };
-    const stab = new THREE.Mesh(track(panelGeometry(stabPanel)), wingMat);
+    const stab = new THREE.Mesh(track(cutPanel(stabPanel, 0.08, 0.94, 0.68, true)), wingMat);
     stab.castShadow = stab.receiveShadow = true;
     group.add(stab);
     // The elevator: one surface, most of the span.
-    group.add(new THREE.LineSegments(
-      track(controlSeams(stabPanel, 0.68, [[0.08, 0.94]])),
-      seamMat,
-    ));
+    elevators.push({ hinge: hinged(stabPanel, 0.08, 0.94, 0.68, true, flapMat, group), side });
+    group.add(new THREE.LineSegments(track(hingeSeams(stabPanel, 0.08, 0.94, 0.68, true)), seamMat));
 
     group.add(engine(side, {
       cowl: skin,
@@ -894,6 +1086,13 @@ export function createAirframe(): AirframeHandles {
 
   /* The beacon's clock, and everything else update() advances. */
   let lifeT = Math.random() * 10;
+  /* The control surfaces' state: the last bank seen, the roll rate read off
+     it, and where each surface has got to. */
+  let lastBank: number | null = null;
+  let rollRate = 0;
+  let aileronDeg = 0;
+  let rudderDeg = 0;
+  let elevatorDeg = 0;
 
   /* The fin: the same panel, stood on its edge so its span axis is height. */
   const finPanel: Panel = {
@@ -901,20 +1100,16 @@ export function createAirframe(): AirframeHandles {
     rootZ: 25.6, rootChord: 5.4, rootThick: 0.5,
     tipZ: 29.1, tipChord: 2.2, tipThick: 0.22,
   };
-  const fin = new THREE.Mesh(track(panelGeometry(finPanel)), navy);
-  fin.rotation.z = Math.PI / 2;
-  fin.position.y = R * 0.72;
+  const finFrame = new THREE.Group();
+  finFrame.rotation.z = Math.PI / 2;
+  finFrame.position.y = R * 0.72;
+  group.add(finFrame);
+  const fin = new THREE.Mesh(track(cutPanel(finPanel, 0.05, 0.95, 0.7, true)), navy);
   fin.castShadow = fin.receiveShadow = true;
-  group.add(fin);
-
-  // The rudder, hung on the same transform the fin is.
-  const rudder = new THREE.LineSegments(
-    track(controlSeams(finPanel, 0.7, [[0.05, 0.95]])),
-    seamMat,
-  );
-  rudder.rotation.copy(fin.rotation);
-  rudder.position.copy(fin.position);
-  group.add(rudder);
+  finFrame.add(fin);
+  // The rudder, hung on the fin's own frame.
+  const rudder = hinged(finPanel, 0.05, 0.95, 0.7, true, navy, finFrame);
+  finFrame.add(new THREE.LineSegments(track(hingeSeams(finPanel, 0.05, 0.95, 0.7, true)), seamMat));
 
   /* The blister under the wing box, and the fillet that runs the fin into
      the crown. Both are silhouette rather than surface detail, which is why
@@ -945,11 +1140,12 @@ export function createAirframe(): AirframeHandles {
     map: finMarkTex, transparent: true, roughness: 0.34, metalness: 0.04,
     depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
   }));
-  const FIN_MARK = 3.0;
+  /* Kept forward of the rudder hinge, on the fixed fin: a mark straddling
+     the hinge would tear in half every time the rudder moved. */
+  const FIN_MARK = 2.5;
   for (const side of [1, -1]) {
     const decal = new THREE.Mesh(track(new THREE.PlaneGeometry(FIN_MARK, FIN_MARK)), finMarkMat);
-    // 42% up the fin, where the panel is still 0.38 m thick.
-    decal.position.set(side * 0.2, R * 0.72 + 2.56, 28.95);
+    decal.position.set(side * 0.2, R * 0.72 + 2.45, 28.5);
     decal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
     group.add(decal);
   }
@@ -1043,7 +1239,7 @@ export function createAirframe(): AirframeHandles {
     for (const s of seats) windows.setColorAt(s.i, isLit(s.row) ? lit : dark);
     if (windows.instanceColor) windows.instanceColor.needsUpdate = true;
   };
-  const update = (dt: number, contrail: number, stream = 120) => {
+  const update = (dt: number, contrail: number, stream = 120, bank = 0) => {
     lifeT += dt;
     /* The fans. Slow enough not to strobe against the frame rate, fast
        enough that the intake plainly holds a turning machine — and each
@@ -1061,6 +1257,29 @@ export function createAirframe(): AirframeHandles {
       contrailMats[i].opacity = seg.o * contrail;
       contrailMats[i].visible = contrail > 0.02;
       seg.tex.offset.x += (dt * stream) / ((seg.z1 - seg.z0) / seg.tiles);
+    }
+    /* The control surfaces, flown the way a pilot flies a turn: aileron
+       while the bank is changing and neutral again once it is held, rudder
+       into the turn, and a touch of up-elevator for the height a bank
+       costs. Rate-driven ailerons are both the realistic choice and the
+       legible one — they move exactly when the wings do. */
+    if (dt > 0) {
+      const raw = lastBank === null ? 0 : (bank - lastBank) / dt;
+      lastBank = bank;
+      rollRate += (raw - rollRate) * (1 - Math.exp(-6 * dt));
+      const ease = 1 - Math.exp(-7 * dt);
+      const clamp = THREE.MathUtils.clamp;
+      // A little aileron is held into the turn as well — enough to read.
+      aileronDeg += (clamp(rollRate * 2.4 + bank * 0.35, -20, 20) - aileronDeg) * ease;
+      rudderDeg += (clamp(bank * 0.75, -14, 14) - rudderDeg) * ease;
+      elevatorDeg += (clamp(Math.abs(bank) * 0.45, 0, 8) - elevatorDeg) * ease;
+      const rad = THREE.MathUtils.degToRad;
+      /* Each aileron's hinge axis points outboard, so one signed angle is
+         trailing edge up on one wing and down on the other — which is
+         exactly what a pair of ailerons does. */
+      for (const aileron of ailerons) aileron.group.quaternion.setFromAxisAngle(aileron.axis, rad(-aileronDeg));
+      for (const { hinge, side } of elevators) hinge.group.quaternion.setFromAxisAngle(hinge.axis, rad(-side * elevatorDeg));
+      rudder.group.quaternion.setFromAxisAngle(rudder.axis, rad(rudderDeg));
     }
   };
   const setFlapDeployment = (target: number) => {

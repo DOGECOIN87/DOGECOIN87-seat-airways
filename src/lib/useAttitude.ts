@@ -42,17 +42,18 @@ export type ApplyAttitude = (a: Attitude, tick: FlightTick | null) => void;
    An airliner in cruise does not fly a ruler-straight line forever: every
    so often it banks gently onto a new heading, holds it, and rolls level.
    That is what this schedule is: level, a gentle turn right, level, a
-   gentle turn left, and round again. About 25 degrees of heading each
+   gentle turn left, and round again. About 27 degrees of heading each
    time, at a bank a passenger would barely spill a drink in.
 
    It is read off the wall clock rather than a per-view timer, so the
    cockpit, the cabin windows and the exterior camera all turn together,
    and it rides on top of whatever the market is doing to the bank. */
 const TURN_CYCLE_S = 72;
-/** Degrees of bank at the top of a turn. */
-const TURN_BANK = 8;
+/** Degrees of bank at the top of a turn — gentle for an airliner, and
+    plainly visible from outside. */
+const TURN_BANK = 14;
 /** Degrees of heading a second, per degree of autopilot bank. */
-const TURN_RATE = 0.22;
+const TURN_RATE = 0.14;
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
