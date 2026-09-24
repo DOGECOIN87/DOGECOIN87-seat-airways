@@ -80,6 +80,15 @@ export interface WorldHandles {
 }
 
 export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
+  /* The exterior camera's own heading, which trails the aircraft's through a
+     turn (see where the airframe is posed), and whether the visitor asked
+     for less motion — in which case it does not trail. */
+  let camHeading: number | null = null;
+  const calm =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cgPivot = new THREE.Vector3();
+  /** Where the airframe turns about: the wing box, not the nose. */
+  const CG_Z = 10.8;
   const lowPower =
     (typeof navigator !== 'undefined' && (navigator.hardwareConcurrency ?? 8) <= 4) ||
     (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
@@ -1046,7 +1055,27 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
        aeroplane sat level in frame and only the horizon tilted, usually out
        of shot, and nobody could see the turn. With the group held level
        from out here, the wings visibly tip into every turn. */
-    airframe.group.rotation.z = THREE.MathUtils.degToRad(pose.exterior ? a.roll - a.bank : 0);
+    /* The secondary motions of a turn, seen from outside. The camera flying
+       alongside cannot match a turn instantly, so it follows the heading
+       about three seconds behind: the nose visibly swings into the turn,
+       then settles as the camera catches up on the roll-out. And a banked
+       wing lifts less, so the nose comes up a couple of degrees to hold the
+       height — what the elevators have been showing all along. Both turn
+       the model about its wing box rather than its nose, so it rotates in
+       place instead of sliding across the frame. */
+    const wrap180 = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
+    if (camHeading === null || calm) camHeading = a.heading;
+    else camHeading += wrap180(a.heading - camHeading) * (1 - Math.exp(-0.3 * dt));
+    const yawLag = pose.exterior ? wrap180(a.heading - camHeading) : 0;
+    const turnPitch = pose.exterior ? Math.abs(a.bank) * 0.18 : 0;
+    airframe.group.rotation.set(
+      THREE.MathUtils.degToRad(turnPitch),
+      THREE.MathUtils.degToRad(-yawLag),
+      THREE.MathUtils.degToRad(pose.exterior ? a.roll - a.bank : 0),
+      'YXZ',
+    );
+    cgPivot.set(0, 0, CG_Z).applyEuler(airframe.group.rotation);
+    airframe.group.position.set(-cgPivot.x, -cgPivot.y, CG_Z - cgPivot.z);
 
     /* Fans, beacon, contrails. The contrail is the air's decision: none in
        the warm air low down, thin ones near the top of the weather, solid
@@ -1064,7 +1093,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
       THREE.MathUtils.degToRad(a.pitch),
-      THREE.MathUtils.degToRad(-a.heading),
+      // From outside, the group — and the camera riding it — takes the
+      // trailing heading; the model carries the difference.
+      THREE.MathUtils.degToRad(-(pose.exterior ? camHeading : a.heading)),
       THREE.MathUtils.degToRad(pose.exterior ? 0 : -a.bank),
     );
     // Keep the shadow camera centred on the aircraft rather than on ground
