@@ -1,0 +1,16 @@
+# The site contract for GitBook's Git Sync, read from the site's project
+# directory (docs/). It names the site and maps this repository onto its
+# navigation: one space, this directory, read as one book. The page tree
+# is SUMMARY.md's to define — its headings are the section groups — so it
+# lives there, not here.
+$schema: https://api.gitbook.com/gitbook-docs.yaml
+site:
+  title: SEAT-AIRLINES Docs
+  structure:
+    - type: space
+      key: space-docs
+      title: Documentation
+      path: docs
+      default: true
+      content:
+        directory: .
