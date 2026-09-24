@@ -843,8 +843,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const groundSpeed = THREE.MathUtils.clamp(height * V_OVER_H, SPEED_FLOOR, SPEED_CAP);
-    shift.x -= groundSpeed * dt;
-    shift.z -= groundSpeed * 0.72 * dt;
+    /* Signs matter once the speed is visible: the nose points down −z, so
+       the world must flow toward +z — nose to tail. The old direction was
+       imperceptible at 18 m/s and plainly tail-first the moment the drift
+       became readable. */
+    shift.x += groundSpeed * dt;
+    shift.z += groundSpeed * 0.72 * dt;
 
     /* The ground is one repeating plane, so flying over it is an offset. */
     const map = groundMat.map;
