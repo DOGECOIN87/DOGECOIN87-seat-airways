@@ -283,10 +283,16 @@ html {
 
 /* ── The departure board ──────────────────────────────────────
    The hero's headline is a split-flap board, drawn after the ones
-   that still hang in terminals. It is the one thing up here that
-   is not made of the panel's material: a board is black metal and
-   painted flaps bolted to a wall, so it keeps its own palette, the
-   way the aircraft keeps its livery.
+   that still hang in terminals: a frame, flaps hinged across their
+   middles, and a pin at each end of every hinge.
+
+   It is painted in the page's own materials. The flaps are the navy
+   of the ground the hero sits on, lit a little from above, so the
+   board reads as part of the night the aircraft is flying through;
+   the letters are the display white every other heading here uses;
+   and the one blue that marks whatever is live runs along the top
+   of the housing and glints on the hinge pins. The palette is the
+   tokens on .sa-board, so it can be retuned in one place.
 
    Everything is sized from the board's own width, through container
    units. A flap is whatever width is left after the padding and the
@@ -294,8 +300,19 @@ html {
    height, its type, its hinge pins — is a fraction of that flap. So
    the board scales as one object from a phone to a wide screen,
    with no breakpoints to drift apart. */
-.sa-board-title { display: block; margin: 0; }
+/* No margin here: an unlayered margin would beat the mt- utility the
+   heading is spaced with, whatever order they came in. */
+.sa-board-title { display: block; }
 .sa-board {
+  --board-housing: linear-gradient(180deg, #1A2638 0%, #111A28 100%);
+  --flap-frame: #070C15;
+  --flap-upper: linear-gradient(180deg, #25344C 0%, #1E2B41 45%, #1A2539 100%);
+  --flap-lower: linear-gradient(180deg, #2B3B56 0%, #24334C 40%, #1E2B42 100%);
+  --flap-rim: rgba(255, 255, 255, 0.09);
+  --flap-hinge-glint: rgba(127, 227, 247, 0.12);
+  --flap-ink: #F5F8FC;
+  --flap-pin: linear-gradient(90deg, #03070D 0%, #3B5876 38%, #10213A 62%, #03070D 100%);
+  --flap-pin-ring: rgba(127, 227, 247, 0.18);
   display: block;
   container-type: inline-size;
   max-inline-size: 52rem;
@@ -308,25 +325,36 @@ html {
   --flap-w: calc((100cqi - 2 * var(--pad) - (var(--cols) - 1) * var(--gap)) / var(--cols));
   /* The reference flap's own proportion: taller than it is wide. */
   --flap-h: calc(var(--flap-w) / 0.78);
+  position: relative;
   display: grid;
   gap: calc(var(--gap) * 1.6);
   padding: var(--pad);
+  overflow: hidden;
   border-radius: calc(var(--pad) + var(--flap-w) * 0.08);
-  background: linear-gradient(180deg, #2C2C2F 0%, #222225 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
-    0 18px 44px rgba(0, 0, 0, 0.5);
+  background: var(--board-housing);
+  /* The hero redefines --e-lg for a dark ground: a deep drop and a faint
+     rim, rather than the white bloom a light panel wears. */
+  box-shadow: var(--e-lg), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+/* The live edge: the same blue bar the page puts along the top of the
+   one panel that is doing something. The housing clips it to its
+   corners. */
+.sa-board__housing::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  block-size: max(2px, calc(var(--pad) * 0.2));
+  background: var(--g-accent);
 }
 .sa-board__row {
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
   gap: var(--gap);
 }
-/* One character: a black frame, two painted halves with a gap
-   between them, and a hinge pin at each end of the gap. The lower
-   half is the lighter one, as it is on the reference board — it is
-   the face turned up towards the lights. */
+/* One character: a frame, two painted halves with a gap between them,
+   and a hinge pin at each end of the gap. The lower half is the
+   lighter one, as it is on the reference board — it is the face
+   turned up towards the lights. */
 .sa-flap {
   --frame: max(1px, calc(var(--flap-w) * 0.035));
   --split: max(1px, calc(var(--flap-h) * 0.017));
@@ -337,12 +365,12 @@ html {
   display: block;
   block-size: var(--flap-h);
   border-radius: var(--r);
-  background: #050505;
+  background: var(--flap-frame);
   box-shadow: 0 max(1px, calc(var(--flap-h) * 0.02)) max(2px, calc(var(--flap-h) * 0.05)) rgba(0, 0, 0, 0.5);
   /* Far enough back that a falling leaf swells a little towards you,
      not so close that it spills over its neighbours. */
   perspective: calc(var(--flap-h) * 5);
-  color: #E8E8E8;
+  color: var(--flap-ink);
   font-family: 'PT Sans Narrow', 'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif;
   font-size: calc(var(--flap-h) * 0.92);
   font-weight: 700;
@@ -356,18 +384,20 @@ html {
   backface-visibility: hidden;
 }
 .sa-flap__half--upper {
-  --paint: linear-gradient(180deg, #333333 0%, #292929 45%, #252525 100%);
+  --paint: var(--flap-upper);
   top: var(--frame);
   border-radius: calc(var(--r) * 0.7) calc(var(--r) * 0.7) 0 0;
   background: var(--paint);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 var(--flap-rim);
 }
 .sa-flap__half--lower {
-  --paint: linear-gradient(180deg, #3A3A3A 0%, #333333 40%, #2D2D2D 100%);
+  --paint: var(--flap-lower);
   bottom: var(--frame);
   border-radius: 0 0 calc(var(--r) * 0.7) calc(var(--r) * 0.7);
-  background: var(--paint);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* While a flap falls it throws a shadow across the half below it:
+     --flap-cast, set by the board's loop and gone at rest. */
+  background: linear-gradient(rgb(0 0 0 / var(--flap-cast, 0)) 0 0), var(--paint);
+  box-shadow: inset 0 1px 0 var(--flap-hinge-glint);
 }
 /* The glyph box is the whole face in both halves, pinned to the top
    of one and the bottom of the other, so the two halves of a letter
@@ -382,7 +412,10 @@ html {
   block-size: calc(var(--half) * 2 + var(--split));
 }
 .sa-flap__half--upper .sa-flap__glyph { top: 0; }
-.sa-flap__half--lower .sa-flap__glyph { bottom: 0; }
+.sa-flap__half--lower .sa-flap__glyph {
+  bottom: 0;
+  color: color-mix(in srgb, #000 calc(var(--flap-cast, 0) * 100%), var(--flap-ink));
+}
 .sa-flap::before,
 .sa-flap::after {
   content: '';
@@ -393,8 +426,8 @@ html {
   block-size: calc(var(--flap-h) * 0.22);
   border-radius: max(1px, calc(var(--flap-w) * 0.02));
   translate: 0 -50%;
-  background: linear-gradient(90deg, #000 0%, #444 38%, #1A1A1A 62%, #000 100%);
-  box-shadow: 0 0 0 max(0.5px, calc(var(--flap-w) * 0.01)) rgba(255, 255, 255, 0.1);
+  background: var(--flap-pin);
+  box-shadow: 0 0 0 max(0.5px, calc(var(--flap-w) * 0.01)) var(--flap-pin-ring);
 }
 .sa-flap::before { left: 0; }
 .sa-flap::after { right: 0; }
@@ -423,8 +456,9 @@ html {
    line, and is now the one edge of each leaf that is on it. */
 .sa-flap__leaf.sa-flap__half--upper { transform-origin: 50% 100%; }
 .sa-flap__leaf.sa-flap__half--lower { transform-origin: 50% 0; }
-.sa-flap__leaf .sa-flap__glyph {
-  color: color-mix(in srgb, #000 calc(var(--flap-shade) * 100%), #E8E8E8);
+.sa-flap__leaf .sa-flap__glyph,
+.sa-flap__leaf.sa-flap__half--lower .sa-flap__glyph {
+  color: color-mix(in srgb, #000 calc(var(--flap-shade) * 100%), var(--flap-ink));
 }
 
 .sa-eyebrow {
@@ -2005,6 +2039,41 @@ p { text-wrap-style: pretty; }
 }
 .sa-footer__nav a:hover { color: var(--accent-deep); }
 .sa-footer__nav a:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
+
+/* ── The docs ─────────────────────────────────────────────────
+   Under the row of places on the page, the one place that is not:
+   the documentation, marked with GitBook's own logo. A raised pill,
+   the same control as the pump.fun one beside the contract address,
+   with the mark in the blue that lights whatever leads somewhere. */
+.sa-footer__docs {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--s-2);
+}
+.sa-docs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+  border-radius: 999px;
+  padding: 0.55rem 1.25rem 0.55rem 0.9rem;
+  background: var(--face);
+  box-shadow: var(--e-sm);
+  font-size: var(--t-base);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ui-ink);
+  transition: box-shadow 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+.sa-docs:hover { box-shadow: var(--e); transform: translateY(-1px); color: var(--accent-deep); }
+.sa-docs:active { box-shadow: var(--e-press); transform: translateY(1px); }
+.sa-docs:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
+.sa-docs__mark { inline-size: 1.4rem; block-size: 1.4rem; flex: none; fill: var(--accent-deep); }
+.sa-docs__on { font-weight: 500; color: var(--ui-soft); }
+@media (prefers-reduced-motion: reduce) {
+  .sa-docs { transition: none; }
+  .sa-docs:hover, .sa-docs:active { transform: none; }
+}
 
 /* ── Measured fixes (layout audit at 360–1440px) ─────────────────────
    Seat labels are sized from the tile in SeatMap.tsx: the old

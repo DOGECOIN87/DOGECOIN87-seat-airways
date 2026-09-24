@@ -13,12 +13,12 @@ Under the view is the overhead annunciator panel. Each lamp is lit by the five-m
 | **Fasten seat belt** | the price moves **more than 12%** in five minutes, either way | Rough air |
 | **Beverage service** | the price **rises more than 8%** in five minutes | Cart rolling |
 | **Oxygen** | the nose is pitched down more than 17° — a five-minute **fall of about 81%** or worse | Masks down |
-| **Brace** | the nose is pitched down more than 23° | Heads down |
+| **Brace** | the nose is pitched down more than 18° — a five-minute **fall of about 94%** or worse | Heads down |
 
 Oxygen and Brace are **cautions**: instead of just lighting a bulb, they fill their whole cell and pulse.
 
 {% hint style="info" %}
-The steepest dive the market can produce is about 18° nose-down (a 100% fall), so the Brace lamp does not light from market movement alone.
+A price can fall no more than 100%, which pitches the nose about 18.4° down, so Brace sits just inside that limit: it lights only in a near-total collapse.
 {% endhint %}
 
 ## Airframe shake

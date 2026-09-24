@@ -43,7 +43,7 @@
  */
 
 import {
-  challenge, decodeDataUrl, imageType, readStoredBanner, sha256Hex, verifySignature,
+  challenge, decodeDataUrl, imageType, readStoredBanner, sha256Hex, takedownChallenge, verifySignature,
   MAX_AGE_MS, MAX_IMAGE_BYTES, COOLDOWN_SECONDS, type StoredBanner,
 } from './verify';
 import {
@@ -371,6 +371,14 @@ async function addToWall(env: Env, owner: string, stored: StoredBanner): Promise
   wallSnapshot = { value: wall, expiresAt: Date.now() + WALL_CACHE_MS };
 }
 
+async function removeFromWall(env: Env, owner: string): Promise<void> {
+  const wall = await readWall(env);
+  if (!(owner in wall)) return;
+  delete wall[owner];
+  await env.BANNERS.put(WALL_KEY, JSON.stringify(wall));
+  wallSnapshot = { value: wall, expiresAt: Date.now() + WALL_CACHE_MS };
+}
+
 function wallEtag(wall: Wall): string {
   const newest = Object.values(wall).reduce((max, item) => Math.max(max, Date.parse(item.updated) || 0), 0);
   return `"${Object.keys(wall).length}-${newest}"`;
@@ -583,7 +591,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
     // client sends a compressed 384px image, so this is intentionally well
     // above the 512 KiB stored-image limit while still bounding an abuse case.
     const contentLength = Number(request.headers.get('content-length'));
-    const writes = request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH';
+    const writes = request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH' || request.method === 'DELETE';
     if (writes && Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
       return json({ error: 'That request is too large.' }, 413, cors);
     }
@@ -1381,6 +1389,58 @@ async function handle(request: Request, env: Env): Promise<Response> {
       try { await caches.default.delete(new Request(new URL('/banners', request.url).toString())); } catch { /* best effort */ }
 
       return json({ image: image_url }, 200, cors);
+    }
+
+    /* Taking an advert down.
+
+       Signed like a publish, over text that names the wallet and the exact
+       advert — the key its artwork is stored under — so a signature takes
+       down the one advert it was made for, and replayed after the holder has
+       put up another it matches nothing. The time bound is the publish's.
+
+       No holder check, because taking your own advert down costs nobody any
+       storage, and no cooldown, so a holder can take one down and put the
+       next one up straight away. The artwork stays where it is: it is
+       addressed by its own bytes, another wallet may be showing the same
+       picture, and a URL that stops resolving is a broken image in some
+       browser that still has the wall cached. */
+    if (request.method === 'DELETE' && url.pathname === '/banner') {
+      let body: { owner?: unknown; key?: unknown; issued?: unknown; signature?: unknown };
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: 'That request was not JSON.' }, 400, cors);
+      }
+
+      const owner = typeof body.owner === 'string' ? body.owner : '';
+      const key = typeof body.key === 'string' ? body.key : '';
+      const issued = typeof body.issued === 'string' ? body.issued : '';
+      const signature = typeof body.signature === 'string' ? body.signature : '';
+      if (!owner || !key || !issued || !signature) {
+        return json({ error: 'That request was missing something.' }, 400, cors);
+      }
+
+      const at = Date.parse(issued);
+      if (!Number.isFinite(at) || Math.abs(Date.now() - at) > MAX_AGE_MS) {
+        return json({ error: 'That signature has expired. Try again.' }, 400, cors);
+      }
+      if (!(await verifySignature(owner, takedownChallenge(owner, key, issued), signature))) {
+        return json({ error: 'That signature does not match the wallet.' }, 401, cors);
+      }
+
+      const stored = readStoredBanner(await env.BANNERS.get(`banner:${owner}`));
+      if (!stored) {
+        return json({ error: 'There is no advert up for this wallet.' }, 404, cors);
+      }
+      if (stored.key !== key) {
+        return json({ error: 'That advert has already been replaced.' }, 409, cors);
+      }
+
+      await env.BANNERS.delete(`banner:${owner}`);
+      await removeFromWall(env, owner);
+      try { await caches.default.delete(new Request(new URL('/banners', request.url).toString())); } catch { /* best effort */ }
+
+      return json({ ok: true }, 200, cors);
     }
 
     /* Serving the artwork. Only reachable without R2 — with it, images are

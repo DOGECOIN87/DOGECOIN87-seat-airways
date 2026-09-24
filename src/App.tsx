@@ -5,6 +5,7 @@ import ViewFrame from './components/ViewFrame';
 import Annunciators from './components/Annunciators';
 import AdvertDialog from './components/AdvertDialog';
 import SplitFlapBoard from './components/SplitFlapBoard';
+import DocsLink from './components/DocsLink';
 import type { LogEntry } from './components/RadioLog';
 import {
   ALL_SEATS,
@@ -43,6 +44,7 @@ import {
   fetchOwnerBanners,
   canPublish,
   publishBanner,
+  unpublishBanner,
   ServerUnreachable,
   hasPublishedWall,
   localBanners,
@@ -317,6 +319,41 @@ export default function App() {
     for (const [seat, banner] of Object.entries(banners)) out[seat] = banner.image;
     return out;
   }, [banners]);
+  /* What there is of the holder's own to take down on the seat they are
+     advertising on: an advert on the published wall, one kept in this
+     browser, or both. With neither, the dialog offers nothing to take down —
+     the airline's house advert is not the holder's to remove. */
+  const ownAdvert = wallet.address ? byOwner[wallet.address] : undefined;
+  const keptAdvert = advertising ? local[advertising] : undefined;
+  const takeDownAdvert = advertising && (ownAdvert || keptAdvert)
+    ? async (): Promise<string | null> => {
+      if (ownAdvert && wallet.address) {
+        try {
+          await unpublishBanner({ owner: wallet.address, image: ownAdvert.image, sign: wallet.signMessage });
+        } catch (e) {
+          if (e instanceof ServerUnreachable) {
+            return 'The advert server could not be reached, so your advert is still up. Try again later.';
+          }
+          const message = e instanceof Error ? e.message : 'That advert could not be taken down.';
+          // A refused signature is a decision, not a fault to report.
+          return /reject|denied|cancel/i.test(message)
+            ? 'You did not sign it, so your advert is still up.'
+            : message;
+        }
+        setByOwner((prev) => {
+          const next = { ...prev };
+          delete next[wallet.address as string];
+          return next;
+        });
+      }
+      if (keptAdvert) {
+        localBanners.clear(advertising);
+        setLocal(localBanners.read());
+      }
+      say(`Advert taken down from seat ${advertising}.`, 'pa');
+      return null;
+    }
+    : undefined;
   const claimed = berth.seat?.id ?? null;
   const claimedSeat = berth.seat;
   const claimedZone = useMemo(
@@ -522,10 +559,11 @@ export default function App() {
               </h1>
             </div>
             <div className="lg:pb-3">
+              {/* One line. The board already says the rest, and everything
+                  else — attitude, the seat ladder, the wall — is a scroll
+                  away, where each has a section of its own. */}
               <p className="sa-lead">
-                A flight simulator flown by one number. Market cap is altitude and the 5-minute change is
-                attitude, so the aeroplane you are looking at is the chart. Inside it, thirty rows of seats go
-                to the top holders in order — and every one of them is a billboard.
+                The plane flies the chart: market cap is altitude, and the biggest holders get the best seats.
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <a href="#wall" className="sa-cta sa-shine" onMouseEnter={prefetchSeatMap} onFocus={prefetchSeatMap}>
@@ -865,6 +903,11 @@ export default function App() {
             <a href="#check-in">Check in</a>
           </nav>
 
+          {/* The one place to go that is not on this page: the docs. */}
+          <div className="sa-footer__docs">
+            <DocsLink />
+          </div>
+
           <div className="sa-footer__bar">
             <span>Seat Airlines · SA350 · Nonstop</span>
             <span>Your bag is your seat</span>
@@ -931,10 +974,7 @@ export default function App() {
             say(`Advert up on seat ${advertising}.`, 'pa');
             return null;
           }}
-          onClear={() => {
-            localBanners.clear(advertising);
-            setLocal(localBanners.read());
-          }}
+          onClear={takeDownAdvert}
           onClose={() => setAdvertising(null)}
         />
       )}

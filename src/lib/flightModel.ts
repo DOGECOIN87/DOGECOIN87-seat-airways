@@ -69,7 +69,11 @@ export function annunciatorsFor(tick: FlightTick): Annunciators {
     seatbelt: Math.abs(tick.change5m) > 12,
     service: tick.change5m > 8,
     oxygen: pitch < -17,
-    brace: pitch < -23,
+    /* A price can fall no further than 100%, which pitches the nose 18.4°
+       down, so the brace sits just inside that: a five-minute fall of about
+       94%. It was 23°, a dive the market cannot produce, and the lamp never
+       lit at all. */
+    brace: pitch < -18,
     shaking: Math.abs(tick.change5m) > 25,
   };
 }

@@ -9,6 +9,7 @@ The wall:
 | --- | --- |
 | `GET /banners` | the published wall, keyed by wallet |
 | `POST /banner` | put an advert up, if you can prove the wallet is yours |
+| `DELETE /banner` | take your own advert down, signed the same way |
 | `GET /health` | a no-store liveness response for monitoring and smoke tests |
 | `GET /holders` | who is aboard, and the supply — what the page seats from |
 | `GET /holding` | one wallet's balance, so the page needs no RPC key of its own |
@@ -84,6 +85,29 @@ wallet. Without it, one captured signature would authorise *any* artwork for
 that wallet, forever — the holder signs "it's me" and whoever caught the
 signature picks the picture. With it, a signature authorises exactly one
 image.
+
+### Taking one down
+
+`DELETE /banner` is signed the same way, over text that names the advert by
+the key its artwork is stored under:
+
+```
+SEAT AIRLINES
+Take the advert off my seat.
+
+wallet: 7xKX…9fQr
+advert: banners/3f9a….webp
+issued: 2026-09-24T00:31:00.000Z
+```
+
+The same five-minute bound applies, and the record must still be that
+advert: a takedown signed for one advert answers **409** once the holder has
+put up another, so a replayed signature takes down nothing it was not made
+for. There is no holder check and no cooldown — taking your own advert down
+costs nobody storage, and a holder should be able to take one down and put
+the next up at once. The artwork itself is left in place: it is addressed by
+its bytes, and another wallet may be showing the same picture. An advert that
+is already gone answers **404**, which the page reads as done.
 
 ## The cabin directory
 
@@ -606,9 +630,11 @@ text the wallet signs, and if those two strings differ by a character then
 every sign-in fails with "that signature does not match the wallet" — a
 message that points at the wallet rather than at the typo.
 
-Twelve cases over `verify.ts`: a genuine signature accepted, and a wrong
+Fifteen cases over `verify.ts`: a genuine signature accepted, and a wrong
 wallet, a captured signature reused for other artwork, a moved timestamp,
-malformed base58 and SVG wearing a JPEG label each refused — plus the record
+malformed base58 and SVG wearing a JPEG label each refused; a genuine
+takedown accepted, and one replayed against a later advert — or a publish
+signature offered as one — refused; plus the record
 reader, which must skip a malformed `banner:` value rather than throw. One
 that threw once took the whole wall down with Cloudflare error 1101.
 
@@ -650,7 +676,9 @@ Over the wall itself, on real HTTP against real bindings: a signed advert is acc
 checked byte for byte; that URL is readable as a WebGL texture and carries a
 version; a second publish inside the cooldown gets 429; forged, stale,
 unsigned and SVG-disguised uploads are refused with the right status each
-time; CORS echoes the allowed origin and the preflight is answered.
+time; a takedown signed for another advert, a forged one and a stale one are
+refused, a genuine one takes the advert off the wall, and taking it down again
+answers 404; CORS echoes the allowed origin and the preflight is answered.
 
 Run it again in the other storage mode:
 
@@ -663,7 +691,7 @@ The Worker picks its backend from whether an R2 binding and
 `PUBLIC_IMAGE_BASE` are *both* present, which means the branch that runs in
 production is decided by config rather than by code — and a test suite that
 only ever sees one config only ever tests half of `storeImage`. So there are
-two local configs and the same fourteen cases run against each. The image case
+two local configs and the same nineteen cases run against each. The image case
 is the one that differs: in KV mode the Worker serves the bytes, so it is
 fetched and every header is checked; in R2 mode the URL points at a bucket
 domain that is not this Worker, so the check is that the URL is well formed

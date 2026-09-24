@@ -53,14 +53,29 @@ Your image is cropped to a square and re-encoded as a **384 × 384** picture of 
 
 ## Changing or taking one down
 
-* **To change your advert**, publish a new one. It replaces the old one.
-* **Take it down**, in the advert dialog, removes an advert that was saved in this browser only.
-* A published advert comes down **on its own** if your wallet leaves the manifest.
+* **To change your advert**, open your seat and press **Change your advert**, then publish the new one. It replaces the old one.
+* **To take it down**, open your seat and press **Take it down**, then approve the message in your wallet. The advert comes off the wall for everybody, and the PA says so: _"Advert taken down from seat 8A."_ You can put a new one up straight away.
+* A published advert also comes down **on its own** if your wallet leaves the manifest.
+
+The takedown message names the advert it removes, so it can never be used to take down an advert you put up afterwards:
+
+```
+SEAT AIRLINES
+Take the advert off my seat.
+
+wallet: <your address>
+advert: <the stored name of that advert's image>
+issued: <the time you pressed the button>
+```
+
+**Take it down** only appears when there is an advert of yours on the seat — the airline's house adverts are not yours to remove.
 
 ## When something goes wrong
 
 | You see | What happened |
 | --- | --- |
 | _You did not sign it, so nothing went up._ | You declined the wallet prompt. Nothing was published. |
+| _You did not sign it, so your advert is still up._ | You declined the takedown prompt. Nothing changed. |
+| _That advert has already been replaced._ | The page was showing an older advert than the one now up — reload and try again. |
 | The PA says the advert is up _in this browser only_ | The advert server could not be reached, so the advert was saved on this device instead. Other people do not see it. Try again later. |
 | Any other message in the dialog | The server read the request and refused it — for example, a wallet that does not hold the token, or a second publish inside a minute. Nothing was published. |

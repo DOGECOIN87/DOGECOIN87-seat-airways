@@ -38,7 +38,11 @@ export interface CabinZone {
   accent: 'cerise' | 'cyan' | 'violet';
   /** Short identifier shown as the zone's visual badge. */
   code: string;
-  /** The material/experience cue shown beside the zone name. */
+  /**
+   * The material/experience cue shown beside the zone name. The seat count
+   * beside it is counted from `rows` rather than written here: written here,
+   * Economy's said 138 while it had 126.
+   */
   visual: string;
 }
 
@@ -68,7 +72,7 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     perk: 'You have the PA. One announcement a day. Use it well.',
     accent: 'cerise',
     code: 'FDK',
-    visual: 'Command / 02 seats',
+    visual: 'Command',
     rows: [{ n: null, left: ['CPT'], right: ['FO'] }],
   },
   {
@@ -80,7 +84,7 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     perk: 'Lie-flat. Champagne on every green candle.',
     accent: 'cerise',
     code: 'FST',
-    visual: 'Private suite / 08 seats',
+    visual: 'Private suite',
     rows: rowRange(1, 2, ['A', 'B'], ['E', 'F']),
   },
   {
@@ -92,7 +96,7 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     perk: 'Priority boarding, and first off the aircraft in an emergency landing.',
     accent: 'violet',
     code: 'BUS',
-    visual: 'Widebody comfort / 30 seats',
+    visual: 'Widebody comfort',
     rows: rowRange(3, 7, LR, RR),
   },
   {
@@ -104,7 +108,7 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     perk: 'You have agreed to open that door. Sign the message.',
     accent: 'cyan',
     code: 'EXR',
-    visual: 'Extra legroom / 12 seats',
+    visual: 'Extra legroom',
     rows: rowRange(16, 17, LR, RR),
   },
   {
@@ -116,7 +120,7 @@ export const CABIN_ZONES: readonly CabinZone[] = [
     perk: 'Seat back and tray table. Welcome aboard.',
     accent: 'cyan',
     code: 'ECO',
-    visual: 'Main cabin / 138 seats',
+    visual: 'Main cabin',
     rows: [...rowRange(8, 15, LR, RR), ...rowRange(18, 30, LR, RR)],
   },
 ];
@@ -171,6 +175,11 @@ export const ALL_SEATS: readonly CabinSeat[] = CABIN_ZONES.flatMap((zone) =>
     })),
   ]),
 );
+
+/** How many seats a cabin has, counted off its rows. */
+export function seatCount(zone: CabinZone): number {
+  return zone.rows.reduce((n, row) => n + row.left.length + row.right.length, 0);
+}
 
 /** Look up one seat by id. */
 export function findSeat(id: string | null): CabinSeat | null {
@@ -237,8 +246,8 @@ export const CALLOUTS = {
 /* ── The departure board ──────────────────────────────────────────────────
    The split-flap board at the top of the page turns through these in order,
    then starts again. The first is the airline's own line: the board boards
-   it first, holds it longest, and shows nothing else to anybody who has asked
-   their device for reduced motion.
+   it first and holds it longest. Anybody who has asked their device for
+   reduced motion sees every phrase too, changing without the flaps turning.
 
    Each entry is the board's rows, top to bottom: one line or two. The board
    is as wide as the longest line in this list, so one long line shrinks every
