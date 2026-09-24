@@ -281,6 +281,152 @@ html {
   max-inline-size: 24ch;
 }
 
+/* ── The departure board ──────────────────────────────────────
+   The hero's headline is a split-flap board, drawn after the ones
+   that still hang in terminals. It is the one thing up here that
+   is not made of the panel's material: a board is black metal and
+   painted flaps bolted to a wall, so it keeps its own palette, the
+   way the aircraft keeps its livery.
+
+   Everything is sized from the board's own width, through container
+   units. A flap is whatever width is left after the padding and the
+   gaps, divided by the column count, and every other measure — its
+   height, its type, its hinge pins — is a fraction of that flap. So
+   the board scales as one object from a phone to a wide screen,
+   with no breakpoints to drift apart. */
+.sa-board-title { display: block; margin: 0; }
+.sa-board {
+  display: block;
+  container-type: inline-size;
+  max-inline-size: 52rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sa-board__housing {
+  --pad: 2cqi;
+  --gap: 0.75cqi;
+  --flap-w: calc((100cqi - 2 * var(--pad) - (var(--cols) - 1) * var(--gap)) / var(--cols));
+  /* The reference flap's own proportion: taller than it is wide. */
+  --flap-h: calc(var(--flap-w) / 0.78);
+  display: grid;
+  gap: calc(var(--gap) * 1.6);
+  padding: var(--pad);
+  border-radius: calc(var(--pad) + var(--flap-w) * 0.08);
+  background: linear-gradient(180deg, #2C2C2F 0%, #222225 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 18px 44px rgba(0, 0, 0, 0.5);
+}
+.sa-board__row {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: var(--gap);
+}
+/* One character: a black frame, two painted halves with a gap
+   between them, and a hinge pin at each end of the gap. The lower
+   half is the lighter one, as it is on the reference board — it is
+   the face turned up towards the lights. */
+.sa-flap {
+  --frame: max(1px, calc(var(--flap-w) * 0.035));
+  --split: max(1px, calc(var(--flap-h) * 0.017));
+  /* One painted half: the face, less the frame and the split. */
+  --half: calc((var(--flap-h) - 2 * var(--frame) - var(--split)) / 2);
+  --r: calc(var(--flap-w) * 0.1);
+  position: relative;
+  display: block;
+  block-size: var(--flap-h);
+  border-radius: var(--r);
+  background: #050505;
+  box-shadow: 0 max(1px, calc(var(--flap-h) * 0.02)) max(2px, calc(var(--flap-h) * 0.05)) rgba(0, 0, 0, 0.5);
+  /* Far enough back that a falling leaf swells a little towards you,
+     not so close that it spills over its neighbours. */
+  perspective: calc(var(--flap-h) * 5);
+  color: #E8E8E8;
+  font-family: 'PT Sans Narrow', 'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif;
+  font-size: calc(var(--flap-h) * 0.92);
+  font-weight: 700;
+  line-height: 1;
+}
+.sa-flap__half {
+  position: absolute;
+  inset-inline: var(--frame);
+  block-size: var(--half);
+  overflow: hidden;
+  backface-visibility: hidden;
+}
+.sa-flap__half--upper {
+  --paint: linear-gradient(180deg, #333333 0%, #292929 45%, #252525 100%);
+  top: var(--frame);
+  border-radius: calc(var(--r) * 0.7) calc(var(--r) * 0.7) 0 0;
+  background: var(--paint);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.sa-flap__half--lower {
+  --paint: linear-gradient(180deg, #3A3A3A 0%, #333333 40%, #2D2D2D 100%);
+  bottom: var(--frame);
+  border-radius: 0 0 calc(var(--r) * 0.7) calc(var(--r) * 0.7);
+  background: var(--paint);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+/* The glyph box is the whole face in both halves, pinned to the top
+   of one and the bottom of the other, so the two halves of a letter
+   meet exactly across the split. Sized in lengths rather than as a
+   share of its half, so a leaf can be a little taller than the half
+   it covers without moving its letter. */
+.sa-flap__glyph {
+  position: absolute;
+  inset-inline: 0;
+  display: grid;
+  place-items: center;
+  block-size: calc(var(--half) * 2 + var(--split));
+}
+.sa-flap__half--upper .sa-flap__glyph { top: 0; }
+.sa-flap__half--lower .sa-flap__glyph { bottom: 0; }
+.sa-flap::before,
+.sa-flap::after {
+  content: '';
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  inline-size: max(2px, calc(var(--flap-w) * 0.08));
+  block-size: calc(var(--flap-h) * 0.22);
+  border-radius: max(1px, calc(var(--flap-w) * 0.02));
+  translate: 0 -50%;
+  background: linear-gradient(90deg, #000 0%, #444 38%, #1A1A1A 62%, #000 100%);
+  box-shadow: 0 0 0 max(0.5px, calc(var(--flap-w) * 0.01)) rgba(255, 255, 255, 0.1);
+}
+.sa-flap::before { left: 0; }
+.sa-flap::after { right: 0; }
+/* The flap that is falling, as its two leaves. Only the one in play is
+   drawn — the board's loop shows it — so at rest neither is.
+
+   A leaf darkens as it turns away from the light, by --flap-shade,
+   which the loop sets. The paint and the letter are darkened in
+   place rather than under a black sheet laid over the leaf: an
+   overlay is a second box, and at a few degrees of turn its edge and
+   the leaf's clip rasterise a pixel apart, which drew a bright seam
+   along the hinge. (And not --shade, which is the page's shadow
+   colour: inherited here it made an overlay opaque.) */
+.sa-flap__leaf {
+  --flap-shade: 0;
+  z-index: 2;
+  visibility: hidden;
+  /* Each leaf reaches on to the hinge, half-way across the split. A
+     transformed leaf rasterises a hair short of the resting half under
+     it, and without this the next letter's ink showed along the hinge
+     as a bright line for the first few degrees of every turn. */
+  block-size: calc(var(--half) + var(--split) / 2);
+  background: linear-gradient(rgb(0 0 0 / var(--flap-shade)) 0 0), var(--paint);
+}
+/* Both leaves turn about the middle of the split — which is the hinge
+   line, and is now the one edge of each leaf that is on it. */
+.sa-flap__leaf.sa-flap__half--upper { transform-origin: 50% 100%; }
+.sa-flap__leaf.sa-flap__half--lower { transform-origin: 50% 0; }
+.sa-flap__leaf .sa-flap__glyph {
+  color: color-mix(in srgb, #000 calc(var(--flap-shade) * 100%), #E8E8E8);
+}
+
 .sa-eyebrow {
   display: flex;
   flex-wrap: wrap;
