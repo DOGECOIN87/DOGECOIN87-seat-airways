@@ -70,6 +70,6 @@ The documentation is the `docs/` folder of the repository, and `gitbook-docs.yam
 2. Install or authorise the GitBook app for `DOGECOIN87/DOGECOIN87-seat-airways`, and pick the branch — `main`. Leave the project directory at the repository root, where GitBook finds `gitbook-docs.yaml`.
 3. For the first sync, keep the direction **GitHub → GitBook**, so GitBook imports these pages rather than overwriting them with an empty site.
 4. Publish the site from GitBook.
-5. Point the site's footer at it: set the repository variable `VITE_DOCS_URL` to the published address, then re-run the Pages deploy (**Actions → Deploy to GitHub Pages → Run workflow**). Until then the footer's **Docs on GitBook** link opens these pages on GitHub.
+5. The footer's **Docs on GitBook** link already opens the published site — its address is committed in `src/lib/docs.ts`. If the address ever changes, either update that constant or set the repository variable `VITE_DOCS_URL` to the new one and re-run the Pages deploy (**Actions → Deploy to GitHub Pages → Run workflow**); the variable wins over the committed address.
 
 After that the sync runs both ways: a push to `docs/` updates GitBook, and an edit made in GitBook arrives as a commit.
