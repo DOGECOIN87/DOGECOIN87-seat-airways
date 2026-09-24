@@ -5,6 +5,7 @@ import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
 import { biomeAt } from '../lib/biome';
+import { noTileShader, type NoTileParams } from './noTile';
 import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
 import { CABIN, createCabin, rowZ } from './cabin';
 import { createAirframe } from './airframe';
@@ -445,16 +446,15 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     displacementScale: HILL_HEIGHT,
     normalMap: farmland.normal,
   });
-  nearMat.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float fade;')
-      .replace(
-        '#include <displacementmap_vertex>',
-        `#ifdef USE_DISPLACEMENTMAP
-          transformed += normalize( objectNormal ) * ( texture2D( displacementMap, vDisplacementMapUv ).x * displacementScale * fade + displacementBias );
-        #endif`,
-      );
-  };
+  /* Past 11 km the tile starts shuffling (see noTile.ts), fully by 20 km;
+     the land's broad tint rides on the same uniform. One object shared by
+     the plate and the relief mesh, so both agree to the pixel where they
+     meet — and so the scene can switch the tint off over water in one
+     place. */
+  const landNoTile: NoTileParams = { value: new THREE.Vector3(11000, 20000, 1) };
+  const waterNoTile: NoTileParams = { value: new THREE.Vector3(11000, 20000, 0) };
+  nearMat.onBeforeCompile = (shader) => noTileShader(shader, landNoTile, true);
+  groundMat.onBeforeCompile = (shader) => noTileShader(shader, landNoTile, false);
   const near = new THREE.Mesh(nearGeometry, nearMat);
   near.rotation.x = -Math.PI / 2;
   scene.add(near);
@@ -528,6 +528,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   sheen.position.y = 0.035;
   sheen.visible = false;
   scene.add(sheen);
+  // The lakes and the incoming sea shuffle with the ground they lie on.
+  waterMat.onBeforeCompile = (shader) => noTileShader(shader, waterNoTile, false);
+  seaMat.onBeforeCompile = (shader) => noTileShader(shader, waterNoTile, false);
 
   /* ── The limb ─────────────────────────────────────────────────────────
      A flat plate is a fair model of the ground until you can see far enough
@@ -808,6 +811,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       nearMat.roughness = groundMat.roughness;
       nearMat.needsUpdate = true;
     }
+    landNoTile.value.z = reliefOn ? 1 : 0;
     groundMat.normalScale.setScalar(relief);
     nearMat.normalScale.setScalar(relief);
     nearMat.displacementScale = HILL_HEIGHT * relief;
