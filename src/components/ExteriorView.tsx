@@ -59,6 +59,11 @@ const ExteriorView = ({ feed, sky, band, taken, claimed, viewing, controls = HAN
       return;
     }
     world.current = handles;
+    // Dev only: the scene's odometer, so a headless test can prove the world
+    // is actually going past without trying to read pixels off SwiftShader.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __saTravelled?: () => number }).__saTravelled = handles.travelled;
+    }
     const resize = () => {
       const r = canvas.getBoundingClientRect();
       handles.resize(Math.max(1, r.width), Math.max(1, r.height));

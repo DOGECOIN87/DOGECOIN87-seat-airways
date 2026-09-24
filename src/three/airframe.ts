@@ -671,7 +671,7 @@ export interface AirframeHandles {
    * flashes, and the contrails stream at `contrail` strength (0 where the
    * air is too warm to hold one, 1 in the cold above the deck).
    */
-  update(dt: number, contrail: number): void;
+  update(dt: number, contrail: number, stream?: number): void;
   dispose(): void;
 }
 
@@ -1043,7 +1043,7 @@ export function createAirframe(): AirframeHandles {
     for (const s of seats) windows.setColorAt(s.i, isLit(s.row) ? lit : dark);
     if (windows.instanceColor) windows.instanceColor.needsUpdate = true;
   };
-  const update = (dt: number, contrail: number) => {
+  const update = (dt: number, contrail: number, stream = 120) => {
     lifeT += dt;
     /* The fans. Slow enough not to strobe against the frame rate, fast
        enough that the intake plainly holds a turning machine — and each
@@ -1060,7 +1060,7 @@ export function createAirframe(): AirframeHandles {
     for (const [i, seg] of CONTRAIL.entries()) {
       contrailMats[i].opacity = seg.o * contrail;
       contrailMats[i].visible = contrail > 0.02;
-      seg.tex.offset.x += (dt * 74) / ((seg.z1 - seg.z0) / seg.tiles);
+      seg.tex.offset.x += (dt * stream) / ((seg.z1 - seg.z0) / seg.tiles);
     }
   };
   const setFlapDeployment = (target: number) => {

@@ -610,9 +610,16 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const shift = { x: 0, z: 0 };
   let last = performance.now();
   const CLOUD_SPAN = 44000;
-  // Keep the world drift calm and visually continuous instead of tying it to
-  // heading changes, which made the background appear to change direction.
-  const BACKGROUND_SPEED = 18;
+  /* v/h constant — for real this time. The old constant 18 m/s was honest
+     physics for a cruise altitude and therefore read as a parked aeroplane:
+     at 900 m it moved the ground one degree a second, which no eye calls
+     flying. What the eye reads as speed is v/h, so the drift is a fraction
+     of the camera's height per second, floored so the bottom of the first
+     band still visibly goes, and capped so the space band's kilometres of
+     height do not spin the limb. */
+  const V_OVER_H = 0.15;
+  const SPEED_FLOOR = 120;
+  const SPEED_CAP = 2200;
   const wrap = (v: number) => ((((v + CLOUD_SPAN / 2) % CLOUD_SPAN) + CLOUD_SPAN) % CLOUD_SPAN) - CLOUD_SPAN / 2;
 
   const render = (a: Attitude, skyState: SkyState, band: BandState, pose: ViewPose) => {
@@ -835,8 +842,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const now = performance.now();
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    shift.x -= BACKGROUND_SPEED * dt;
-    shift.z -= BACKGROUND_SPEED * 0.72 * dt;
+    const groundSpeed = THREE.MathUtils.clamp(height * V_OVER_H, SPEED_FLOOR, SPEED_CAP);
+    shift.x -= groundSpeed * dt;
+    shift.z -= groundSpeed * 0.72 * dt;
 
     /* The ground is one repeating plane, so flying over it is an offset. */
     const map = groundMat.map;
@@ -948,7 +956,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         : inSpace
           ? Math.max(0, 1 - band.progress * 2.4) * 0.7
           : THREE.MathUtils.smoothstep(height, 2100, 2600) * 0.5;
-    airframe.update(dt, contrail);
+    airframe.update(dt, contrail, groundSpeed);
 
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
