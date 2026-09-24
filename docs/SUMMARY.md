@@ -49,3 +49,4 @@
 * [Worker API](developers/worker-api.md)
 * [Deploying](developers/deploying.md)
 * [The departure board](developers/departure-board.md)
+* [Engineering notes](developers/engineering-notes.md)
