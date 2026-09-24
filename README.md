@@ -498,11 +498,11 @@ ALLOWED_ORIGINS = "https://seat-airlines.space,https://www.seat-airlines.space"
 ### The documentation
 
 The public documentation is `docs/`, published by GitBook through Git Sync:
-`docs/gitbook-docs.yaml` names the site and maps the folder onto it as one
-space, `docs/SUMMARY.md` is its table of contents, and this README stays the
-developer's. Connect a GitBook docs site to this repository and branch with
-Git Sync, project directory `docs/`, and make the **first** sync GitHub →
-GitBook, so the pages are imported rather than overwritten by an empty site.
+`gitbook-docs.yaml` at the repository root names the site and maps the folder
+onto it as one space, `docs/SUMMARY.md` is its table of contents, and this
+README stays the developer's. Connect a GitBook docs site to this repository
+and branch with Git Sync, and make the **first** sync GitHub → GitBook, so
+the pages are imported rather than overwritten by an empty site.
 After that, edits made in GitBook come back as commits — and a push that only
 touches `docs/` does not redeploy the site.
 

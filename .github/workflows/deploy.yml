@@ -9,6 +9,7 @@ on:
     # touches anything else still deploys.
     paths-ignore:
       - 'docs/**'
+      - 'gitbook-docs.yaml'
       - '.gitbook.yaml'
   # So a config change can be shipped without an empty commit.
   workflow_dispatch:
