@@ -107,7 +107,11 @@ for. There is no holder check and no cooldown — taking your own advert down
 costs nobody storage, and a holder should be able to take one down and put
 the next up at once. The artwork itself is left in place: it is addressed by
 its bytes, and another wallet may be showing the same picture. An advert that
-is already gone answers **404**, which the page reads as done.
+is already gone answers **404** with `"gone": true`, which the page reads as
+done. The flag matters: a Worker deployed before this route answers the same
+request with the fallthrough 404, and the page must not tell the holder their
+advert is down while it is still on the wall — without the flag it says the
+server cannot take adverts down yet.
 
 ## The cabin directory
 

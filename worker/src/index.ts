@@ -1428,9 +1428,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
         return json({ error: 'That signature does not match the wallet.' }, 401, cors);
       }
 
+      /* `gone` is what tells this 404 from the fallthrough's: a Worker from
+         before this route answers the same DELETE with "No such route.",
+         and a page that took any 404 as done would tell the holder their
+         advert was down while it was still on the wall. */
       const stored = readStoredBanner(await env.BANNERS.get(`banner:${owner}`));
       if (!stored) {
-        return json({ error: 'There is no advert up for this wallet.' }, 404, cors);
+        return json({ error: 'There is no advert up for this wallet.', gone: true }, 404, cors);
       }
       if (stored.key !== key) {
         return json({ error: 'That advert has already been replaced.' }, 409, cors);

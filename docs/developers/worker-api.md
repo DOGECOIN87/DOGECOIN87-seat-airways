@@ -87,7 +87,7 @@ It answers `{ "ok": true }` and removes the advert from the wall, or:
 | --- | --- |
 | 400 | Not JSON, a missing field, or a signature older than five minutes |
 | 401 | The signature does not match the wallet |
-| 404 | There is no advert up for this wallet — the page treats this as done |
+| 404 | There is no advert up for this wallet. The body carries `"gone": true`, and the page treats this as done |
 | 409 | The advert up now is not the one the signature names |
 
 There is no holder check and no cooldown, and the artwork itself is left in place, since another wallet may be showing the same picture.

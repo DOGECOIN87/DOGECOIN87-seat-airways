@@ -274,9 +274,13 @@ await check('a genuine takedown takes the advert off the wall', async () => {
   assert(!wall[owner], 'the advert is still on the wall');
 });
 
-await check('taking down an advert that is already gone is a 404', async () => {
+await check('taking down an advert that is already gone is a 404 that says so', async () => {
   const res = await takeDown(await takedownBody('banners/0123456789abcdef0123456789abcdef.jpg'));
   assert(res.status === 404, `status ${res.status}, expected 404`);
+  /* The flag is what the page reads as done; the fallthrough 404 of a
+     Worker without this route does not carry it. */
+  const body = await res.json();
+  assert(body.gone === true, `no gone flag: ${JSON.stringify(body)}`);
 });
 
 /* ── The cabin directory ──────────────────────────────────────────────────

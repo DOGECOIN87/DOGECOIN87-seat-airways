@@ -467,14 +467,18 @@ export async function unpublishBanner(opts: {
     throw new ServerUnreachable();
   }
 
+  if (res.ok) return;
+  const body = (await res.json().catch(() => null)) as { error?: string; gone?: boolean } | null;
   /* No advert up for this wallet is where taking one down was going: the
      page was holding a copy of the wall from before somebody — this holder,
-     in another tab — had already taken it down. */
-  if (res.status === 404) return;
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `The advert server refused it (${res.status}).`);
+     in another tab — had already taken it down. Only the route's own 404
+     says so. Any other 404 is a Worker older than the route, and the advert
+     is still up. */
+  if (res.status === 404) {
+    if (body?.gone) return;
+    throw new Error('The advert server cannot take adverts down yet, so your advert is still up.');
   }
+  throw new Error(body?.error ?? `The advert server refused it (${res.status}).`);
 }
 
 /**

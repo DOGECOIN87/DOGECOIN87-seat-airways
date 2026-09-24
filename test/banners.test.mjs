@@ -185,8 +185,19 @@ await checkAsync('a takedown sends the key, and signs the takedown text', async 
 });
 
 await checkAsync('an advert already gone counts as taken down', async () => {
-  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'There is no advert up for this wallet.' }), { status: 404 });
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'There is no advert up for this wallet.', gone: true }), { status: 404 });
   await unpublish();
+});
+
+await checkAsync('a Worker without the takedown route leaves the advert up, and says so', async () => {
+  /* The fallthrough 404 a Worker deployed before the route gives the same
+     DELETE. Taking it as done would report the advert down while it is
+     still on the wall. */
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'No such route.' }), { status: 404 });
+  await rejects(unpublish, (e) => {
+    assert(!(e instanceof ServerUnreachable), 'a 404 was mistaken for an outage');
+    assert(/still up/.test(e.message), `did not say the advert is still up: "${e.message}"`);
+  }, 'takedown against a Worker without the route');
 });
 
 await checkAsync('a takedown refusal keeps the server’s reason', async () => {
