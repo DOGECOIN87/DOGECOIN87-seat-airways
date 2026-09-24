@@ -63,4 +63,4 @@ docs/                        this documentation
 * The 3D scene adapts its pixel ratio to measured render time, and React and three.js ship as separate cached chunks.
 * `prefers-reduced-motion` drops the animation loop: values snap, and the view is repainted on a slow cadence.
 
-The repository's own [README](https://github.com/DOGECOIN87/DOGECOIN87-seat-airways#readme) and [`worker/README.md`](https://github.com/DOGECOIN87/DOGECOIN87-seat-airways/blob/main/worker/README.md) go deeper on every decision here.
+The repository's own [README](https://github.com/DOGECOIN87/Seat-Airlines#readme) and [`worker/README.md`](https://github.com/DOGECOIN87/Seat-Airlines/blob/main/worker/README.md) go deeper on every decision here.

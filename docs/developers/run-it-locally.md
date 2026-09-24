@@ -54,4 +54,4 @@ npm run test:e2e         # in another shell: the full route suite
 
 `npm run dev:local:r2` runs the same Worker with the R2 storage path instead of KV. Run `rm -rf .wrangler/state` between the two modes, with the Worker stopped, because they share simulated state.
 
-See [`worker/README.md`](https://github.com/DOGECOIN87/DOGECOIN87-seat-airways/blob/main/worker/README.md) for what each test case proves.
+See [`worker/README.md`](https://github.com/DOGECOIN87/Seat-Airlines/blob/main/worker/README.md) for what each test case proves.

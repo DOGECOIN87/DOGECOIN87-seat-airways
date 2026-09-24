@@ -12,8 +12,8 @@ so the aeroplane on your screen *is* the chart — and its 178 seats go to the b
 [![Fly now](https://img.shields.io/badge/fly%20now-seat--airlines.space-00C9F1?style=for-the-badge&logo=googlechrome&logoColor=white)](https://seat-airlines.space)
 [![Read the docs](https://img.shields.io/badge/read%20the%20docs-GitBook-0E2E5E?style=for-the-badge&logo=gitbook&logoColor=white)](https://seat-airlines.gitbook.io/seat-airlines-docs/)
 
-[![Deploy to GitHub Pages](https://github.com/DOGECOIN87/DOGECOIN87-seat-airways/actions/workflows/deploy.yml/badge.svg)](https://github.com/DOGECOIN87/DOGECOIN87-seat-airways/actions/workflows/deploy.yml)
-[![Deploy the banners Worker](https://github.com/DOGECOIN87/DOGECOIN87-seat-airways/actions/workflows/worker.yml/badge.svg)](https://github.com/DOGECOIN87/DOGECOIN87-seat-airways/actions/workflows/worker.yml)
+[![Deploy to GitHub Pages](https://github.com/DOGECOIN87/Seat-Airlines/actions/workflows/deploy.yml/badge.svg)](https://github.com/DOGECOIN87/Seat-Airlines/actions/workflows/deploy.yml)
+[![Deploy the banners Worker](https://github.com/DOGECOIN87/Seat-Airlines/actions/workflows/worker.yml/badge.svg)](https://github.com/DOGECOIN87/Seat-Airlines/actions/workflows/worker.yml)
 [![MIT licence](https://img.shields.io/badge/licence-MIT-0E2E5E)](LICENSE)
 
 <img src="docs/.gitbook/assets/exterior.jpg" alt="Flight SA350 banking into a turn over rolling farmland" width="100%">
