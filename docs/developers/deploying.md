@@ -6,7 +6,7 @@ description: The page on GitHub Pages, the Worker on Cloudflare, the token, and 
 
 ## The page — GitHub Pages
 
-`.github/workflows/deploy.yml` runs on every push to `main` and on manual dispatch: it installs, runs `npm test`, builds, and publishes `dist/` to GitHub Pages. A push that changes only `docs/` or `.gitbook.yaml` does not redeploy the site.
+`.github/workflows/deploy.yml` runs on every push to `main` and on manual dispatch: it installs, runs `npm test`, builds, and publishes `dist/` to GitHub Pages. A push that changes only `docs/`, `gitbook-docs.yaml` or `.gitbook.yaml` does not redeploy the site.
 
 1. **Turn Pages on first.** Repository → **Settings → Pages → Source: GitHub Actions**. Without it the workflow builds and then fails at the deploy step with a permissions error.
 2. **Configuration** goes in repository **variables**, not secrets: **Settings → Secrets and variables → Actions → Variables**. See [Configuration](configuration.md) for why.
@@ -64,10 +64,10 @@ A new mint is a new holder set: the seats and the holder count come from the new
 
 ## These docs — GitBook
 
-The documentation is the `docs/` folder of the repository, and `docs/gitbook-docs.yaml` is the contract GitBook reads: it names the site and maps this folder onto it as one space — one book, whose page tree is `SUMMARY.md`. (`.gitbook.yaml` at the repository root is the older, space-level version of the same pointer, kept for anything still reading it.) To connect a GitBook docs site:
+The documentation is the `docs/` folder of the repository, and `gitbook-docs.yaml` at the repository root is the contract GitBook reads: it names the site and maps that folder onto it as one space — one book, whose page tree is `docs/SUMMARY.md`. (`.gitbook.yaml` is the older, space-level version of the same pointer, kept for anything still reading it.) To connect a GitBook docs site:
 
 1. In the site, open **Git Sync** and choose **GitHub**.
-2. Install or authorise the GitBook app for `DOGECOIN87/DOGECOIN87-seat-airways`, pick the branch — `main` — and set the project directory to `docs/`, where GitBook finds `gitbook-docs.yaml`.
+2. Install or authorise the GitBook app for `DOGECOIN87/DOGECOIN87-seat-airways`, and pick the branch — `main`. Leave the project directory at the repository root, where GitBook finds `gitbook-docs.yaml`.
 3. For the first sync, keep the direction **GitHub → GitBook**, so GitBook imports these pages rather than overwriting them with an empty site.
 4. Publish the site from GitBook.
 5. Point the site's footer at it: set the repository variable `VITE_DOCS_URL` to the published address, then re-run the Pages deploy (**Actions → Deploy to GitHub Pages → Run workflow**). Until then the footer's **Docs on GitBook** link opens these pages on GitHub.
