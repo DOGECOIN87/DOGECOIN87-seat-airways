@@ -159,12 +159,15 @@ jump), and every measure of air is a rem stepped by the same number — so
 nothing on the page is nearly-but-not-quite related to anything else. The
 scale is `--t-xs` through `--t-5xl` and `--s-1` through `--s-6`.
 
-The headline is the other exception: a split-flap departure board
-(`src/components/SplitFlapBoard.tsx`), black flaps and white type like the
-ones in a terminal, turning each letter through every flap between the one
-showing and the one wanted. What it says is `BOARD_PHRASES` in
-`src/content/cabin.ts` — one or two lines per entry, first entry held longest
-and the only one shown to anybody who asks for reduced motion. The heading
+The headline is a split-flap departure board
+(`src/components/SplitFlapBoard.tsx`) painted in the page's own materials:
+flaps in the navy of the ground the hero sits on, letters in the display
+white, and the blue that marks whatever is live along its top edge — the
+palette is a set of tokens on `.sa-board`. Changing a word, each letter falls
+through the last few flaps before the one wanted, so it counts up to it and
+the columns land at different moments. What it says is `BOARD_PHRASES` in
+`src/content/cabin.ts` — one or two lines per entry, the first held longest.
+Reduced motion changes the words without turning the flaps. The heading
 itself stays "Hold more. Fly higher." for screen readers.
 
 The aircraft keeps its own materials. Inside the dark screens the livery is

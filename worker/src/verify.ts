@@ -64,6 +64,25 @@ export function challenge(owner: string, imageHash: string, issued: string): str
   ].join('\n');
 }
 
+/**
+ * The exact text a holder signs to take their advert down. Must match
+ * `takedownChallenge()` in the app.
+ *
+ * It names the advert as well as the wallet — by the key its artwork is
+ * stored under — so a signature takes down the one advert it was made for.
+ * Replayed after the holder has put up another, it matches nothing.
+ */
+export function takedownChallenge(owner: string, key: string, issued: string): string {
+  return [
+    'SEAT AIRLINES',
+    'Take the advert off my seat.',
+    '',
+    `wallet: ${owner}`,
+    `advert: ${key}`,
+    `issued: ${issued}`,
+  ].join('\n');
+}
+
 /** A Solana address is an ed25519 public key, so this is a plain verify. */
 export async function verifySignature(owner: string, message: string, signature: string): Promise<boolean> {
   const pub = fromBase58(owner);

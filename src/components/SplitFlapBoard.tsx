@@ -5,15 +5,15 @@ import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from '
  *
  * A split-flap display, the kind that still hangs over the gates in older
  * terminals. Every character is a drum of flaps hinged across its middle, and
- * changing one means turning through every flap between the one on show and
- * the one wanted — so the cells finish at different times, letters nobody
- * asked for go past on the way, and the board settles a column at a time.
- * That is the whole reason anybody stops to watch one, so it is modelled
- * rather than faked with a cross-fade.
+ * changing one means the flaps falling one after another until the wanted one
+ * is showing — so the cells finish at different times, letters nobody asked
+ * for go past on the way, and the board settles a column at a time. That is
+ * the whole reason anybody stops to watch one, so it is modelled rather than
+ * faked with a cross-fade.
  *
  * It animates the way the instruments do: off refs, through one
  * requestAnimationFrame loop, with no React render per flap. Twenty drums each
- * turning fifteen times a second would otherwise be three hundred renders a
+ * turning several times a second would otherwise be hundreds of renders a
  * second of a component whose props never change.
  *
  * The board is a picture of words, not the words. It is hidden from assistive
@@ -29,17 +29,30 @@ import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from '
 const DRUM = ` ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-/:()%.,!?&$'`;
 const BLANK = 0;
 
-/** One flap falling, top to bottom. Real boards turn about fifteen a second. */
-const FLIP_MS = 64;
+/**
+ * One flap falling, top to bottom. Slow enough to see it fold, which at the
+ * rate a real board turns — fifteen a second — nobody could.
+ */
+const FLIP_MS = 120;
+/**
+ * How many flaps a letter turns through to reach the next one.
+ *
+ * A real drum turns through every flap between the two letters, and at a
+ * speed you can see that takes seconds. So each drum turns through the last
+ * few flaps of that journey — the letters counting up to the one wanted — and
+ * each a different number of them, so the columns land at different moments.
+ */
+const FLIPS_MIN = 4;
+const FLIPS_MAX = 9;
 /** How long a phrase stays up once its last flap has landed. */
 const HOLD_MS = 4000;
 /** The home phrase is the airline's own line, and stays up twice as long. */
 const HOME_HOLD_MS = HOLD_MS * 2;
 /** Drums start a little after the one to their left, and not quite on time. */
-const STAGGER_MS = 24;
-const JITTER_MS = 80;
+const STAGGER_MS = 45;
+const JITTER_MS = 90;
 /** The last flap on a drum bounces once when it lands. */
-const SETTLE_MS = 170;
+const SETTLE_MS = 200;
 /** A beat before the first phrase boards, so it does not turn while the page is still arriving. */
 const INTRO_MS = 450;
 
@@ -68,12 +81,16 @@ interface Drum {
   glyphs: readonly HTMLElement[];
   /** What each of those glyphs is printing now, so the loop only writes what changed. */
   printed: number[];
+  /** The resting lower half, which the falling flap throws its shadow on. */
+  lower: HTMLElement;
   fall: HTMLElement;
   rise: HTMLElement;
   /** Which leaf is drawn, likewise cached: 'fall', 'rise', or neither. */
   drawn: 'fall' | 'rise' | null;
   /** The flap on show. */
   at: number;
+  /** The flap the current fall reveals. */
+  next: number;
   /** The flap this drum is turning to. */
   target: number;
   state: 'idle' | 'waiting' | 'turning' | 'settling';
@@ -96,11 +113,28 @@ function print(d: Drum, which: number, at: number) {
 
 /** A flap has started to fall: the next one shows above it, and it still covers the old one below. */
 function turn(d: Drum) {
-  const next = (d.at + 1) % DRUM.length;
-  print(d, UPPER, next);
+  print(d, UPPER, d.next);
   print(d, LOWER, d.at);
   print(d, FALL, d.at);
-  print(d, RISE, next);
+  print(d, RISE, d.next);
+}
+
+/**
+ * Point a resting drum at a new letter, starting at `when`.
+ *
+ * It turns through the last few flaps before the target, in drum order, so
+ * the letter visibly counts up to the one wanted. A drum already showing it
+ * stays put, as a real one would.
+ */
+function aim(d: Drum, target: number, when: number) {
+  d.target = target;
+  const distance = (target - d.at + DRUM.length) % DRUM.length;
+  if (distance === 0) return;
+  const flips = Math.min(distance, FLIPS_MIN + Math.floor(Math.random() * (FLIPS_MAX - FLIPS_MIN + 1)));
+  d.next = (target - flips + 1 + DRUM.length) % DRUM.length;
+  d.state = 'waiting';
+  d.from = when;
+  d.rate = FLIP_MS * (0.9 + Math.random() * 0.2);
 }
 
 /**
@@ -128,10 +162,12 @@ function setLeaf(leaf: HTMLElement, degrees: number, shade: number) {
  *
  * A flap falls rather than glides, so the angle accelerates. It swings through
  * 180 degrees: the first 90 are the upper leaf coming towards you, the second
- * are the same flap's back landing over the lower half.
+ * are the same flap's back landing over the lower half. On the way down it
+ * throws a shadow across the lower half, which is most of what makes a flat
+ * card read as something falling out of the board.
  */
 function paint(d: Drum, p: number) {
-  const angle = 180 * Math.min(1, p) ** 1.6;
+  const angle = 180 * Math.min(1, p) ** 1.35;
   if (angle < 90) {
     draw(d, 'fall');
     setLeaf(d.fall, -angle, (angle / 90) * 0.5);
@@ -139,6 +175,8 @@ function paint(d: Drum, p: number) {
     draw(d, 'rise');
     setLeaf(d.rise, 180 - angle, ((180 - angle) / 90) * 0.45);
   }
+  const cast = angle < 90 ? angle / 90 : (180 - angle) / 90;
+  d.lower.style.setProperty('--flap-cast', (cast * 0.3).toFixed(3));
 }
 
 /** The last flap has landed on the one wanted, and bounces once off the stack. */
@@ -146,11 +184,13 @@ function settle(d: Drum, s: number) {
   const lift = 14 * Math.sin(Math.PI * s) * (1 - s);
   draw(d, 'rise');
   setLeaf(d.rise, lift, (lift / 90) * 0.45);
+  d.lower.style.removeProperty('--flap-cast');
 }
 
 function rest(d: Drum) {
   d.state = 'idle';
   draw(d, null);
+  d.lower.style.removeProperty('--flap-cast');
   print(d, UPPER, d.at);
   print(d, LOWER, d.at);
 }
@@ -171,38 +211,40 @@ interface SplitFlapBoardProps {
 
 const SplitFlapBoard = memo(function SplitFlapBoard({ phrases }: SplitFlapBoardProps) {
   const board = useRef<HTMLSpanElement>(null);
-  /* Read once, the way the instruments read it. A board that asked for no
-     motion shows the home phrase and nothing else: the phrases are the
-     airline talking, not information anybody is missing. */
+  /* Read once, the way the instruments read it. Asking for less motion
+     stops the flaps, not the words: the board still changes phrase on the
+     same schedule, each one simply appearing where the last one stood. The
+     preference asks for no animation, not for no information. */
   const [still] = useState(prefersStill);
 
   const rows = Math.max(1, ...phrases.map((p) => p.length));
   const cols = Math.max(1, ...phrases.flatMap((p) => p.map((line) => line.length)));
   /* With motion it opens blank and boards the first phrase in front of you,
-     which is the one moment that says what the thing is. */
+     which is the one moment that says what the thing is. Without, it opens on
+     the first phrase. */
   const opening = useMemo(
     () => (still ? layout(phrases[0] ?? [], rows, cols) : new Array<number>(rows * cols).fill(BLANK)),
     [still, phrases, rows, cols],
   );
   /* Which phrase is up, kept across a remount so a development re-render
      does not send the board back to the start. -1 is blank. */
-  const shown = useRef(-1);
+  const shown = useRef(still ? 0 : -1);
 
   useEffect(() => {
     const host = board.current;
-    if (still || !host || phrases.length === 0) return;
+    if (!host || phrases.length === 0) return;
 
     const drums = Array.from(host.querySelectorAll<HTMLElement>('.sa-flap'), (root): Drum => {
       const glyphs = Array.from(root.querySelectorAll<HTMLElement>('.sa-flap__glyph'));
-      const [fall, rise] = Array.from(root.querySelectorAll<HTMLElement>('.sa-flap__leaf'));
+      const halves = root.querySelectorAll<HTMLElement>('.sa-flap__half');
       /* Read the flap on show off the page rather than assuming it, so a
          remount picks up wherever the last mount left the board. */
       const at = Math.max(BLANK, DRUM.indexOf(glyphs[UPPER].textContent || ' '));
       return {
-        glyphs, fall, rise, at,
+        glyphs, lower: halves[1], fall: halves[2], rise: halves[3], at,
         printed: [at, at, -1, -1],
         drawn: null,
-        target: at, state: 'idle', from: 0, rate: FLIP_MS,
+        next: at, target: at, state: 'idle', from: 0, rate: FLIP_MS,
       };
     });
 
@@ -243,7 +285,7 @@ const SplitFlapBoard = memo(function SplitFlapBoard({ phrases }: SplitFlapBoardP
              after a minute, catches up in one step rather than replaying. */
           while (now - d.from >= d.rate) {
             d.from += d.rate;
-            d.at = (d.at + 1) % DRUM.length;
+            d.at = d.next;
             if (d.at === d.target) {
               d.state = 'settling';
               print(d, UPPER, d.at);
@@ -251,6 +293,7 @@ const SplitFlapBoard = memo(function SplitFlapBoard({ phrases }: SplitFlapBoardP
               print(d, RISE, d.at);
               break;
             }
+            d.next = (d.at + 1) % DRUM.length;
           }
           if (d.state === 'turning') {
             turn(d);
@@ -271,13 +314,26 @@ const SplitFlapBoard = memo(function SplitFlapBoard({ phrases }: SplitFlapBoardP
     function show(index: number) {
       shown.current = index;
       const cells = layout(phrases[index], rows, cols);
+      if (still) {
+        for (const [k, d] of drums.entries()) {
+          d.at = d.next = d.target = cells[k];
+          print(d, UPPER, d.at);
+          print(d, LOWER, d.at);
+        }
+        queue(holdFor(index));
+        return;
+      }
       const start = performance.now();
       drums.forEach((d, k) => {
-        d.target = cells[k];
-        if (d.state !== 'idle' || d.at === d.target) return;
-        d.state = 'waiting';
-        d.from = start + (k % cols) * STAGGER_MS + Math.floor(k / cols) * STAGGER_MS * 2 + Math.random() * JITTER_MS;
-        d.rate = FLIP_MS * (0.92 + Math.random() * 0.16);
+        if (d.state !== 'idle') {
+          d.target = cells[k];
+          return;
+        }
+        const when = start
+          + (k % cols) * STAGGER_MS
+          + Math.floor(k / cols) * STAGGER_MS * 1.5
+          + Math.random() * JITTER_MS;
+        aim(d, cells[k], when);
       });
       if (!raf) raf = requestAnimationFrame(frame);
     }

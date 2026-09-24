@@ -40,6 +40,7 @@
  */
 
 import { LOGO_FRAME } from '../components/Mark';
+import { MANIFEST_SIZE } from './manifest';
 import { resolveWorkerApi } from './workerBase';
 
 export interface Banner {
@@ -402,6 +403,85 @@ export async function publishBanner(opts: {
 }
 
 /**
+ * The text a holder signs to take their advert down. Must match
+ * `takedownChallenge()` in the Worker.
+ *
+ * It names the advert — by the key its artwork is stored under — so the
+ * signature takes down that advert and no later one.
+ */
+export function takedownChallenge(owner: string, key: string, issued: string): string {
+  return [
+    'SEAT AIRLINES',
+    'Take the advert off my seat.',
+    '',
+    `wallet: ${owner}`,
+    `advert: ${key}`,
+    `issued: ${issued}`,
+  ].join('\n');
+}
+
+/**
+ * The key a published advert's artwork is stored under, read off its URL.
+ *
+ * Both ways the Worker serves artwork end the path with the key — its own
+ * `/images/<key>` and a bucket's `<base>/<key>` — so this does not need to
+ * know which one this deployment uses.
+ */
+export function advertKey(image: string): string | null {
+  try {
+    const path = decodeURIComponent(new URL(image).pathname);
+    return /(banners\/[^/]+)$/.exec(path)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Take a published advert down, for everybody.
+ *
+ * Signed, like a publish, and the same split between the two ways of
+ * failing: a server that never answered throws `ServerUnreachable`, and one
+ * that answered and refused throws with its reason.
+ */
+export async function unpublishBanner(opts: {
+  owner: string;
+  /** The advert's artwork URL, as the published wall hands it back. */
+  image: string;
+  sign: (message: string) => Promise<string>;
+}): Promise<void> {
+  if (!API) throw new Error('This deployment has no advert server configured.');
+  const key = advertKey(opts.image);
+  if (!key) throw new Error('That advert is not one the advert server stored.');
+
+  const issued = new Date().toISOString();
+  const signature = await opts.sign(takedownChallenge(opts.owner, key, issued));
+
+  let res: Response;
+  try {
+    res = await fetch(`${API}/banner`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ owner: opts.owner, key, issued, signature }),
+    });
+  } catch {
+    throw new ServerUnreachable();
+  }
+
+  if (res.ok) return;
+  const body = (await res.json().catch(() => null)) as { error?: string; gone?: boolean } | null;
+  /* No advert up for this wallet is where taking one down was going: the
+     page was holding a copy of the wall from before somebody — this holder,
+     in another tab — had already taken it down. Only the route's own 404
+     says so. Any other 404 is a Worker older than the route, and the advert
+     is still up. */
+  if (res.status === 404) {
+    if (body?.gone) return;
+    throw new Error('The advert server cannot take adverts down yet, so your advert is still up.');
+  }
+  throw new Error(body?.error ?? `The advert server refused it (${res.status}).`);
+}
+
+/**
  * The published wall, keyed by the wallet that owns each advert.
  *
  * The caller maps these onto seats through the manifest it already has.
@@ -590,7 +670,9 @@ const HOUSE_ADS: HouseAd[] = [
         const w = 1 + ((i * 37) % 5) * 0.9;
         return `<rect x="${14 + i * 5.9}" y="140" width="${w}" height="34" fill="${HOUSE_INK.night}"/>`;
       }).join('') +
-      micro('TOP 40 ONLY', 14, 190, HOUSE_INK.cloth, 8),
+      // The cabin's own size, not a number typed in: this said TOP 40 for as
+      // long after the aircraft grew to 178 as nobody read it.
+      micro(`TOP ${MANIFEST_SIZE} ONLY`, 14, 190, HOUSE_INK.cloth, 8),
   },
 ];
 

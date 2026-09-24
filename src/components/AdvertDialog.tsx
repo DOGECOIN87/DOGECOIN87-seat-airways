@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { type Banner } from '../lib/banners';
+import { BANNER_SIZE, type Banner } from '../lib/banners';
 import { defaultEdit, filterCss, loadImage, loadImageFromSrc, panBy, renderBanner, type EditState } from '../lib/imageEdit';
 
 interface AdvertDialogProps {
   seat: string; current: Banner | null;
   onSave: (banner: Banner) => Promise<string | null> | string | null;
-  shared?: boolean; onClear: () => void; onClose: () => void;
+  /**
+   * Take the holder's own advert down, resolving to a reason when it could
+   * not be. Absent when there is nothing of theirs on the seat to take down.
+   */
+  onClear?: () => Promise<string | null> | string | null;
+  shared?: boolean; onClose: () => void;
 }
 
 const sliders: Array<{ key: keyof EditState['filter']; label: string; min: number; max: number; step: number }> = [
@@ -66,6 +71,18 @@ export default function AdvertDialog({ seat, current, onSave, onClear, onClose, 
     } catch (e) { setError(e instanceof Error ? e.message : 'That advert could not be published.'); }
     finally { setBusy(false); }
   };
+  /* Taking an advert down can ask the wallet to sign and the server to
+     answer, so it waits for both, and a refusal is shown here rather than
+     the dialog closing as though it had worked. */
+  const takeDown = async () => {
+    if (!onClear) return;
+    setBusy(true); setError(null);
+    try {
+      const failure = await onClear();
+      if (failure) setError(failure); else onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : 'That advert could not be taken down.'); }
+    finally { setBusy(false); }
+  };
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!source) return; e.currentTarget.setPointerCapture(e.pointerId); drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
   };
@@ -105,7 +122,7 @@ export default function AdvertDialog({ seat, current, onSave, onClear, onClose, 
             {image ? <img src={image} alt="Edited advert preview" className="h-full w-full object-cover" style={{ filter: filterCss(edit.filter) }} /> : <button type="button" onClick={() => input.current?.click()} className="h-full w-full text-[11px] uppercase tracking-[.14em] text-ui-faint">Drop, paste, or choose an image</button>}
             {grid && image && <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_32.9%,rgba(255,255,255,.6)_33%,transparent_33.4%,transparent_66.2%,rgba(255,255,255,.6)_66.5%,transparent_67%),linear-gradient(0deg,transparent_32.9%,rgba(255,255,255,.6)_33%,transparent_33.4%,transparent_66.2%,rgba(255,255,255,.6)_66.5%,transparent_67%)]" />}
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2"><input ref={input} type="file" accept="image/*" hidden onChange={e => void take(e.target.files?.[0])} /><button type="button" className="sa-ghost px-3 py-1.5 text-[11px]" onClick={() => input.current?.click()}>Choose image</button><button type="button" className="sa-ghost px-3 py-1.5 text-[11px]" onClick={() => setEdit(defaultEdit())} disabled={!source}>Reset edits</button><button type="button" className="sa-ghost px-3 py-1.5 text-[11px]" onClick={() => setGrid(v => !v)} disabled={!image}>{grid ? 'Hide grid' : 'Show grid'}</button><span className="ml-auto text-[11px] uppercase tracking-[.12em] text-ui-faint">{busy ? 'Processing…' : bytes ? `${prettyBytes(bytes)} ready` : '512px square'}</span></div>
+          <div className="mt-3 flex flex-wrap items-center gap-2"><input ref={input} type="file" accept="image/*" hidden onChange={e => void take(e.target.files?.[0])} /><button type="button" className="sa-ghost px-3 py-1.5 text-[11px]" onClick={() => input.current?.click()}>Choose image</button><button type="button" className="sa-ghost px-3 py-1.5 text-[11px]" onClick={() => setEdit(defaultEdit())} disabled={!source}>Reset edits</button><button type="button" className="sa-ghost px-3 py-1.5 text-[11px]" onClick={() => setGrid(v => !v)} disabled={!image}>{grid ? 'Hide grid' : 'Show grid'}</button><span className="ml-auto text-[11px] uppercase tracking-[.12em] text-ui-faint">{busy ? 'Processing…' : bytes ? `${prettyBytes(bytes)} ready` : `${BANNER_SIZE}px square`}</span></div>
           <p className="mt-2 text-[11px] leading-relaxed text-ui-faint">Drag the crop to reposition it. Your wallet signs the exact edited bytes shown here.</p>
         </div>
         <div className="space-y-3">
@@ -133,7 +150,13 @@ export default function AdvertDialog({ seat, current, onSave, onClear, onClose, 
           caused it, not a screenful above the button you just pressed. */}
       <div className="shrink-0 border-t border-ui-line px-5 pb-5 pt-3.5 sm:px-6 sm:pb-6">
         {error && <p role="alert" className="mb-2.5 text-[11.5px] font-semibold text-[#B3261E]">{error}</p>}
-        <div className="flex gap-2"><button type="button" onClick={() => void save()} disabled={busy} className="sa-cta px-5 py-2 text-[11px] disabled:opacity-40">{busy ? 'Working…' : shared ? 'Sign and put it up' : 'Put it up'}</button>{current && <button type="button" onClick={() => { onClear(); onClose(); }} className="sa-ghost px-5 py-2 text-[11px]">Take it down</button>}</div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void save()} disabled={busy} className="sa-cta px-5 py-2 text-[11px] disabled:opacity-40">{busy ? 'Working…' : shared ? 'Sign and put it up' : 'Put it up'}</button>
+          {/* Only when there is an advert of the holder's own to take down.
+              It used to show over anything on the seat, the airline's house
+              adverts included, and pressing it there did nothing at all. */}
+          {onClear && <button type="button" onClick={() => void takeDown()} disabled={busy} className="sa-ghost px-5 py-2 text-[11px] disabled:opacity-40">Take it down</button>}
+        </div>
       </div>
     </div>
   </div>;

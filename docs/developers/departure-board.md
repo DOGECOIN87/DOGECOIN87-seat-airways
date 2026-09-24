@@ -6,7 +6,7 @@ description: The split-flap board at the top of the page — how it works and ho
 
 ![](../.gitbook/assets/departure-board.png)
 
-The headline at the top of the page is a split-flap board, drawn after the mechanical ones in terminals: black flaps, white condensed type, a split across the middle of every flap and a hinge pin at each end of it. Every character is a drum of flaps, and changing a letter turns the drum through **every** flap between the one showing and the one wanted — so the letters land at different times, and characters nobody asked for flick past on the way.
+The headline at the top of the page is a split-flap board, drawn after the mechanical ones in terminals: a split across the middle of every flap and a hinge pin at each end of it, painted in the site's own colours — navy flaps from the ground the hero sits on, white letters, and the site's blue along the top edge. Every character is a drum of flaps. Changing a word, each letter falls through the last few flaps before the one it wants, so you see the letters count up to it, and the columns land at different moments in a wave from left to right.
 
 ## What it says
 
@@ -40,7 +40,7 @@ export const BOARD_PHRASES: readonly (readonly string[])[] = [
 * **Each entry is the board's rows, top to bottom** — one line or two.
 * **The board is as wide as the longest line in the list**, so one long line shrinks every flap. Keep lines to **10 characters** or fewer to keep the letters big on a phone.
 * **The drums carry** A–Z, 0–9 and `+ - / : ( ) % . , ! ? & $ '`. Lower case is shown in capitals, and any other character comes up blank.
-* **The first entry is the home phrase.** The board boards it first, holds it twice as long, and shows only it to anybody whose device asks for reduced motion.
+* **The first entry is the home phrase.** The board boards it first and holds it twice as long.
 
 The heading screen readers hear stays _Hold more. Fly higher._ whatever the board shows. It is in `src/App.tsx`, if the home phrase ever changes.
 
@@ -49,17 +49,18 @@ The heading screen readers hear stays _Hold more. Fly higher._ whatever the boar
 | | |
 | --- | --- |
 | **On load** | It opens blank and boards the home phrase a moment after it comes into view. |
-| **Each flap** | About 64 ms, and each drum runs a few percent faster or slower than its neighbours, like real mechanisms. Columns start a beat apart, left to right. |
+| **Each flap** | About 120 ms — slow enough to see it fold, with a shadow thrown on the half below — and each drum runs a little faster or slower than its neighbours, like real mechanisms. |
+| **Each letter** | Falls through the last 4 to 9 flaps before its target, a different number for each, so a whole word lands in about a second and a half. Columns start a beat apart, left to right. |
 | **Between phrases** | 4 seconds once the last flap has landed — 8 for the home phrase. |
 | **Off screen, or in a background tab** | It finishes the turn in progress and waits. Nothing new is queued until it can be seen. |
-| **Reduced motion** | The home phrase, still. It never turns. |
+| **Reduced motion** | The words change on the same schedule, but the flaps do not turn — each phrase simply appears. On Android this is the **Remove animations** setting. |
 
-The timings are constants at the top of `src/components/SplitFlapBoard.tsx`: `FLIP_MS`, `HOLD_MS`, `HOME_HOLD_MS`, `STAGGER_MS`, `JITTER_MS`, `SETTLE_MS` and `INTRO_MS`. The order of the flaps on each drum is `DRUM`.
+The timings are constants at the top of `src/components/SplitFlapBoard.tsx`: `FLIP_MS`, `FLIPS_MIN` and `FLIPS_MAX`, `HOLD_MS`, `HOME_HOLD_MS`, `STAGGER_MS`, `JITTER_MS`, `SETTLE_MS` and `INTRO_MS`. The order of the flaps on each drum is `DRUM`.
 
 ## How it is built
 
 * **One animation loop.** Like the instruments, the board animates off DOM refs through a single `requestAnimationFrame` loop that runs only while flaps are turning — no React render per flap, and no loop at all between phrases.
 * **Sized from its own width.** Every measure — the flap, its letter, its hinge pins — comes from the board's width through CSS container units, so it scales as one object from a 320px phone to a wide screen, with no breakpoints.
 * **The typeface** is PT Sans Narrow Bold, loaded with the site's other fonts in `index.html`.
-* **The styles** are the _departure board_ block in `src/index.css`.
+* **The styles** are the _departure board_ block in `src/index.css`, and the colours are tokens at the top of it, on `.sa-board` — `--board-housing`, `--flap-upper`, `--flap-lower`, `--flap-ink` and the rest — so the palette changes in one place.
 * **Accessibility.** The board is hidden from assistive technology, because a heading that read out half a letter mid-turn would be worse than none; the heading's own text carries the words.

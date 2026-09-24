@@ -27,7 +27,7 @@ Your balance is merged into the seating the moment it is read, so you do not wai
 Connecting gives the site your **public address**, which is already public on the chain. It does not sign anything, move anything, or grant the site any permission over your funds.
 
 {% hint style="info" %}
-Two features ask for a signature later, and both are plain-text messages, never transactions: putting an advert on your seat, and signing in to the cabin directory. [Wallet safety](../safety/wallet-safety.md) shows both messages in full.
+A few features ask for a signature later, and every one is a plain-text message, never a transaction: putting an advert on your seat, taking it down, and signing in to the cabin directory. [Wallet safety](../safety/wallet-safety.md) shows each message in full.
 {% endhint %}
 
 ## Coming back

@@ -15,6 +15,7 @@ Base URL in production: `https://seat-airlines-banners.trashmarket.workers.dev`.
 | `GET /holding?address=<wallet>` | `{ balance, supply, share }` for one wallet |
 | `GET /banners` | The published wall: `{ "<wallet>": { image, alt, href? } }` |
 | `POST /banner` | Publish an advert — see below |
+| `DELETE /banner` | Take your own advert down — see below |
 | `GET /images/<key>` | Advert artwork, when it is stored in KV rather than R2 |
 | `GET /flight` | The crew's current flight controls |
 
@@ -66,6 +67,30 @@ It answers `{ "image": "<url of the stored artwork>" }`, or:
 | 413 | The image is over 512 KB |
 | 415 | The image is not a real JPEG, PNG or WebP |
 | 429 | Another publish from this wallet inside the last minute |
+
+## Taking an advert down
+
+`DELETE /banner` with `{ owner, key, issued, signature }`, where `key` is the stored name of the advert's artwork — the `banners/…` path its image URL ends in. The signature is over:
+
+```
+SEAT AIRLINES
+Take the advert off my seat.
+
+wallet: <owner>
+advert: <key>
+issued: <issued>
+```
+
+It answers `{ "ok": true }` and removes the advert from the wall, or:
+
+| Status | Why |
+| --- | --- |
+| 400 | Not JSON, a missing field, or a signature older than five minutes |
+| 401 | The signature does not match the wallet |
+| 404 | There is no advert up for this wallet. The body carries `"gone": true`, and the page treats this as done |
+| 409 | The advert up now is not the one the signature names |
+
+There is no holder check and no cooldown, and the artwork itself is left in place, since another wallet may be showing the same picture.
 
 ## The directory
 

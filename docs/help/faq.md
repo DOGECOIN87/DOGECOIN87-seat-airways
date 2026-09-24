@@ -100,9 +100,9 @@ The flight crew can take the controls for show, and everyone sees it at once. Th
 
 <details>
 
-<summary>I have never seen the Brace lamp lit. Is it broken?</summary>
+<summary>When does the Brace lamp light?</summary>
 
-No. Brace lights past 23° nose-down, and the steepest dive the market can produce is about 18°. See [The overhead panel and the PA](../how-it-flies/overhead-panel.md).
+Only in a near-total collapse: a five-minute fall of about 94% or more, which pitches the nose past 18° down. Oxygen comes first, at a fall of about 81%. See [The overhead panel and the PA](../how-it-flies/overhead-panel.md).
 
 </details>
 
@@ -110,7 +110,7 @@ No. Brace lights past 23° nose-down, and the steepest dive the market can produ
 
 <summary>Why does the board at the top keep changing?</summary>
 
-It is a split-flap departure board, and it turns through the airline's lines: _Hold more, fly higher_, _Take a seat_, _Network_, _Build_, _Relax_ and more. If your device is set to reduce motion, it shows _Hold more, fly higher_ and stays still.
+It is a split-flap departure board, and it turns through the airline's lines: _Hold more, fly higher_, _Take a seat_, _Network_, _Build_, _Relax_ and more. If your device is set to reduce motion — on Android, **Remove animations** — the words still change, but the flaps do not turn.
 
 </details>
 
@@ -128,7 +128,7 @@ If the PA said it went up _in this browser only_, the advert server could not be
 
 <summary>How do I remove or change my advert?</summary>
 
-Publish a new one to replace it. A published advert also comes down on its own if your wallet leaves the manifest.
+Open your seat on the wall. **Change your advert** publishes a new one in its place; **Take it down** removes it, after you sign a short message. A published advert also comes down on its own if your wallet leaves the manifest. See [Put an advert on your seat](../the-wall/put-an-advert-on-your-seat.md#changing-or-taking-one-down).
 
 </details>
 

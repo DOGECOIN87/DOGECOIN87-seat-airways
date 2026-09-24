@@ -12,7 +12,7 @@ Nothing on the site sends, swaps, approves or spends anything. Connecting a wall
 If a page claiming to be Seat Airlines asks you to **approve a transaction**, to sign something you cannot read, or for your **seed phrase** or **private key** — stop and reject it. That is not Seat Airlines, which never asks for any of them.
 {% endhint %}
 
-## The only two messages you will be asked to sign
+## The only three messages you will be asked to sign
 
 **1. Putting an advert on your seat** — every time you publish one:
 
@@ -25,7 +25,18 @@ image:  sha256:<fingerprint of the exact image>
 issued: <the time you pressed the button>
 ```
 
-**2. Signing in to the cabin directory** — once a day at most:
+**2. Taking your advert down** — when you press **Take it down**:
+
+```
+SEAT AIRLINES
+Take the advert off my seat.
+
+wallet: <your address>
+advert: <the stored name of that advert's image>
+issued: <the time you pressed the button>
+```
+
+**3. Signing in to the cabin directory** — once a day at most:
 
 ```
 SEAT AIRLINES
@@ -38,7 +49,7 @@ wallet: <your address>
 issued: <the time you pressed the button>
 ```
 
-Both are checked by the server, and both expire: a signature more than five minutes old is refused. A directory sign-in can be used **once** — a copy of it cannot open a second session — and an advert signature covers **one exact image**, so it cannot be reused to put up a different picture.
+All three are checked by the server, and all three expire: a signature more than five minutes old is refused. A directory sign-in can be used **once** — a copy of it cannot open a second session. An advert signature covers **one exact image**, so it cannot be reused to put up a different picture, and a takedown names **one exact advert**, so it cannot take down one you put up later.
 
 ## Check you are in the right place
 

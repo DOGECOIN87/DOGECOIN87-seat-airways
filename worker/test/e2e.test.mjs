@@ -225,6 +225,64 @@ await check('an unknown route 404s', async () => {
   assert(res.status === 404, `status ${res.status}`);
 });
 
+/* ── Taking an advert down ────────────────────────────────────────────────
+   The advert published above is still up. A takedown is signed over text
+   naming the wallet and the advert's own storage key, so these prove the
+   route refuses every way of bending that, and then that a genuine one
+   really does take the advert off the wall. */
+
+const takedownChallenge = (who, key, issued) =>
+  ['SEAT AIRLINES', 'Take the advert off my seat.', '', `wallet: ${who}`, `advert: ${key}`, `issued: ${issued}`].join('\n');
+const takeDown = (body) =>
+  fetch(`${BASE}/banner`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json', origin: ORIGIN },
+    body: JSON.stringify(body),
+  });
+const publishedKey = async () => {
+  const wall = await (await fetch(`${BASE}/banners`, { headers: { origin: ORIGIN } })).json();
+  const url = wall[owner]?.image;
+  return url ? /(banners\/[^/?]+)/.exec(decodeURIComponent(new URL(url).pathname))?.[1] : undefined;
+};
+const takedownBody = async (key, issued = new Date().toISOString()) =>
+  ({ owner, key, issued, signature: await sign(takedownChallenge(owner, key, issued)) });
+
+await check('a takedown signed for a different advert is refused', async () => {
+  const res = await takeDown(await takedownBody('banners/00000000000000000000000000000000.jpg'));
+  assert(res.status === 409, `status ${res.status}, expected 409`);
+});
+
+await check('a forged takedown is refused', async () => {
+  const key = await publishedKey();
+  assert(key, 'no advert on the wall to take down');
+  const body = await takedownBody(key);
+  const other = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+  body.owner = toBase58(new Uint8Array(await crypto.subtle.exportKey('raw', other.publicKey)));
+  const res = await takeDown(body);
+  assert(res.status === 401, `status ${res.status}, expected 401`);
+});
+
+await check('a stale takedown is refused', async () => {
+  const res = await takeDown(await takedownBody(await publishedKey(), new Date(Date.now() - 20 * 60_000).toISOString()));
+  assert(res.status === 400, `status ${res.status}, expected 400`);
+});
+
+await check('a genuine takedown takes the advert off the wall', async () => {
+  const res = await takeDown(await takedownBody(await publishedKey()));
+  assert(res.status === 200, `status ${res.status}: ${await res.text()}`);
+  const wall = await (await fetch(`${BASE}/banners`, { headers: { origin: ORIGIN } })).json();
+  assert(!wall[owner], 'the advert is still on the wall');
+});
+
+await check('taking down an advert that is already gone is a 404 that says so', async () => {
+  const res = await takeDown(await takedownBody('banners/0123456789abcdef0123456789abcdef.jpg'));
+  assert(res.status === 404, `status ${res.status}, expected 404`);
+  /* The flag is what the page reads as done; the fallthrough 404 of a
+     Worker without this route does not carry it. */
+  const body = await res.json();
+  assert(body.gone === true, `no gone flag: ${JSON.stringify(body)}`);
+});
+
 /* ── The cabin directory ──────────────────────────────────────────────────
    Profiles and introductions, which used to be localStorage and so were
    never read by anybody else. These cases are the proof that they are now:

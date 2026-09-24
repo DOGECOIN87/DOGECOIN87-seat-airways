@@ -1,5 +1,5 @@
 import { memo, useState, type CSSProperties } from 'react';
-import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, type CabinRow, type ZoneKey } from '../content/cabin';
+import { CABIN_ZONES, CARGO_HOLD, LAVATORY_SEATS, seatCount, type CabinRow, type ZoneKey } from '../content/cabin';
 import { safeHref, type Banner, type BannerSet } from '../lib/banners';
 import { shortAddress, type Manifest, type ManifestEntry } from '../lib/manifest';
 import { formatShare, formatTokens } from '../lib/seatLadder';
@@ -208,7 +208,7 @@ const SeatMap = memo(function SeatMap({ manifest, banners, mine, canAdvertise, o
                     <h3>{zone.name}</h3>
                     {/* Keep "/ 08 seats" in one piece so a wrapped subtitle breaks after
                         the name, never before the slash or inside the count. */}
-                    <span className="sa-zone-head__visual">{zone.visual.replace(' / ', '\u00a0/ ').replace(/(\d+) /, '$1\u00a0')}</span>
+                    <span className="sa-zone-head__visual">{`${zone.visual}\u00a0/ ${String(seatCount(zone)).padStart(2, '0')}\u00a0seats`}</span>
                   </div>
                   {/* A word joiner after each dash, so a range ("Rows 1–2") never splits
                     across a line on a phone while the note itself may wrap. */}

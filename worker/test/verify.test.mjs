@@ -8,7 +8,9 @@
  */
 import { webcrypto as crypto } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { challenge, decodeDataUrl, imageType, readStoredBanner, sha256Hex, verifySignature } from '../dist-test/verify.js';
+import {
+  challenge, decodeDataUrl, imageType, readStoredBanner, sha256Hex, takedownChallenge, verifySignature,
+} from '../dist-test/verify.js';
 
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const toBase58 = (bytes) => {
@@ -86,6 +88,26 @@ await check('rejects a captured signature reused for OTHER artwork', async () =>
 await check('rejects a tampered timestamp', async () => {
   const moved = challenge(owner, hash, new Date(Date.now() + 60_000).toISOString());
   assert.equal(await verifySignature(owner, moved, signature), false);
+});
+
+/* Taking an advert down is signed over text that names the advert, so one
+   signature removes one advert and nothing published after it. */
+const advert = 'banners/0123456789abcdef0123456789abcdef.webp';
+const takedown = takedownChallenge(owner, advert, issued);
+const takedownSignature = await sign(takedown);
+
+await check('accepts a genuine takedown', async () => {
+  assert.equal(await verifySignature(owner, takedown, takedownSignature), true);
+});
+
+await check('rejects a takedown replayed against a later advert', async () => {
+  const later = takedownChallenge(owner, 'banners/fedcba9876543210fedcba9876543210.webp', issued);
+  assert.equal(await verifySignature(owner, later, takedownSignature), false);
+});
+
+await check('a publish signature cannot take an advert down', async () => {
+  // The two texts say different things, so neither signs for the other.
+  assert.equal(await verifySignature(owner, takedown, signature), false);
 });
 
 await check('rejects malformed base58', async () => {
