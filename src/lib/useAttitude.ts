@@ -38,6 +38,38 @@ export interface Attitude {
 
 export type ApplyAttitude = (a: Attitude, tick: FlightTick | null) => void;
 
+/* ── The autopilot's turns ─────────────────────────────────────────────────
+   An airliner in cruise does not fly a ruler-straight line forever: every
+   so often it banks gently onto a new heading, holds it, and rolls level.
+   That is what this schedule is: level, a gentle turn right, level, a
+   gentle turn left, and round again. About 25 degrees of heading each
+   time, at a bank a passenger would barely spill a drink in.
+
+   It is read off the wall clock rather than a per-view timer, so the
+   cockpit, the cabin windows and the exterior camera all turn together,
+   and it rides on top of whatever the market is doing to the bank. */
+const TURN_CYCLE_S = 72;
+/** Degrees of bank at the top of a turn. */
+const TURN_BANK = 8;
+/** Degrees of heading a second, per degree of autopilot bank. */
+const TURN_RATE = 0.22;
+
+const smooth = (t: number) => t * t * (3 - 2 * t);
+
+/** The autopilot's bank, in degrees, at a moment on the wall clock. */
+export function autopilotBank(nowMs: number): number {
+  const s = ((nowMs / 1000) % TURN_CYCLE_S + TURN_CYCLE_S) % TURN_CYCLE_S;
+  // One turn: four seconds to roll in, ten held, four to roll out.
+  const turn = (start: number) => {
+    const t = s - start;
+    if (t < 0 || t > 18) return 0;
+    if (t < 4) return smooth(t / 4);
+    if (t < 14) return 1;
+    return smooth(1 - (t - 14) / 4);
+  };
+  return TURN_BANK * (turn(14) - turn(50));
+}
+
 export function useAttitude(
   feed: FlightFeed,
   apply: ApplyAttitude,
@@ -100,6 +132,11 @@ export function useAttitude(
        only thing that moves is the world going calmly past — steady,
        constant-rate, and the entire point of the scene. */
     let skip = false;
+    /* The market's bank and the autopilot's are kept apart: the market's is
+       eased, the autopilot's is already smooth, and each turns the heading
+       at its own rate. */
+    let marketBank = 0;
+    let autoHeading = 0;
 
     const frame = (now: number) => {
       if (document.visibilityState === 'hidden') return;
@@ -107,14 +144,20 @@ export function useAttitude(
       if (reduced && (skip = !skip)) return;
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
+      const auto = autopilotBank(Date.now());
+      autoHeading += auto * TURN_RATE * dt;
       if (reduced) {
+        /* The turns still happen — the flight still goes somewhere — but
+           flat: the heading swings round with no roll at all. */
         Object.assign(shown, target, { bank: 0, roll: rollTo.current });
+        shown.heading = (target.heading + autoHeading + 3600) % 360;
       } else {
         // Frame-rate independent easing, so 60Hz and 120Hz settle alike and a
         // backgrounded tab does not snap when it returns.
         const k = 1 - Math.exp(-4.5 * dt);
         shown.pitch += (target.pitch - shown.pitch) * k;
-        shown.bank += (target.bank - shown.bank) * k;
+        marketBank += (target.bank - marketBank) * k;
+        shown.bank = marketBank + auto;
         shown.speed += (target.speed - shown.speed) * k;
         shown.alt += (target.alt - shown.alt) * k;
         shown.vs += (target.vs - shown.vs) * k;
@@ -124,7 +167,7 @@ export function useAttitude(
            so a barrel roll is a roll rather than a jump cut. */
         shown.roll += (rollTo.current - shown.roll) * (1 - Math.exp(-3.2 * dt));
         // Banking turns the aircraft, so the compass actually goes somewhere.
-        shown.heading = (shown.heading + shown.bank * dt * 0.9 + 360) % 360;
+        shown.heading = (shown.heading + marketBank * dt * 0.9 + auto * TURN_RATE * dt + 360) % 360;
       }
       applyRef.current(shown, latest);
     };

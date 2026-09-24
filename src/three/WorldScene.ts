@@ -843,12 +843,15 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const groundSpeed = THREE.MathUtils.clamp(height * V_OVER_H, SPEED_FLOOR, SPEED_CAP);
-    /* Signs matter once the speed is visible: the nose points down −z, so
-       the world must flow toward +z — nose to tail. The old direction was
-       imperceptible at 18 m/s and plainly tail-first the moment the drift
-       became readable. */
-    shift.x += groundSpeed * dt;
-    shift.z += groundSpeed * 0.72 * dt;
+    /* Nose to tail, whatever the heading. The aircraft is yawed by −heading,
+       so its nose points along (sin h, 0, −cos h); the texture offsets and
+       the cloud wrap below move features by −Δshift.x in x and +Δshift.z in
+       z, so these signs send the ground the opposite way to the nose. Held
+       fixed to the world instead, the flow only stayed nose-to-tail while
+       the heading did — and the aircraft turns now, on purpose. */
+    const hdg = THREE.MathUtils.degToRad(a.heading);
+    shift.x += groundSpeed * Math.sin(hdg) * dt;
+    shift.z += groundSpeed * Math.cos(hdg) * dt;
 
     /* The ground is one repeating plane, so flying over it is an offset. */
     const map = groundMat.map;

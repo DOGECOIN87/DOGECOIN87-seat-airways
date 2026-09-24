@@ -884,6 +884,7 @@ export default function App() {
           ══════════════════════════════════════════════════════════════ */}
       <footer className="sa-footer">
         <div className="mx-auto max-w-[94rem] px-5 sm:px-8">
+          <div className="sa-footer__card">
           <div className="sa-close">
             <Mark size={40} />
             <p className="sa-close__line">Hold more. Fly higher.</p>
@@ -911,6 +912,7 @@ export default function App() {
           <div className="sa-footer__bar">
             <span>Seat Airlines · SA350 · Nonstop</span>
             <span>Your bag is your seat</span>
+          </div>
           </div>
         </div>
       </footer>
