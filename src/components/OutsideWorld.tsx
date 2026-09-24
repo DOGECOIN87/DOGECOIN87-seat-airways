@@ -28,6 +28,12 @@ interface OutsideWorldProps {
   band: BandState;
   /** Where the horizon sits, in the parent's coordinates, at zero pitch. */
   horizonY: number;
+  /**
+   * How much of the ground below is open water, 0–1, from the shared biome
+   * clock — so this window crosses the coast at the same moment as the 3D
+   * scene beside it.
+   */
+  ocean?: number;
   /** Half-width the scene must still cover when banked hard over. */
   spread?: number;
   /**
@@ -61,8 +67,14 @@ function seeded(seed: number) {
  */
 const groundY = (horizonY: number, t: number) => horizonY + 1250 * t ** 2.3;
 
+/* Less motion, not a parked aeroplane: the sweep is the scene's one honest
+   movement, so the preference slows it well down rather than stopping it. */
+const CALM =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
-  ({ idPrefix, sky, band, horizonY, spread = 1400, driftSeconds = 19 }, ref) => {
+  ({ idPrefix, sky, band, horizonY, ocean = 0, spread = 1400, driftSeconds = 19 }, ref) => {
     const p = sky.palette;
     const w = spread * 2;
     const id = (name: string) => `${idPrefix}-${name}`;
@@ -118,7 +130,7 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
          Crowded toward the horizon, where the eye reads the convergence. */
       const depth = (j: number) => 0.012 + (1 - 0.012) * (j / ROWS) ** 1.8;
 
-      interface Cell { d: string; fill: string; o: number }
+      interface Cell { d: string; fill: string; sea: string; o: number }
       const cells: Cell[] = [];
 
       for (let j = 0; j < ROWS; j++) {
@@ -140,6 +152,15 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
                   : roll > 0.46 ? '#4F6B41'
                     : roll > 0.24 ? '#8A7C4E'
                       : '#3F5A3A',
+            /* The same cell over open water: swell and current instead of
+               pasture and plough. One bright band in eight is a current
+               line, which is what gives the sea a direction to move in. */
+            sea:
+              roll > 0.94 ? '#4E93B8'
+                : roll > 0.72 ? '#2E6285'
+                  : roll > 0.46 ? '#27567A'
+                    : roll > 0.24 ? '#305F82'
+                      : '#234E70',
             o: 0.55 + rand() * 0.4,
           };
         });
@@ -155,6 +176,7 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
           cells.push({
             d: `M${xa.toFixed(1)} ${y0.toFixed(1)} L${xb.toFixed(1)} ${y0.toFixed(1)} L${xc.toFixed(1)} ${y1.toFixed(1)} L${xd.toFixed(1)} ${y1.toFixed(1)} Z`,
             fill: q.fill,
+            sea: q.sea,
             o: q.o,
           });
         }
@@ -259,10 +281,12 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
       () =>
         ({
           transformOrigin: `0px ${horizonY}px`,
-          animationDuration: `${driftSeconds}s`,
+          animationDuration: `${driftSeconds * (CALM ? 2.6 : 1)}s`,
         }) as CSSProperties,
       [horizonY, driftSeconds],
     );
+
+    const atSea = ocean >= 0.5;
 
     const sunX = sky.sunX * spread * 0.55;
     const inAtmosphere = band.band === 'atmosphere';
@@ -437,17 +461,23 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
                   <g key={offset} className="sa-sweep" style={sweepStyle}>
                    <g transform={`translate(${offset} 0)`}>
                   {cities.map((c, i) => {
+                    /* Over the sea a town becomes a ship: one light, maybe
+                       two, and no glow over it — most of them gone entirely,
+                       because the dark is the point of a night crossing. */
+                    if (atSea && i % 3 !== 0) return null;
                     const rand = seeded(c.seed);
                     return (
                       <g key={i}>
-                        <ellipse cx={c.cx} cy={c.cy} rx={c.r * 1.6} ry={c.r * 0.44} fill="#FFCE7A" opacity="0.12" />
-                        {Array.from({ length: c.n }, (_, k) => (
+                        {!atSea && (
+                          <ellipse cx={c.cx} cy={c.cy} rx={c.r * 1.6} ry={c.r * 0.44} fill="#FFCE7A" opacity="0.12" />
+                        )}
+                        {Array.from({ length: atSea ? 1 + (c.n % 2) : c.n }, (_, k) => (
                           <circle
                             key={k}
-                            cx={c.cx + (rand() - 0.5) * c.r * 2.4}
-                            cy={c.cy + (rand() - 0.5) * c.r * 0.6}
-                            r={0.9 + rand() * 1.8}
-                            fill={rand() > 0.75 ? '#BFE0FF' : '#FFD79A'}
+                            cx={c.cx + (rand() - 0.5) * c.r * (atSea ? 0.4 : 2.4)}
+                            cy={c.cy + (rand() - 0.5) * c.r * (atSea ? 0.1 : 0.6)}
+                            r={atSea ? 1 + rand() : 0.9 + rand() * 1.8}
+                            fill={atSea ? '#DCEBFF' : rand() > 0.75 ? '#BFE0FF' : '#FFD79A'}
                             opacity={0.5 + rand() * 0.5}
                           />
                         ))}
@@ -459,13 +489,15 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
                  ))}
                 </g>
               ) : (
-                /* By day it is fields and water, going past. */
+                /* By day it is fields — or, over the sea legs, swell — going
+                   past. The cells are the same perspective grid either way;
+                   only their colours cross the coast, on a slow dissolve. */
                 <g clipPath={`url(#${id('wedge')})`}>
                   <g className="sa-sweep" style={sweepStyle}>
                     {terrain.cells.map((c, i) => (
-                      <path key={i} d={c.d} fill={c.fill} opacity={c.o} />
+                      <path key={i} className="sa-outside-cell" d={c.d} fill={atSea ? c.sea : c.fill} opacity={c.o} />
                     ))}
-                    <g stroke="#2A3D22" strokeWidth="1.6" opacity="0.32" fill="none">
+                    <g className="sa-outside-cell" stroke={atSea ? '#BFE2EE' : '#2A3D22'} strokeWidth="1.6" opacity={atSea ? 0.15 : 0.32} fill="none">
                       {terrain.hedges.map((d, i) => (
                         <path key={i} d={d} />
                       ))}
@@ -473,6 +505,17 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
                   </g>
                 </g>
               )}
+
+              {/* The sea colours the air's floor as well as the cells. */}
+              <rect
+                className="sa-outside-cell"
+                x={-spread}
+                y={horizonY}
+                width={w}
+                height="1300"
+                fill={night ? '#0A1A2C' : '#1E4A69'}
+                opacity={ocean * (night ? 0.6 : 0.45)}
+              />
 
               {/* Distance, laid over the ground: far fields sink into the
                   colour of the air, near ones keep their contrast. */}

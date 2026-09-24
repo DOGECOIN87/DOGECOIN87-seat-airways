@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
 import OutsideWorld from './OutsideWorld';
+import { useBiome } from '../lib/useBiome';
 import type { FlightFeed } from '../lib/flightFeed';
 import type { BandState } from '../lib/flightModel';
 import { formatChange, formatFeet } from '../lib/flightModel';
@@ -68,6 +69,7 @@ const Passenger = ({ x, y, s, i }: { x: number; y: number; s: number; i: number 
 );
 
 const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewProps) => {
+  const biome = useBiome();
   const world = useRef<SVGGElement>(null);
   const screenAlt = useRef<SVGTextElement>(null);
   const screenChg = useRef<SVGTextElement>(null);
@@ -226,7 +228,7 @@ const CabinView = ({ feed, sky, band, seat, zone, lavatory, taken }: CabinViewPr
           <rect x={f.cx - f.rx - 14} y={f.cy - f.ry - 14} width={f.rx * 2 + 28} height={f.ry * 2 + 28} rx={f.rx * 0.64} fill="#0B0C0F" />
           <g clipPath="url(#cv-pane)">
             <g transform={`translate(${f.cx} 0)`}>
-              <OutsideWorld ref={world} idPrefix="cv" sky={sky} band={band} horizonY={f.cy} spread={1000} driftSeconds={78} />
+              <OutsideWorld ref={world} idPrefix="cv" sky={sky} band={band} ocean={biome.ocean} horizonY={f.cy} spread={1000} driftSeconds={78} />
             </g>
             {(exitRow || zone.key === 'business') && (
               <g>

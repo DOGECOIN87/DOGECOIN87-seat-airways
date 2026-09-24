@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { cloudTexture, earthTexture, farmlandTextures, moonTexture, radialTexture } from './terrain';
+import { cloudTexture, earthTexture, farmlandTextures, moonTexture, oceanTextures, radialTexture } from './terrain';
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
+import { biomeAt } from '../lib/biome';
 import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
 import { CABIN, createCabin, rowZ } from './cabin';
 import { createAirframe } from './airframe';
@@ -111,15 +112,54 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const cabin = createCabin();
   aircraft.add(cabin.group);
   aircraft.add(camera);
-  const cabinLamps: Array<{ light: THREE.PointLight; intensity: number }> = [];
+  const cabinLamps: Array<{ light: THREE.PointLight; intensity: number; colour: THREE.Color }> = [];
   cabin.group.traverse(object => {
-    if (object instanceof THREE.PointLight) cabinLamps.push({ light: object, intensity: object.intensity });
+    if (object instanceof THREE.PointLight) {
+      cabinLamps.push({ light: object, intensity: object.intensity, colour: object.color.clone() });
+    }
   });
 
   /* The aeroplane itself, for when the camera is outside it. */
   const airframe = createAirframe();
   airframe.group.visible = false;
   aircraft.add(airframe.group);
+
+  /* ── Environment ──────────────────────────────────────────────────────
+     One soft equirectangular gradient — zenith blue through a bright horizon
+     to a ground tone — prefiltered once at startup. It is not the live sky
+     and does not try to be: what the physical materials want is *something*
+     plausible to mirror, so the fuselage carries a moving sheen and the sea
+     reflects a sky, for the price of a 64-pixel texture. Applied to the
+     airframe and the water explicitly rather than to the whole scene, so
+     the cabin's carefully balanced interior light is left alone. */
+  const envCanvas = document.createElement('canvas');
+  envCanvas.width = 64;
+  envCanvas.height = 32;
+  const eg = envCanvas.getContext('2d') as CanvasRenderingContext2D;
+  const egrad = eg.createLinearGradient(0, 0, 0, 32);
+  egrad.addColorStop(0, '#4f88cf');
+  egrad.addColorStop(0.48, '#cfe2f2');
+  egrad.addColorStop(0.55, '#e4ecf1');
+  egrad.addColorStop(1, '#5c6653');
+  eg.fillStyle = egrad;
+  eg.fillRect(0, 0, 64, 32);
+  const envTex = new THREE.CanvasTexture(envCanvas);
+  envTex.mapping = THREE.EquirectangularReflectionMapping;
+  envTex.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envRT = pmrem.fromEquirectangular(envTex);
+  envTex.dispose();
+  pmrem.dispose();
+  airframe.group.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] | undefined;
+    for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+      if ('envMapIntensity' in mat) {
+        mat.envMap = envRT.texture;
+        mat.envMapIntensity = 0.55;
+        mat.needsUpdate = true;
+      }
+    }
+  });
 
   /* Cabin lighting. A tube blocks the sun, and there is no bounce in here. */
   const cabinLight = new THREE.PointLight(0xffd8a8, 11, 10, 2);
@@ -376,6 +416,57 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   water.rotation.x = -Math.PI / 2;
   water.visible = false;
   scene.add(water);
+  waterMat.envMap = envRT.texture;
+  waterMat.envMapIntensity = 0.7;
+
+  /* ── The sea ──────────────────────────────────────────────────────────
+     Every few minutes the flight crosses a coast (`biomeAt`, shared with the
+     SVG views, so every window agrees). Two extra surfaces do the work, and
+     both stand down when they are not needed: `sea` is the crossfade — open
+     water dissolving in over the farmland as the coast goes by — and `sheen`
+     is the glint, a sparkle field sliding just above the water at its own
+     rate, which is the whole optical recipe for a liquid surface. Once the
+     crossing completes, the plate itself takes the ocean maps and drops back
+     to one opaque plane, so steady cruise over water costs what cruise over
+     land does. */
+  const ocean = oceanTextures();
+  ocean.day.repeat.set(40, 40);
+  ocean.night.repeat.set(40, 40);
+  ocean.glint.repeat.set(52, 52);
+  const seaMat = new THREE.MeshStandardMaterial({
+    map: ocean.day,
+    emissive: new THREE.Color(0xffffff),
+    emissiveMap: ocean.night,
+    emissiveIntensity: 0,
+    roughness: 0.6,
+    metalness: 0.05,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  const sea = new THREE.Mesh(groundGeometry, seaMat);
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.y = 0.02;
+  sea.visible = false;
+  scene.add(sea);
+  const sheenMat = new THREE.MeshPhysicalMaterial({
+    map: ocean.glint,
+    color: 0xcfeaf4,
+    roughness: 0.16,
+    metalness: 0.1,
+    clearcoat: 0.7,
+    clearcoatRoughness: 0.14,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    envMap: envRT.texture,
+    envMapIntensity: 0.8,
+  });
+  const sheen = new THREE.Mesh(groundGeometry, sheenMat);
+  sheen.rotation.x = -Math.PI / 2;
+  sheen.position.y = 0.035;
+  sheen.visible = false;
+  scene.add(sheen);
 
   /* ── The limb ─────────────────────────────────────────────────────────
      A flat plate is a fair model of the ground until you can see far enough
@@ -488,6 +579,11 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const groundTint = new THREE.Color();
   const WHITE = new THREE.Color(0xffffff);
   const EARTH = new THREE.Color(0x6f6a58);
+  const SEA_TINT = new THREE.Color(0x27506b);
+  const SEA_BOUNCE = new THREE.Color(0x9fc3d4);
+  const LAND_BOUNCE = new THREE.Color(0xdcd3bd);
+  const MOOD_BLUE = new THREE.Color(0x8fb8e8);
+  const CABIN_WARM = new THREE.Color(0xffd8a8);
   const cloudTint = new THREE.Color();
   const cloudLit = new THREE.Color();
   const NEUTRAL_CLOUD = new THREE.Color(0xb9c2cf);
@@ -610,22 +706,25 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     /* Ground: farmland below, regolith at the moon, and haze that thickens
        with distance so the horizon dissolves rather than ending. Above the
        atmosphere the plate gives way to the limb, which is a sphere. */
+    /* Which country is under the aircraft. The moon overrules the coast. */
+    const seaBlend = onMoon ? 0 : biomeAt(Date.now()).ocean;
     const waterFade = band.band === 'atmosphere'
-      ? 1 - THREE.MathUtils.smoothstep(height, 1450, 2150)
+      ? (1 - THREE.MathUtils.smoothstep(height, 1450, 2150)) * (1 - seaBlend)
       : 0;
     waterMat.opacity = waterFade;
     water.visible = waterFade > 0.01;
-    if (onMoon && groundMat.map !== moon) {
-      groundMat.map = moon;
-      // Nobody is home up here.
-      groundMat.emissiveMap = null;
+    /* The plate takes whichever map the moment calls for; the crossfade mesh
+       only exists while the coast is actually going by. */
+    const plateMap = onMoon ? moon : seaBlend >= 0.999 ? ocean.day : farmland.day;
+    if (groundMat.map !== plateMap) {
+      groundMat.map = plateMap;
+      // Nobody is home on the moon; ships are, at sea.
+      groundMat.emissiveMap = onMoon ? null : seaBlend >= 0.999 ? ocean.night : farmland.night;
+      groundMat.roughness = plateMap === ocean.day ? 0.62 : 1;
       groundMat.needsUpdate = true;
     }
-    if (!onMoon && groundMat.map !== farmland.day) {
-      groundMat.map = farmland.day;
-      groundMat.emissiveMap = farmland.night;
-      groundMat.needsUpdate = true;
-    }
+    sea.visible = !onMoon && !inSpace && seaBlend > 0.001 && seaBlend < 0.999;
+    seaMat.opacity = seaBlend;
     /* Lights up through dusk, out by mid-morning. Civil twilight is about
        six degrees below the horizon, so the ramp is hung either side of
        that rather than on sunset itself — which is when you can first see a
@@ -633,6 +732,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     groundMat.emissiveIntensity = onMoon
       ? 0
       : 1 - THREE.MathUtils.smoothstep(skyState.elevation, -8, 3);
+    seaMat.emissiveIntensity = groundMat.emissiveIntensity;
     ground.visible = !inSpace;
     limb.visible = limbAir.visible = inSpace;
     if (inSpace) {
@@ -722,6 +822,8 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
          difference between golden hour and a colour cast. */
       skyTint.setStyle(skyState.palette.glow).lerp(WHITE, 0.52);
       groundTint.setStyle(skyState.palette.horizon).lerp(EARTH, 0.58);
+      // Skylight bounced off open water is bluer than off stubble.
+      if (seaBlend > 0) groundTint.lerp(SEA_TINT, seaBlend * 0.6);
       ambient.color.copy(skyTint);
       ambient.groundColor.copy(groundTint);
       ambient.intensity = overcast ? 0.95 : lerp(0.8, 0.46, day);
@@ -745,6 +847,22 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       /* The emissive map has to travel with the diffuse one to the pixel.
          Drifting them apart slides every town's lights off the town. */
       groundMat.emissiveMap?.offset.copy(map.offset);
+      /* The sea rides the same shift — the coast must not slide against the
+         fields while both are on screen mid-crossfade. */
+      ocean.day.offset.copy(map.offset);
+      ocean.night.offset.copy(map.offset);
+      /* The glint slides a touch faster than the water it rides — two layers
+         at two rates being the whole recipe for "liquid" — plus a slow
+         breathing wobble so the sparkle lives even when the camera holds
+         still. */
+      const glintTile = GROUND / ocean.glint.repeat.x;
+      ocean.glint.offset.set(
+        (shift.x * 1.07) / glintTile + Math.sin(now * 0.00037) * 0.0006,
+        (shift.z * 1.07) / glintTile + Math.cos(now * 0.00031) * 0.0006,
+      );
+      const sheenOn = seaBlend > 0.02 && !onMoon && !inSpace;
+      sheen.visible = sheenOn;
+      if (sheenOn) sheenMat.opacity = 0.4 * seaBlend * (0.2 + 0.8 * day);
     }
 
     /* The cloud deck sits at a fixed altitude; the aircraft climbs past it. */
@@ -819,6 +937,19 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
        scene — go over on exactly the same curve. */
     airframe.group.rotation.z = THREE.MathUtils.degToRad(pose.exterior ? a.roll : 0);
 
+    /* Fans, beacon, contrails. The contrail is the air's decision: none in
+       the warm air low down, thin ones near the top of the weather, solid
+       ribbons in the cold above the deck, thinning out again as the air
+       itself runs out. */
+    const contrail = onMoon
+      ? 0
+      : band.band === 'above-clouds'
+        ? 1
+        : inSpace
+          ? Math.max(0, 1 - band.progress * 2.4) * 0.7
+          : THREE.MathUtils.smoothstep(height, 2100, 2600) * 0.5;
+    airframe.update(dt, contrail);
+
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
       THREE.MathUtils.degToRad(a.pitch),
@@ -866,6 +997,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       // without the bounce the underside goes black and the aeroplane reads as
       // a sticker rather than a solid.
       bounce.intensity = onMoon || inSpace ? 0.08 : overcast ? 0.85 : 0.5;
+      bounce.color.copy(LAND_BOUNCE).lerp(SEA_BOUNCE, seaBlend);
       bounce.visible = true;
       cabin.group.visible = false;
       cabinLight.visible = false;
@@ -900,7 +1032,21 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       cabin.group.visible = pose.seatIndex !== null;
       cabinLight.visible = pose.seatIndex !== null;
       cabinLight.intensity = 11 * interiorLightLevel;
-      cabinLamps.forEach(({ light, intensity }) => { light.intensity = intensity * interiorLightLevel; });
+      /* Mood lighting: after dark the cove washes toward the airline's calm
+         blue, the way a night flight's cabin actually looks, and warms back
+         up through dawn. */
+      const nightMood = skyState.phase === 'night'
+        ? 1
+        : skyState.phase === 'astronomical'
+          ? 0.7
+          : skyState.phase === 'dusk' || skyState.phase === 'dawn'
+            ? 0.35
+            : 0;
+      cabinLight.color.copy(CABIN_WARM).lerp(MOOD_BLUE, nightMood * 0.5);
+      cabinLamps.forEach(({ light, intensity, colour }) => {
+        light.intensity = intensity * interiorLightLevel;
+        light.color.copy(colour).lerp(MOOD_BLUE, nightMood * 0.5);
+      });
       cabinFill.intensity = pose.seatIndex !== null ? 0.45 * interiorLightLevel : 0;
       cabinAmbient.intensity = pose.seatIndex !== null ? 0.32 * interiorLightLevel : 0;
     }
@@ -983,6 +1129,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     airframe.dispose();
     farmland.day.dispose();
     farmland.night.dispose();
+    ocean.day.dispose();
+    ocean.night.dispose();
+    ocean.glint.dispose();
+    seaMat.dispose();
+    sheenMat.dispose();
+    envRT.dispose();
     moon.dispose();
     puff.dispose();
     ground.geometry.dispose();

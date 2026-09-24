@@ -1058,6 +1058,12 @@ html {
   will-change: transform;
 }
 
+/* The coast, crossed on a dissolve: the ground cells swap between their land
+   and sea colours a couple of times a cycle, and the swap should read as an
+   approach rather than a repaint. */
+.sa-outside-cell { transition: fill 2.4s ease, stroke 2.4s ease, opacity 2.4s ease; }
+@media (prefers-reduced-motion: reduce) { .sa-outside-cell { transition: none; } }
+
 /* Airframe shake — reserved for a move big enough to earn it. */
 @keyframes sd-shake {
   0%, 100% { transform: translate(0, 0); }
@@ -1127,7 +1133,12 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .sd-shake, .sa-pulse-glow, .sa-live, .sa-shine::after, .sa-sweep, .sa-ground__pattern::before, .sa-view-loading__mark { animation: none !important; }
+  /* The ground sweep is deliberately NOT in this list. It is the one thing on
+     the page that says the aircraft is flying — stopping it does not reduce
+     motion, it parks the aeroplane, which is what this rule used to do. The
+     views slow it down instead (see OutsideWorld), the way the 3D scene keeps
+     gliding with its sway and banking stripped out. */
+  .sd-shake, .sa-pulse-glow, .sa-live, .sa-shine::after, .sa-ground__pattern::before, .sa-view-loading__mark { animation: none !important; }
 }
 
 /* ============================================================

@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
 import OutsideWorld from './OutsideWorld';
+import { useBiome } from '../lib/useBiome';
 import type { FlightFeed } from '../lib/flightFeed';
 import type { BandState } from '../lib/flightModel';
 import type { SkyState } from '../lib/sky';
@@ -79,6 +80,7 @@ interface CabinSideViewProps {
 }
 
 const CabinSideView = ({ feed, sky, band, seat, zone, facing, taken }: CabinSideViewProps) => {
+  const biome = useBiome();
   const world = useRef<SVGGElement>(null);
   const altRead = useRef<SVGTextElement>(null);
 
@@ -177,7 +179,7 @@ const CabinSideView = ({ feed, sky, band, seat, zone, facing, taken }: CabinSide
             />
             <g clipPath="url(#sv-pane)">
               <g transform={`translate(${win.cx} 0)`}>
-                <OutsideWorld ref={world} idPrefix="sv" sky={sky} band={band} horizonY={win.cy} spread={900} />
+                <OutsideWorld ref={world} idPrefix="sv" sky={sky} band={band} ocean={biome.ocean} horizonY={win.cy} spread={900} />
               </g>
               <rect
                 x={win.cx - win.rx}

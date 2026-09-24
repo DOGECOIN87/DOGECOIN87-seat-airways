@@ -82,52 +82,52 @@ export function useAttitude(
     let raf = 0;
     let last = performance.now();
 
+    /* Reduced motion is not a frozen instrument — that mistake has been made
+       here twice now, in opposite directions.
+
+       Holding the first reading for the life of the page showed farmland
+       captioned "space". Redrawing a snapshot every 900 ms — the second
+       attempt — killed the one movement that makes the aircraft an aircraft:
+       between repaints the ground advanced two metres and the window read as
+       a photograph, which is exactly what the preference's owner reported as
+       broken. What the preference asks for is less *motion*: no swaying, no
+       banking, no eased bobbing of the horizon. It does not ask for a parked
+       aeroplane, any more than it asks a video to freeze.
+
+       So under reduced motion the loop still runs, at half rate: attitude
+       values snap to their targets instead of easing (no sway), bank is
+       pinned level and the hand-flown roll jumps rather than rolls, and the
+       only thing that moves is the world going calmly past — steady,
+       constant-rate, and the entire point of the scene. */
+    let skip = false;
+
     const frame = (now: number) => {
       if (document.visibilityState === 'hidden') return;
+      raf = requestAnimationFrame(frame);
+      if (reduced && (skip = !skip)) return;
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      // Frame-rate independent easing, so 60Hz and 120Hz settle alike and a
-      // backgrounded tab does not snap when it returns.
-      const k = 1 - Math.exp(-4.5 * dt);
-      shown.pitch += (target.pitch - shown.pitch) * k;
-      shown.bank += (target.bank - shown.bank) * k;
-      shown.speed += (target.speed - shown.speed) * k;
-      shown.alt += (target.alt - shown.alt) * k;
-      shown.vs += (target.vs - shown.vs) * k;
-      /* Read every frame rather than on a tick, because this one is not fed
-         by the market — it changes the moment somebody presses a switch.
-         Slower than the rest on purpose: half a turn takes about a second,
-         so a barrel roll is a roll rather than a jump cut. */
-      shown.roll += (rollTo.current - shown.roll) * (1 - Math.exp(-3.2 * dt));
-      // Banking turns the aircraft, so the compass actually goes somewhere.
-      shown.heading = (shown.heading + shown.bank * dt * 0.9 + 360) % 360;
-      applyRef.current(shown, latest);
-      raf = requestAnimationFrame(frame);
-    };
-
-    if (reduced) {
-      /* No loop and no easing — but the view still has to be true.
-      
-         Holding the very first reading for the life of the page was not
-         reduced motion, it was a frozen instrument: the altitude buttons moved
-         the aeroplane and the window never showed it, so a visitor who asks
-         for less motion was shown farmland captioned "space" and a market cap
-         from the moment the page loaded. What the preference asks for is no
-         *animation*, not no *information*. So values snap rather than ease,
-         nothing drifts on its own, and the picture is redrawn at a slow,
-         deliberate cadence — a readout that updates, not a scene in motion. */
-      const paint = () => {
+      if (reduced) {
         Object.assign(shown, target, { bank: 0, roll: rollTo.current });
-        applyRef.current(shown, latest);
-      };
-      const id = setTimeout(paint, 80);
-      const tick = setInterval(paint, 900);
-      return () => {
-        clearTimeout(id);
-        clearInterval(tick);
-        unsubscribe();
-      };
-    }
+      } else {
+        // Frame-rate independent easing, so 60Hz and 120Hz settle alike and a
+        // backgrounded tab does not snap when it returns.
+        const k = 1 - Math.exp(-4.5 * dt);
+        shown.pitch += (target.pitch - shown.pitch) * k;
+        shown.bank += (target.bank - shown.bank) * k;
+        shown.speed += (target.speed - shown.speed) * k;
+        shown.alt += (target.alt - shown.alt) * k;
+        shown.vs += (target.vs - shown.vs) * k;
+        /* Read every frame rather than on a tick, because this one is not fed
+           by the market — it changes the moment somebody presses a switch.
+           Slower than the rest on purpose: half a turn takes about a second,
+           so a barrel roll is a roll rather than a jump cut. */
+        shown.roll += (rollTo.current - shown.roll) * (1 - Math.exp(-3.2 * dt));
+        // Banking turns the aircraft, so the compass actually goes somewhere.
+        shown.heading = (shown.heading + shown.bank * dt * 0.9 + 360) % 360;
+      }
+      applyRef.current(shown, latest);
+    };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {

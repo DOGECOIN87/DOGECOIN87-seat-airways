@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
 import OutsideWorld from './OutsideWorld';
+import { useBiome } from '../lib/useBiome';
 import type { FlightFeed } from '../lib/flightFeed';
 import type { Annunciators } from '../lib/flightModel';
 import { formatChange, formatFeet, formatFeetShort, formatVerticalSpeed, phaseFor } from '../lib/flightModel';
@@ -96,6 +97,7 @@ interface FlightDeckProps {
 }
 
 const FlightDeck = ({ feed, lamps, sky, band, controls = HANDS_OFF }: FlightDeckProps) => {
+  const biome = useBiome();
   const world = useRef<SVGGElement>(null);
   const adi = useRef<SVGGElement>(null);
   const roll = useRef<SVGGElement>(null);
@@ -263,7 +265,7 @@ const FlightDeck = ({ feed, lamps, sky, band, controls = HANDS_OFF }: FlightDeck
         {/* ══ OUTSIDE ═══════════════════════════════════════════════════ */}
         <g clipPath="url(#fd-glass)">
           <g transform="translate(600 0)">
-            <OutsideWorld ref={world} idPrefix="fd" sky={sky} band={band} horizonY={GLASS_CY} spread={1400} driftSeconds={78} />
+            <OutsideWorld ref={world} idPrefix="fd" sky={sky} band={band} ocean={biome.ocean} horizonY={GLASS_CY} spread={1400} driftSeconds={78} />
           </g>
           <rect x="100" y={GLASS.top} width="1000" height={GLASS.bottom - GLASS.top} fill="#0A1424" opacity="0.10" />
           <path d={`M240 ${GLASS.bottom} L420 ${GLASS.top} L470 ${GLASS.top} L290 ${GLASS.bottom} Z`} fill="#ffffff" opacity="0.045" />

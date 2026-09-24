@@ -382,7 +382,12 @@ function pylonGeometry(): THREE.BufferGeometry {
 }
 
 /** One engine: rolled intake, fan, spinner, cowling and a shaped pylon. */
-function engine(mirror: number, mat: EngineMaterials, track: <T extends { dispose(): void }>(x: T) => T): THREE.Group {
+function engine(
+  mirror: number,
+  mat: EngineMaterials,
+  track: <T extends { dispose(): void }>(x: T) => T,
+  fans: THREE.Group[],
+): THREE.Group {
   const g = new THREE.Group();
   // Cylinder y becomes the aircraft's z. RadiusBottom is therefore the
   // forward (negative-z) intake, which must be the larger end.
@@ -409,6 +414,7 @@ function engine(mirror: number, mat: EngineMaterials, track: <T extends { dispos
 
   const fan = new THREE.Group();
   fan.position.z = -1.78;
+  fans.push(fan);
   const fanDisc = new THREE.Mesh(track(new THREE.CircleGeometry(0.92, 48)), mat.intake);
   fanDisc.rotation.y = Math.PI;
   fan.add(fanDisc);
@@ -660,7 +666,50 @@ export interface AirframeHandles {
   setRowsLit(isLit: (row: number) => boolean): void;
   /** Smoothly deploy the trailing-edge flaps from 0 (retracted) to 1. */
   setFlapDeployment(target: number): void;
+  /**
+   * Advance the parts of the aeroplane that live: the fans turn, the beacon
+   * flashes, and the contrails stream at `contrail` strength (0 where the
+   * air is too warm to hold one, 1 in the cold above the deck).
+   */
+  update(dt: number, contrail: number): void;
   dispose(): void;
+}
+
+/**
+ * A contrail's cross-tile: repeating lobes of vapour with the fade to clear
+ * air baked across the narrow axis. The fade *along* the trail cannot live
+ * in the texture — it scrolls, that is the point — so it is stepped by the
+ * segments that wear it.
+ */
+function contrailTexture(): THREE.CanvasTexture {
+  const w = 256, h = 64;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d') as CanvasRenderingContext2D;
+  let seed = 0xb5c0fbcf;
+  const rand = () => {
+    seed ^= seed << 13; seed >>>= 0;
+    seed ^= seed >> 17;
+    seed ^= seed << 5; seed >>>= 0;
+    return seed / 4294967296;
+  };
+  for (let i = 0; i < 42; i++) {
+    const x = rand() * w;
+    const y = h / 2 + (rand() - 0.5) * h * 0.34;
+    const r = 7 + rand() * 15;
+    for (const dx of [0, -w, w]) {
+      const grd = g.createRadialGradient(x + dx, y, 0, x + dx, y, r);
+      grd.addColorStop(0, `rgba(255,255,255,${0.16 + rand() * 0.2})`);
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x + dx, y, r, 0, Math.PI * 2); g.fill();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 export function createAirframe(): AirframeHandles {
@@ -668,6 +717,7 @@ export function createAirframe(): AirframeHandles {
   const dispose: (() => void)[] = [];
   const track = <T extends { dispose(): void }>(x: T) => (dispose.push(() => x.dispose()), x);
   const flapGroups: THREE.Group[] = [];
+  const fans: THREE.Group[] = [];
   let flapDeployment = 0;
 
   // Airline white is barely off-white and only gently glossy. A restrained
@@ -805,8 +855,45 @@ export function createAirframe(): AirframeHandles {
       spinner: spinnerMat,
       nozzle: nozzleMat,
       pylon: pylonMat,
-    }, track));
+    }, track, fans));
   }
+
+  /* ── Contrails ──────────────────────────────────────────────────────────
+     One per engine, streaming aft. The vapour texture repeats and scrolls —
+     which is what makes the trail the loudest speed cue in the frame — and
+     since a scrolling texture cannot also carry the fade to clear air along
+     its own length, the fade is stepped: a bright near segment off the
+     nozzle, a wide faint far one dissolving toward the horizon. */
+  const nearTex = track(contrailTexture());
+  const farTex = track(nearTex.clone());
+  const CONTRAIL: { z0: number; z1: number; w: number; o: number; tex: THREE.Texture; tiles: number }[] = [
+    { z0: 4.2, z1: 150, w: 1.5, o: 0.42, tex: nearTex, tiles: 4.5 },
+    { z0: 150, z1: 470, w: 3.8, o: 0.15, tex: farTex, tiles: 4 },
+  ];
+  const contrailMats = CONTRAIL.map((seg) => {
+    seg.tex.repeat.set(seg.tiles, 1);
+    return track(new THREE.MeshBasicMaterial({
+      map: seg.tex, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: true,
+    }));
+  });
+  for (const side of [1, -1]) {
+    for (const [i, seg] of CONTRAIL.entries()) {
+      const len = seg.z1 - seg.z0;
+      const geo = track(new THREE.PlaneGeometry(len, seg.w));
+      // Laid flat and turned to run aft, in the geometry rather than the
+      // mesh, so the mesh's own transform stays a plain position.
+      geo.rotateX(-Math.PI / 2);
+      geo.rotateY(Math.PI / 2);
+      const trail = new THREE.Mesh(geo, contrailMats[i]);
+      trail.position.set(6.6 * side, -2.3, WING.rootZ + WING.engineZ + seg.z0 + len / 2);
+      trail.renderOrder = 2;
+      group.add(trail);
+    }
+  }
+
+  /* The beacon's clock, and everything else update() advances. */
+  let lifeT = Math.random() * 10;
 
   /* The fin: the same panel, stood on its edge so its span axis is height. */
   const finPanel: Panel = {
@@ -956,6 +1043,26 @@ export function createAirframe(): AirframeHandles {
     for (const s of seats) windows.setColorAt(s.i, isLit(s.row) ? lit : dark);
     if (windows.instanceColor) windows.instanceColor.needsUpdate = true;
   };
+  const update = (dt: number, contrail: number) => {
+    lifeT += dt;
+    /* The fans. Slow enough not to strobe against the frame rate, fast
+       enough that the intake plainly holds a turning machine — and each
+       engine a hair off its neighbour's speed, which is true of real pairs
+       and is what keeps them from reading as mirrored copies. */
+    for (const [i, fan] of fans.entries()) fan.rotation.z -= dt * (13 + i * 0.9);
+    /* The anti-collision beacon: a double flash, then dark — the rhythm is
+       the recognisable part, not the brightness. */
+    const phase = lifeT % 1.3;
+    beaconLamp.emissiveIntensity = phase < 0.07 || (phase > 0.16 && phase < 0.22) ? 3.6 : 0.16;
+    /* The contrails stream aft at a fixed rate. Whether they exist at all is
+       the air's decision, passed in from the scene: none in the warm air
+       down low, solid ribbons in the cold above the deck. */
+    for (const [i, seg] of CONTRAIL.entries()) {
+      contrailMats[i].opacity = seg.o * contrail;
+      contrailMats[i].visible = contrail > 0.02;
+      seg.tex.offset.x += (dt * 74) / ((seg.z1 - seg.z0) / seg.tiles);
+    }
+  };
   const setFlapDeployment = (target: number) => {
     flapDeployment = THREE.MathUtils.lerp(flapDeployment, THREE.MathUtils.clamp(target, 0, 1), 0.14);
     // Flaps are detail, not a second attitude indicator: keep their response
@@ -968,6 +1075,7 @@ export function createAirframe(): AirframeHandles {
     group,
     setRowsLit,
     setFlapDeployment,
+    update,
     dispose: () => {
       dispose.forEach((d) => d());
       windows.dispose();

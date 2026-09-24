@@ -110,6 +110,22 @@ export function farmlandTextures(size = 2048): GroundTextures {
     g.fillStyle = greens[Math.floor(rand() * greens.length)];
     g.fillRect(f.x, f.y, f.w + 1, f.h + 1);
 
+    /* A field is not one flat colour: crops ripen unevenly, ground drains
+       unevenly, and from altitude that reads as a soft gradient across each
+       field rather than as noise. One corner-to-corner wash per field is the
+       cheapest thing that stops the patchwork reading as printed. */
+    const washed = g.createLinearGradient(f.x, f.y, f.x + f.w, f.y + f.h);
+    const wash = 0.05 + rand() * 0.07;
+    if (rand() > 0.5) {
+      washed.addColorStop(0, `rgba(255,244,214,${wash})`);
+      washed.addColorStop(1, `rgba(24,32,18,${wash})`);
+    } else {
+      washed.addColorStop(0, `rgba(24,32,18,${wash})`);
+      washed.addColorStop(1, `rgba(255,244,214,${wash})`);
+    }
+    g.fillStyle = washed;
+    g.fillRect(f.x, f.y, f.w + 1, f.h + 1);
+
     // Plough lines: the corduroy that tells you which way a field was worked.
     if (rand() < 0.42) {
       const along = f.w > f.h;
@@ -130,10 +146,73 @@ export function farmlandTextures(size = 2048): GroundTextures {
       g.restore();
     }
 
+    // An orchard, occasionally: rows of trees on a grid, unmistakable from
+    // the air and different in kind from any plough line.
+    if (rand() < 0.05 && f.w > size / 40 && f.h > size / 40) {
+      g.fillStyle = 'rgba(30,48,24,0.75)';
+      const step = 8 + rand() * 4;
+      for (let y = f.y + step / 2; y < f.y + f.h - 2; y += step) {
+        for (let x = f.x + step / 2; x < f.x + f.w - 2; x += step) {
+          g.beginPath();
+          g.arc(x + (rand() - 0.5) * 1.5, y + (rand() - 0.5) * 1.5, 1.7, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
+
     // Hedgerow along the boundary — what actually makes farmland read as farmland.
     g.strokeStyle = 'rgba(28,40,22,0.42)';
     g.lineWidth = 2;
     g.strokeRect(f.x, f.y, f.w, f.h);
+
+    /* Hedgerow trees: the lone oaks that stand along old boundaries. Dotted
+       down one side of a third of the fields, they give the lattice the
+       irregular punctuation a real one has. */
+    if (rand() < 0.34) {
+      g.fillStyle = 'rgba(24,38,19,0.8)';
+      const along = rand() > 0.5;
+      const run = along ? f.w : f.h;
+      for (let d = 4 + rand() * 10; d < run - 3; d += 9 + rand() * 16) {
+        const x = along ? f.x + d : f.x + (rand() > 0.5 ? f.w : 0);
+        const y = along ? f.y + (rand() > 0.5 ? f.h : 0) : f.y + d;
+        g.beginPath();
+        g.arc(x, y, 1.3 + rand() * 1.6, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
+
+  /* ── Relief ───────────────────────────────────────────────────────────
+     Rolling ground, painted rather than displaced: long soft ridges lit from
+     the north-west and shaded on their far side, laid diagonally so they
+     never line up with the field lattice. At altitude this is what separates
+     land that undulates from a printed tablecloth — the fields stay the
+     subject, the light across them gains a slow rhythm. */
+  for (let i = 0; i < 9; i++) {
+    const cx = rand() * size;
+    const cy = rand() * size;
+    const len = size * (0.3 + rand() * 0.45);
+    const wide = size * (0.05 + rand() * 0.08);
+    const a = -0.5 + rand() * 0.5; // NW–SE-ish, jittered
+    for (const [off, tone, alpha] of [
+      [-wide * 0.5, '255,248,230', 0.05 + rand() * 0.04],
+      [wide * 0.55, '14,20,12', 0.06 + rand() * 0.04],
+    ] as const) {
+      g.save();
+      g.translate(cx, cy);
+      g.rotate(a);
+      const ridge = g.createRadialGradient(0, off, 0, 0, off, wide);
+      ridge.addColorStop(0, `rgba(${tone},${alpha})`);
+      ridge.addColorStop(1, `rgba(${tone},0)`);
+      g.fillStyle = ridge;
+      g.save();
+      g.scale(len / wide, 1);
+      g.beginPath();
+      g.arc(0, off, wide, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+      g.restore();
+    }
   }
 
   /* Water is a separate transparent layer so it can disappear with altitude
@@ -203,6 +282,24 @@ export function farmlandTextures(size = 2048): GroundTextures {
     g.lineTo(x, size * 0.62 + Math.sin((x / size) * Math.PI * 2) * size * 0.1);
   }
   g.stroke();
+
+  /* Tributaries. A river with nothing feeding it is a canal; two thinner
+     streams wandering in from up-tile, each ending exactly on the river's
+     own curve, make the drainage read as a system. */
+  g.lineWidth = size / 340;
+  for (const [x0, jitter] of [[0.31, 3], [0.79, 7]] as const) {
+    const xEnd = size * x0;
+    const yEnd = size * 0.62 + Math.sin(x0 * Math.PI * 2) * size * 0.1;
+    g.beginPath();
+    g.moveTo(xEnd + size * (0.1 + rand() * 0.1) * (jitter > 4 ? -1 : 1), 0);
+    const bend = size * (0.06 + rand() * 0.1);
+    g.bezierCurveTo(
+      xEnd + bend, yEnd * 0.3,
+      xEnd - bend, yEnd * 0.72,
+      xEnd, yEnd,
+    );
+    g.stroke();
+  }
 
   g.strokeStyle = 'rgba(206,198,178,0.5)';
   g.lineWidth = size / 420;
@@ -276,6 +373,165 @@ export function farmlandTextures(size = 2048): GroundTextures {
   waterTex.colorSpace = THREE.SRGBColorSpace;
 
   return { day: tex, night: nightTex, water: waterTex };
+}
+
+/**
+ * Open water, for the legs of the flight that cross it.
+ *
+ * The sea's pattern is nothing like land's, which is exactly why it earns a
+ * texture of its own rather than a blue filter over the farmland: no lattice,
+ * no boundaries — instead depth (broad patches where the bottom falls away),
+ * swell (long parallel bands, one direction, because wind has one), current
+ * lines (the bright streaks where two bodies of water shear past each other)
+ * and the odd fleck of white where a crest breaks.
+ *
+ * The glint map is the part that moves: a transparent field of elongated
+ * sparkle laid over the plate on its own drifting offset, so the surface
+ * shimmers against the water under it — two layers sliding at slightly
+ * different rates being the entire optical recipe for "liquid".
+ */
+export interface OceanTextures {
+  day: THREE.CanvasTexture;
+  /** Ships' lights, for after dark. Almost all of it is honestly black. */
+  night: THREE.CanvasTexture;
+  /** Transparent sparkle, drifted at its own rate over the plate. */
+  glint: THREE.CanvasTexture;
+}
+
+export function oceanTextures(size = 1024): OceanTextures {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d') as CanvasRenderingContext2D;
+
+  let seed = 0x1f83d9ab;
+  const rand = () => {
+    seed ^= seed << 13; seed >>>= 0;
+    seed ^= seed >> 17;
+    seed ^= seed << 5; seed >>>= 0;
+    return seed / 4294967296;
+  };
+
+  g.fillStyle = '#16496b';
+  g.fillRect(0, 0, size, size);
+
+  /* Depth. Broad, soft, and darker — the sea's only "fields". Doubled at the
+     edges so the patches carry across the tile join. */
+  for (let i = 0; i < 14; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = size * (0.09 + rand() * 0.22);
+    const deep = rand() > 0.4;
+    for (const [dx, dy] of [[0, 0], [size, 0], [-size, 0], [0, size], [0, -size]] as const) {
+      const grd = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+      grd.addColorStop(0, deep ? 'rgba(8,38,58,0.42)' : 'rgba(58,126,150,0.3)');
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x + dx, y + dy, r, 0, Math.PI * 2); g.fill();
+    }
+  }
+
+  /* Swell: one wind, one direction, many long soft bands. Drawn on a rotated
+     frame big enough that every stroke crosses the whole tile, and stroked
+     twice — a lit face and a shaded back — so each band reads as a wave and
+     not as a scratch. */
+  const SWELL = -0.42;
+  g.save();
+  g.translate(size / 2, size / 2);
+  g.rotate(SWELL);
+  const reach = size * 0.75;
+  for (let y = -reach; y < reach; y += 9 + rand() * 14) {
+    const wobble = (rand() - 0.5) * 4;
+    g.strokeStyle = `rgba(196,232,240,${0.028 + rand() * 0.035})`;
+    g.lineWidth = 1.6 + rand() * 1.8;
+    g.beginPath(); g.moveTo(-reach, y); g.bezierCurveTo(-reach / 3, y + wobble, reach / 3, y - wobble, reach, y); g.stroke();
+    g.strokeStyle = `rgba(4,22,36,${0.03 + rand() * 0.04})`;
+    g.beginPath(); g.moveTo(-reach, y + 2.4); g.bezierCurveTo(-reach / 3, y + 2.4 - wobble, reach / 3, y + 2.4 + wobble, reach, y + 2.4); g.stroke();
+  }
+  g.restore();
+
+  /* Current lines: a handful of brighter ribbons shearing across the swell. */
+  for (let i = 0; i < 4; i++) {
+    const y = rand() * size;
+    g.strokeStyle = `rgba(158,214,224,${0.1 + rand() * 0.08})`;
+    g.lineWidth = 2.4 + rand() * 3.2;
+    g.beginPath();
+    g.moveTo(0, y);
+    g.bezierCurveTo(size * 0.3, y + (rand() - 0.5) * size * 0.24, size * 0.7, y + (rand() - 0.5) * size * 0.24, size, y);
+    g.stroke();
+  }
+
+  /* Whitecaps. Sparse, tiny, aligned with the swell — a sea entirely covered
+     in them is a gale, and this is an airline. */
+  g.save();
+  g.translate(size / 2, size / 2);
+  g.rotate(SWELL);
+  g.strokeStyle = 'rgba(255,255,255,0.6)';
+  g.lineCap = 'round';
+  for (let i = 0; i < 210; i++) {
+    const x = (rand() - 0.5) * size * 1.4;
+    const y = (rand() - 0.5) * size * 1.4;
+    g.lineWidth = 0.8 + rand() * 1.1;
+    g.globalAlpha = 0.25 + rand() * 0.5;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + 2 + rand() * 5, y); g.stroke();
+  }
+  g.globalAlpha = 1;
+  g.restore();
+
+  /* ── Night: ships ─────────────────────────────────────────────────────
+     A dozen for the whole tile, each a point with a fainter stern light and
+     a short wake. The dark between them is the picture. */
+  const nc = document.createElement('canvas');
+  nc.width = nc.height = size;
+  const n = nc.getContext('2d') as CanvasRenderingContext2D;
+  n.fillStyle = '#000000';
+  n.fillRect(0, 0, size, size);
+  for (let i = 0; i < 12; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const a = rand() * Math.PI * 2;
+    const wake = 8 + rand() * 18;
+    const grd = n.createLinearGradient(x, y, x - Math.cos(a) * wake, y - Math.sin(a) * wake);
+    grd.addColorStop(0, 'rgba(140,190,220,0.3)');
+    grd.addColorStop(1, 'rgba(140,190,220,0)');
+    n.strokeStyle = grd;
+    n.lineWidth = 1.4;
+    n.beginPath(); n.moveTo(x, y); n.lineTo(x - Math.cos(a) * wake, y - Math.sin(a) * wake); n.stroke();
+    n.fillStyle = 'rgba(255,240,210,0.95)';
+    n.fillRect(x - 0.9, y - 0.9, 1.8, 1.8);
+    n.fillStyle = 'rgba(180,220,255,0.6)';
+    n.fillRect(x + Math.cos(a) * 2.6 - 0.6, y + Math.sin(a) * 2.6 - 0.6, 1.2, 1.2);
+  }
+
+  /* ── Glint ────────────────────────────────────────────────────────────
+     Transparent elongated sparkle, denser in loose bands so the shimmer has
+     structure. It rides over the plate on its own offset. */
+  const wc = document.createElement('canvas');
+  wc.width = wc.height = size;
+  const w = wc.getContext('2d') as CanvasRenderingContext2D;
+  w.save();
+  w.translate(size / 2, size / 2);
+  w.rotate(SWELL);
+  w.lineCap = 'round';
+  for (let i = 0; i < 620; i++) {
+    const x = (rand() - 0.5) * size * 1.42;
+    const y = (rand() - 0.5) * size * 1.42;
+    // Banded: sparkle gathers along the swell every so often.
+    const band = 0.5 + 0.5 * Math.sin(y * 0.055 + rand() * 0.8);
+    if (rand() > 0.28 + band * 0.6) continue;
+    w.strokeStyle = `rgba(255,255,255,${0.1 + rand() * 0.26})`;
+    w.lineWidth = 0.8 + rand() * 1.3;
+    w.beginPath(); w.moveTo(x, y); w.lineTo(x + 3 + rand() * 9, y); w.stroke();
+  }
+  w.restore();
+
+  const finish = (canvas: HTMLCanvasElement) => {
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = 16;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
+  return { day: finish(c), night: finish(nc), glint: finish(wc) };
 }
 
 /**
