@@ -37,7 +37,7 @@ function seeded(seed: number) {
 
 /** How cold it is in here, 0–1, by how far from the ground the flight is. */
 const frostFor = (band: BandState) =>
-  band.band === 'moon' ? 1 : band.band === 'space' ? 0.72 : band.band === 'above-clouds' ? 0.38 : 0.12;
+  band.band === 'moon' || band.band === 'mars' ? 1 : band.band === 'space' ? 0.72 : band.band === 'above-clouds' ? 0.38 : 0.12;
 
 interface CargoHoldProps {
   feed: FlightFeed;

@@ -8,7 +8,7 @@ Nothing on the aircraft is flown by hand or scripted. Every instrument reads the
 
 ## Altitude — market cap
 
-Altitude is the market cap read straight across as feet. A $163K market cap flies at **163,000 ft**; $2.4M flies at **2,400,000 ft**. The milestones are literal, and each one changes the world outside — see [Altitude bands](altitude-bands.md).
+Altitude is the market cap read straight across as feet. A $163K market cap flies at **163,000 ft**; $2.4M flies at **2,400,000 ft**. The milestones are literal, and each one changes the world outside — see [The five levels](altitude-bands.md).
 
 ## Pitch — the five-minute move
 

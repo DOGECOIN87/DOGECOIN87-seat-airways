@@ -138,8 +138,9 @@ const Deferred = ({ children, minHeight = '6rem' }: { children: ReactNode; minHe
  *
  * One number flies the whole page. The 5m change sets the aircraft's attitude
  * and the market cap is its altitude: $1M puts you on top of the cloud deck,
- * $10M turns the sky black, $50M is the moon. The sky itself is real — the
- * visitor's own time of day, and the weather where they are.
+ * $10M turns the sky black, $50M is the moon and $100M is Mars. The sky
+ * itself is real — the visitor's own time of day, and the weather where they
+ * are.
  *
  * The aircraft is walkable. Every zone has its own view, and within a zone the
  * window, middle and aisle seats see genuinely different things, because that
@@ -401,6 +402,7 @@ export default function App() {
         'above-clouds': 'We are on top. Cloud deck below us.',
         space: 'Cabin crew, the sky has run out. Sky is black.',
         moon: 'Ladies and gentlemen, we have reached the moon.',
+        mars: 'Ladies and gentlemen, welcome to Mars. Mind the dust.',
         atmosphere: 'Back in the weather. Seat belt sign is on.',
       };
       say(lines[band.band] ?? '', band.band === 'atmosphere' ? 'alert' : 'pa');
@@ -726,7 +728,7 @@ export default function App() {
             <div className="sa-progress px-4 py-3">
               <div className="flex items-baseline justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-ui-faint">
                 <span>{band.label}</span>
-                <span>{band.next ?? 'The moon'}</span>
+                <span>{band.next ?? 'Mars'}</span>
               </div>
               <div className="sa-track mt-2 h-2 w-full">
                 <div

@@ -82,6 +82,7 @@ Avoid a blanket `localStorage.clear()` in production — it removes unrelated vi
 * **One animation loop.** Every view animates off refs through a single `requestAnimationFrame` loop; after mount, no React render is involved in the instruments at all.
 * **Polling is polite.** It pauses in hidden tabs, aborts superseded requests, and reads fresh when the page is visible again.
 * **The 3D scene adapts.** Cloud instances upload at 30 Hz, the pixel ratio follows measured render time, low-power devices ask for the low-power GPU, and the distant terrain's hex-tiling costs three texture reads only where it is used.
+* **The other worlds are built off the main thread.** The cloud sea, Earth from space, the moon and Mars are generated in the browser — height fields, normal maps, albedo — by a worker (`src/three/surfaceWorker.ts`) that starts a moment after the page settles and builds them in the order the flight is likely to need them. Each is a second or so of arithmetic that would otherwise stall the whole flight on crossing into a level; this way it is waiting when the market gets there.
 * **The aircraft's lights light only the aircraft.** The strobes, beacons, position and logo lights, the window light and the night moonlight are added to the airframe's own materials in `src/three/lamps.ts`, not as scene lights — so the terrain never pays for a wingtip lamp. Their glare is one instanced draw call.
 * **Vendor chunks.** React and three.js are split into stable chunks, so a routine change does not invalidate both in the browser cache.
 

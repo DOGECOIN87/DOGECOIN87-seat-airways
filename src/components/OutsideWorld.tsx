@@ -293,6 +293,7 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
     const aboveClouds = band.band === 'above-clouds';
     const inSpace = band.band === 'space';
     const onMoon = band.band === 'moon';
+    const onMars = band.band === 'mars';
     const night = p.stars > 0.5;
 
     const deckDrop = 70 + band.progress * 380;
@@ -400,6 +401,18 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
             <stop offset="46%" stopColor="#17457F" />
             <stop offset="100%" stopColor="#061229" />
           </linearGradient>
+          {/* Mars: butterscotch dust overhead, paler at the horizon; rust
+              underfoot, darkening toward the foreground. */}
+          <linearGradient id={id('marssky')} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8E5A3D" />
+            <stop offset="55%" stopColor="#C58E64" />
+            <stop offset="100%" stopColor="#E3B892" />
+          </linearGradient>
+          <linearGradient id={id('mars')} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#C9895C" />
+            <stop offset="40%" stopColor="#A2603D" />
+            <stop offset="100%" stopColor="#4F2C1C" />
+          </linearGradient>
           <linearGradient id={id('moon')} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#9A958E" />
             <stop offset="42%" stopColor="#5E5A55" />
@@ -414,7 +427,7 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
             y={horizonY - 1500}
             width={w}
             height={1500}
-            fill={inAtmosphere || aboveClouds ? `url(#${id('sky')})` : `url(#${id('deepsky')})`}
+            fill={onMars ? `url(#${id('marssky')})` : inAtmosphere || aboveClouds ? `url(#${id('sky')})` : `url(#${id('deepsky')})`}
           />
           {/* Altitude darkens the zenith: there is simply less air above you. */}
           {aboveClouds && (
@@ -430,7 +443,7 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
 
           <g fill="#FFFFFF">
             {stars.map((s, i) => {
-              const show = inSpace || onMoon ? 1 : p.stars;
+              const show = inSpace || onMoon ? 1 : onMars ? 0 : p.stars;
               if (show < 0.04) return null;
               if (show < 0.5 && i % 3 !== 0) return null;
               return <circle key={i} cx={s.x} cy={s.y} r={s.r} opacity={s.o * show} />;
@@ -438,7 +451,7 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
           </g>
 
           {/* Sun, and the glare around it */}
-          {!onMoon && (
+          {!onMoon && !onMars && (
             <g>
               <circle cx={sunX} cy={horizonY - (aboveClouds ? 260 : 20)} r={aboveClouds ? 520 : 600} fill={`url(#${id('glow')})`} />
               <circle cx={sunX} cy={horizonY - (aboveClouds ? 260 : 20)} r={aboveClouds ? 92 : 118} fill={p.disc} opacity="0.28" />
@@ -632,6 +645,33 @@ const OutsideWorld = forwardRef<SVGGElement, OutsideWorldProps>(
               <circle cx="0" cy={horizonY + earthR} r={earthR + 5} fill="none" stroke="#BFE4FF" strokeWidth="4" opacity="0.9" />
               <circle cx="0" cy={horizonY + earthR} r={earthR + 20} fill="none" stroke="#4E9BEA" strokeWidth="22" opacity="0.28" />
               <circle cx="0" cy={horizonY + earthR} r={earthR + 54} fill="none" stroke="#2C6BC0" strokeWidth="46" opacity="0.1" />
+            </>
+          )}
+
+          {/* ══ MARS — $100M ════════════════════════════════════════════ */}
+          {onMars && (
+            <>
+              {/* A smaller, paler sun through the dust, and Phobos, low and lumpy */}
+              <circle cx={sunX} cy={horizonY - 240} r="420" fill="#FFE9CF" opacity="0.18" />
+              <circle cx={sunX} cy={horizonY - 240} r="24" fill="#FFF6E8" opacity="0.95" />
+              <ellipse cx={-spread * 0.12} cy={horizonY - 330} rx="34" ry="24" fill="#6E655C" transform={`rotate(-18 ${-spread * 0.12} ${horizonY - 330})`} />
+              <ellipse cx={-spread * 0.12 + 9} cy={horizonY - 334} rx="13" ry="10" fill="#4D463F" opacity="0.8" />
+              <rect x={-spread} y={horizonY} width={w} height="1300" fill={`url(#${id('mars')})`} />
+              {/* Dune fields: long dark ridges across the wind */}
+              <g stroke="#5A3525" strokeWidth="5" fill="none" opacity="0.45">
+                {craters.slice(0, 9).map((c, i) => (
+                  <path key={`d${i}`} d={`M${c.x * 1.6 - 260} ${c.y + 30} q130 -22 260 0 t260 0`} />
+                ))}
+              </g>
+              {craters.map((c, i) => (
+                <g key={i}>
+                  <ellipse cx={c.x} cy={c.y} rx={c.r} ry={c.r * 0.3} fill="#5C3322" opacity="0.8" />
+                  <ellipse cx={c.x} cy={c.y - c.r * 0.07} rx={c.r * 0.9} ry={c.r * 0.25} fill="#D9A57B" opacity="0.35" />
+                  <ellipse cx={c.x} cy={c.y + c.r * 0.06} rx={c.r * 0.62} ry={c.r * 0.15} fill="#3F2217" opacity="0.6" />
+                </g>
+              ))}
+              {/* Dust hangs over the horizon, the colour of the sky */}
+              <rect x={-spread} y={horizonY - 40} width={w} height="80" fill="#E3B892" opacity="0.45" />
             </>
           )}
 

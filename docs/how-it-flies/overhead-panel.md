@@ -31,7 +31,7 @@ The **radio log**, beside your boarding pass, is the aircraft's PA written down.
 
 * **Boarding** when the page opens — _"Boarding complete. Cabin doors armed."_
 * **Your seat** — _"Passenger seated in 8A. ECONOMY."_, _"Passenger reseated to 7C. BUSINESS."_, or _"Passenger assigned to the cargo hold. Mind the step."_
-* **Altitude bands** as you cross them — see [Altitude bands](altitude-bands.md).
+* **Levels** as you cross them — see [The five levels](altitude-bands.md).
 * **Cautions** — _"Oxygen masks deployed. Secure your own before assisting others."_, then _"Masks stowed. We have levelled off."_
 * **Your advert** going up on your seat.
 

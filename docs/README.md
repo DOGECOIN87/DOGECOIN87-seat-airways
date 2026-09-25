@@ -14,7 +14,7 @@ Flight **SA350** · Nonstop · [seat-airlines.space](https://seat-airlines.space
 
 | | |
 | --- | --- |
-| **Market cap is altitude** | $163K flies at 163,000 ft. $1M breaks out above the clouds, $10M is space, $50M is the moon. |
+| **Market cap is altitude** | $163K flies at 163,000 ft. $1M breaks out above the clouds, $10M is space, $50M is the moon, $100M is Mars. |
 | **The five-minute move is attitude** | A rising market pitches the nose up; a falling one pitches it down. |
 | **Your bag is your seat** | The 178 biggest holders are seated by rank, flight deck first. Everyone else rides in the cargo hold. |
 | **Seats are finite** | Out-hold the holder in front of you and you take their seat, and they move back. When your seat changes, the PA announces it. |

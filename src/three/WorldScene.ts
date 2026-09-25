@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { cloudTexture, earthTexture, farmlandTextures, HILL_HEIGHT, moonTexture, oceanTextures, radialTexture } from './terrain';
+import { cloudTexture, farmlandTextures, HILL_HEIGHT, oceanTextures, radialTexture } from './terrain';
+import { createSurfaceBank, potatoGeometry, type SurfaceTextures } from './surfaces';
+import { atmosphereShell, globeRim, marsSky, planetSurface } from './skies';
 import type { SkyState } from '../lib/sky';
 import type { BandState } from '../lib/flightModel';
 import type { Attitude } from '../lib/useAttitude';
@@ -22,7 +24,8 @@ import { createAirframe } from './airframe';
  *
  * One scene covers every altitude band. Climbing is literally moving the
  * camera up: the cloud deck falls below you at $1M, the atmosphere thins to
- * black by $10M, and at $50M the ground is swapped for the moon.
+ * black by $10M, at $50M the ground is swapped for the moon, and at $100M
+ * for Mars.
  */
 
 /** Metres of camera height per band, on a log scale so the climb reads. */
@@ -30,8 +33,12 @@ const ALTITUDE = {
   atmosphere: [900, 2600],
   'above-clouds': [3400, 9000],
   space: [16000, 60000],
-  moon: [1200, 1200],
+  moon: [1400, 1400],
+  mars: [1500, 1500],
 } as const;
+
+/** The top of the cloud sea the above-clouds band flies over. */
+const CLOUD_TOP = 2750;
 
 /* The ground plate. Wide enough that its edge sits well past anything the
    haze still resolves at the bands that use it — an edge you can see is a
@@ -202,8 +209,13 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   skyU.mieCoefficient.value = 0.005;
   skyU.mieDirectionalG.value = 0.8;
   skyU.skyFade = { value: 1 };
+  /* A multiplier on the dome's colour. Above the cloud deck the thinner air
+     is a deeper blue right down to the horizon, which the model's haze —
+     tuned for the ground — washes out to white. */
+  const skyShade = { value: new THREE.Color(1, 1, 1) };
+  (skyU as typeof skyU & { skyTint: typeof skyShade }).skyTint = skyShade;
   sky.material.fragmentShader = sky.material.fragmentShader
-    .replace('uniform float mieDirectionalG;', 'uniform float mieDirectionalG;\n\t\tuniform float skyFade;')
+    .replace('uniform float mieDirectionalG;', 'uniform float mieDirectionalG;\n\t\tuniform float skyFade;\n\t\tuniform vec3 skyTint;')
     .replace(
       'gl_FragColor = vec4( texColor, 1.0 );',
       `// A fifth power, not a fraction. This sky runs to hundreds of units in
@@ -213,7 +225,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 			// genuinely gone by the time the band is entered, and the blue that
 			// survives up there comes from the limb's own atmosphere shell,
 			// seen edge on, which is where it comes from in a photograph.
-			gl_FragColor = vec4( texColor * pow( skyFade, 5.0 ), 1.0 );`,
+			gl_FragColor = vec4( texColor * pow( skyFade, 5.0 ) * skyTint, 1.0 );`,
     );
   sky.material.needsUpdate = true;
 
@@ -341,36 +353,82 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      a full disc depending on where the sun has been put. The shell around it
      is the atmosphere: back faces only, additive, which is the cheap way to
      get a limb that glows without a shader. */
-  const earthMap = earthTexture();
-  const earth = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 48, 32),
-    new THREE.MeshStandardMaterial({ map: earthMap, roughness: 0.92, metalness: 0 }),
-  );
-  earth.scale.setScalar(9000);
+  /* The globe is baked the first time anybody reaches the moon; see
+     `earthly` below. Its air is a shell that glows by how close each ray
+     passes to the disc, and a rim on the disc itself, brightest on the day
+     side — so the crescent has an atmosphere and the night side does not. */
+  /* Some three times the size it really looks from the moon — two degrees
+     would be a marble — and small enough to sit whole above the horizon. */
+  const EARTH_R = 3600;
+  const earthMat = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0, fog: false });
+  const earthSun = new THREE.Vector3();
+  globeRim(earthMat, new THREE.Vector4(0.3, 0.55, 1, 0.9), earthSun);
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 40), earthMat);
+  earth.scale.setScalar(EARTH_R);
   earth.visible = false;
   // Parented to the aircraft, not the world: a heading change should not swing
   // Earth out of the only window it was composed for. Pitch and bank still
   // move it, which is the part that has to feel physical.
   aircraft.add(earth);
-  const earthAir = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 32, 24),
-    new THREE.MeshBasicMaterial({
-      color: 0x6ba8ee,
-      transparent: true,
-      opacity: 0.24,
-      side: THREE.BackSide,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      fog: false,
-    }),
-  );
-  earthAir.scale.setScalar(9000 * 1.055);
-  earthAir.visible = false;
-  aircraft.add(earthAir);
+  const earthAir = atmosphereShell(0x3d86ff, 1.6);
+  earthAir.mesh.scale.setScalar(EARTH_R * 1.2);
+  earthAir.uniforms.planetRadius.value = EARTH_R;
+  earthAir.uniforms.glowHeight.value = EARTH_R * 0.028;
+  aircraft.add(earthAir.mesh);
+
+  /* ── Mars ─────────────────────────────────────────────────────────────
+     Its own sky, as a dome that follows the camera, and its two moons: small,
+     dark and lumpy, off the port side where the Earth hangs at the moon. */
+  const redSky = marsSky();
+  redSky.mesh.scale.setScalar(150000);
+  scene.add(redSky.mesh);
+  const regolithDark = new THREE.MeshStandardMaterial({ color: 0x5c534b, roughness: 1, metalness: 0, fog: false });
+  const phobos = new THREE.Mesh(potatoGeometry(31, true), regolithDark);
+  phobos.scale.setScalar(2100);
+  phobos.position.set(-50000, 5400, 30000);
+  phobos.rotation.set(0.3, 0.9, 0.2);
+  phobos.visible = false;
+  aircraft.add(phobos);
+  const deimos = new THREE.Mesh(potatoGeometry(47), regolithDark);
+  deimos.scale.setScalar(900);
+  deimos.position.set(-70000, 9000, 12000);
+  deimos.visible = false;
+  aircraft.add(deimos);
 
   /* ── Ground ── */
   const farmland = farmlandTextures();
-  const moon = moonTexture();
+  /* The other worlds, the cloud sea and Earth from above are built in a
+     worker while the flight carries on (see `createSurfaceBank`), each laid
+     at its own scale on the same plate once it arrives. Until a world's
+     ground is ready, a plain of its colour stands in for it. */
+  const bank = createSurfaceBank();
+  const placed = new WeakSet<SurfaceTextures>();
+  const onPlate = (t: SurfaceTextures | null) => {
+    if (t && !placed.has(t)) {
+      for (const tex of [t.day, t.height, t.normal]) tex.repeat.setScalar(GROUND / t.tile);
+      placed.add(t);
+    }
+    return t;
+  };
+  const standIn = (hex: number): SurfaceTextures => {
+    const c = new THREE.Color(hex);
+    const one = (r: number, g: number, b: number) => {
+      const tex = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.needsUpdate = true;
+      return tex;
+    };
+    const day = one(Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255));
+    return { day, height: one(0, 0, 0), normal: one(128, 128, 255), relief: 1, tile: 12000 };
+  };
+  const MOON_STAND_IN = standIn(0x96918b);
+  const MARS_STAND_IN = standIn(0xa8633f);
+  const surfaceFor = (band: string): SurfaceTextures | null =>
+    band === 'moon'
+      ? onPlate(bank.surface('moon')) ?? MOON_STAND_IN
+      : band === 'mars'
+        ? onPlate(bank.surface('mars')) ?? MARS_STAND_IN
+        : null;
   /* Three-kilometre tiles, not five and a half.
   
      The plate is 120 km across and the aircraft covers a few hundred metres a
@@ -385,11 +443,6 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   /* The lights repeat with the land, because they are the same land. */
   farmland.night.repeat.set(40, 40);
   farmland.water.repeat.set(40, 40);
-  /* Bigger tiles than the farmland's. A crater is a landform, not a field:
-     at five-kilometre tiles the largest one in the texture was a few hundred
-     metres across and the plain read as flat grey from any altitude worth
-     being at. */
-  moon.repeat.set(9, 9);
   /* Towns after dark.
 
      The night map is emissive rather than a second lit surface: street
@@ -572,26 +625,21 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   planetTex.wrapS = planetTex.wrapT = THREE.RepeatWrapping;
   planetTex.repeat.set(240, 120);
   planetTex.needsUpdate = true;
-  const limb = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 96, 64),
-    new THREE.MeshStandardMaterial({ map: planetTex, roughness: 0.98, metalness: 0 }),
-  );
+  /* Over the farmland, the planet: seas, coasts, the dry belts and its
+     weather, from `earthMaps` the first time the band is reached (see
+     `planetSurface`). Fine enough in the sphere that its silhouette is a
+     curve and not a polygon from sixty kilometres up. */
+  const limbMat = new THREE.MeshStandardMaterial({ map: planetTex, roughness: 0.98, metalness: 0 });
+  const limb = new THREE.Mesh(new THREE.SphereGeometry(1, 256, 128), limbMat);
   limb.visible = false;
   scene.add(limb);
-  const limbAir = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 64, 48),
-    new THREE.MeshBasicMaterial({
-      color: 0x5aa2ff,
-      transparent: true,
-      opacity: 0.45,
-      side: THREE.BackSide,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      fog: false,
-    }),
-  );
-  limbAir.visible = false;
-  scene.add(limbAir);
+  let limbDressed = false;
+  /* The air, seen from inside it at the edge of space: a thin bright band
+     on the limb and, overhead, whatever is left of the sky — which is how
+     the black arrives with the climb. See `atmosphereShell`. */
+  const limbAir = atmosphereShell(0x2f6fe8, 1.7);
+  limbAir.uniforms.glowHeight.value = 7000;
+  scene.add(limbAir.mesh);
   /* Nearly flat where the band begins, and a real planet by the top of it. */
   const LIMB_R = { low: 4_200_000, high: 620_000 };
 
@@ -606,6 +654,49 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     opacity: 0.85,
     fog: true,
   });
+  /* ── The cloud sea ────────────────────────────────────────────────────
+     From above the deck the billboards are the wrong idea: a puff standing
+     up on its own reads as a sheep, and a few hundred of them never made a
+     floor. Up here the deck is a surface — cumulus tops to the horizon —
+     so it is drawn as one: billowing relief near the aircraft on the same
+     dense mesh the hills use, and a flat plate carrying its light and shade
+     on out to the haze, both hex-shuffled in the distance like the ground.
+     The gaps are the texture's alpha, opened and closed by the weather. */
+  const seaCover = { value: new THREE.Vector3(0.44, 0.56, 1) };
+  const seaNoTile: NoTileParams = { value: new THREE.Vector3(9000, 16000, 0) };
+  const cloudSeaShader = (displaced: boolean) => (shader: Parameters<NonNullable<THREE.Material['onBeforeCompile']>>[0]) => {
+    noTileShader(shader, seaNoTile, displaced);
+    shader.uniforms.seaCover = seaCover;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 seaCover;')
+      .replace(
+        '#include <color_fragment>',
+        'diffuseColor.a = smoothstep( seaCover.x, seaCover.y, diffuseColor.a ) * seaCover.z;\n\t#include <color_fragment>',
+      );
+  };
+  const cloudSeaNearMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 1, metalness: 0, transparent: true, depthWrite: true,
+  });
+  cloudSeaNearMat.onBeforeCompile = cloudSeaShader(true);
+  const cloudSeaFarMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 1, metalness: 0, transparent: true, depthWrite: true,
+  });
+  cloudSeaFarMat.onBeforeCompile = cloudSeaShader(false);
+  // The near relief is drawn first, so where it lies the flat plate behind
+  // it loses the depth test and the sea is never doubled.
+  const cloudSeaNear = new THREE.Mesh(nearGeometry, cloudSeaNearMat);
+  cloudSeaNear.rotation.x = -Math.PI / 2;
+  cloudSeaNear.position.y = CLOUD_TOP;
+  cloudSeaNear.renderOrder = 0.5;
+  cloudSeaNear.visible = false;
+  scene.add(cloudSeaNear);
+  const cloudSeaFar = new THREE.Mesh(groundGeometry, cloudSeaFarMat);
+  cloudSeaFar.rotation.x = -Math.PI / 2;
+  cloudSeaFar.position.y = CLOUD_TOP - 6;
+  cloudSeaFar.renderOrder = 0.6;
+  cloudSeaFar.visible = false;
+  scene.add(cloudSeaFar);
+
   const CLOUDS = 620;
   const clouds = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), cloudMat, CLOUDS);
   clouds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -656,6 +747,11 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const SEA_BOUNCE = new THREE.Color(0x9fc3d4);
   const LAND_BOUNCE = new THREE.Color(0xdcd3bd);
   const MOOD_BLUE = new THREE.Color(0x8fb8e8);
+  const BLACK = new THREE.Color(0x000000);
+  /** What Mars's rust throws back up at the belly. */
+  const RUST_BOUNCE = new THREE.Color(0xc98a62);
+  /** The sky above the deck: the same model, but blue right down to the haze. */
+  const ABOVE_DECK_SKY = new THREE.Color().setRGB(0.26, 0.38, 0.62);
   /** What comes up off farmland after dark: towns, sodium-warm. */
   const TOWN_GLOW = new THREE.Color(0xffb46a);
   const CABIN_WARM = new THREE.Color(0xffd8a8);
@@ -703,6 +799,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const render = (a: Attitude, skyState: SkyState, band: BandState, pose: ViewPose) => {
     const inSpace = band.band === 'space';
     const onMoon = band.band === 'moon';
+    const onMars = band.band === 'mars';
+    /** Over another world's ground rather than this one's. */
+    const elsewhere = onMoon || onMars;
+    const aboveClouds = band.band === 'above-clouds';
 
     /* Camera height from the altitude band, log-spaced within it. */
     const [lo, hi] = ALTITUDE[band.band];
@@ -715,8 +815,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
        and a planet lit edge-on is a black disc with a rim. So the sun is put
        where it lights the thing you came up here to look at: high over the
        limb in space, low over the moon, where a grazing sun is what gives
-       regolith its relief. */
-    const elevation = onMoon ? 23 : inSpace ? 46 : skyState.elevation;
+       regolith its relief, and a little higher over Mars, where the dust in
+       the air softens it anyway. */
+    const elevation = onMoon ? 23 : onMars ? 30 : inSpace ? 46 : skyState.elevation;
     const phi = THREE.MathUtils.degToRad(90 - elevation);
     const theta = THREE.MathUtils.degToRad(skyState.sunX * 80);
     sunPos.setFromSphericalCoords(1, phi, theta);
@@ -725,8 +826,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     /* The disc itself. It reddens and weakens as it goes down rather than
        simply switching off, which is the half of golden hour a plain
        intensity ramp misses. */
-    sun.intensity = onMoon ? 4.6 : inSpace ? 3.4 : Math.max(0.04, Math.sin(THREE.MathUtils.degToRad(Math.max(elevation, -6))) * 3.2);
-    if (!onMoon && !inSpace) sun.color.setStyle(skyState.palette.disc).lerp(WHITE, 0.3);
+    sun.intensity = onMoon ? 3.8 : onMars ? 3 : inSpace ? 3.4 : Math.max(0.04, Math.sin(THREE.MathUtils.degToRad(Math.max(elevation, -6))) * 3.2);
+    // Mars is half as far again from the sun, and sees it through a little dust.
+    if (onMars) sun.color.setHex(0xfff0dc);
+    else if (!onMoon && !inSpace) sun.color.setStyle(skyState.palette.disc).lerp(WHITE, 0.3);
     else sun.color.setHex(0xffffff);
 
     /* Weather thickens the air. Altitude does not thin it — it takes it away;
@@ -736,10 +839,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     const rain = skyState.weather === 'rain' || skyState.weather === 'storm';
     /* Above the cloud deck the air overhead is genuinely thinner and cleaner:
        less Mie haze, deeper blue. That is the whole look of that band. */
-    const high = band.band === 'above-clouds' ? band.progress : 0;
-    skyU.turbidity.value = overcast ? 14 : rain ? 10 : lerp(3.2, 1.6, high);
+    const high = aboveClouds ? band.progress : 0;
+    /* Most of the haze is below the deck: above it the glare round the sun
+       shrinks, and the blue comes down nearer the horizon. */
+    skyU.turbidity.value = overcast ? 14 : rain ? 10 : aboveClouds ? lerp(2.2, 1.4, high) : 3.2;
     skyU.rayleigh.value = overcast ? 0.6 : lerp(2.4, 3.1, high);
-    skyU.mieCoefficient.value = (overcast ? 0.03 : 0.005) * lerp(1, 0.45, high);
+    skyU.mieCoefficient.value = (overcast ? 0.03 : 0.005) * (aboveClouds ? 0.3 : 1) * lerp(1, 0.45, high);
     /* How much of the sky is left.
     
        $10M is *defined* as the sky going black, so by the time the band is
@@ -756,43 +861,66 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         ? 0.38 * THREE.MathUtils.smoothstep(band.progress, 0.45, 1)
         : 0;
     skyU.skyFade.value = 1 - airless;
+    skyShade.value.setRGB(1, 1, 1).lerp(ABOVE_DECK_SKY, aboveClouds && !overcast ? 0.75 + 0.25 * band.progress : 0);
     // Ground and cabin lighting follow the sky: an aeroplane in vacuum is not
     // lit by a dome that is no longer there.
-    sky.visible = !onMoon;
+    sky.visible = !elsewhere;
+    /* Mars has a sky of its own: see `marsSky`. */
+    redSky.mesh.visible = onMars;
+    if (onMars) {
+      redSky.mesh.position.set(0, height, 0);
+      redSky.uniforms.sunDirection.value.copy(sunPos);
+    }
 
     /* Above the atmosphere the sky is simply gone, and the stars arrive. */
-    const starOpacity = onMoon ? 1 : inSpace ? Math.min(1, 0.2 + airless * 1.1) : Math.max(0, skyState.palette.stars - 0.35);
+    // Not on Mars by day: its dusty sky is bright enough to hide them.
+    const starOpacity = onMoon ? 1 : onMars ? 0 : inSpace ? Math.min(1, 0.2 + airless * 1.1) : Math.max(0, skyState.palette.stars - 0.35);
     starMat.opacity = starOpacity;
     stars.position.copy(aircraft.position);
     renderer.setClearColor(0x000000, 1);
 
     /* The sun becomes an object once there is no air left to scatter it. The
        Sky shader draws its own below that, so showing both would double it. */
-    const sunVisibility = onMoon ? 1 : inSpace ? airless : 0;
+    const sunVisibility = onMoon || onMars ? 1 : inSpace ? airless : 0;
     sunDisc.visible = sunGlow.visible = sunVisibility > 0.01;
     if (sunDisc.visible) {
       sunDisc.position.copy(sunPos).multiplyScalar(110000);
       sunGlow.position.copy(sunDisc.position);
+      /* From Mars the disc is two thirds the size, and the dust around it
+         is a wide, pale halo rather than a tight glare. */
+      sunDisc.scale.setScalar(onMars ? 2250 : 3400);
+      sunGlow.scale.setScalar(onMars ? 30000 : 16000);
       sunDisc.material.opacity = sunVisibility;
-      sunGlow.material.opacity = sunVisibility * 0.5;
+      sunGlow.material.opacity = sunVisibility * (onMars ? 0.3 : 0.5);
     }
 
-    /* Earthrise. Off the port side, a little above the horizon, turning on its
-       own axis — and lit by the same sun as everything else, so the phase it
-       shows is the phase the geometry says it should. */
-    earth.visible = earthAir.visible = onMoon;
-    if (onMoon) {
-      earth.position.set(-52000, 15000, -30000);
-      earthAir.position.copy(earth.position);
+    /* Earthrise. Off the port quarter, a few degrees above the horizon —
+       where the port windows look out on it and where the camera outside
+       looks past the aircraft at it — turning on its own axis, and lit by
+       the same sun as everything else, so the phase it shows is the phase
+       the geometry says it should. */
+    // Shown once the globe has been built; until then the sky is just black.
+    const earthly = onMoon || inSpace ? bank.earth() : null;
+    earth.visible = earthAir.mesh.visible = onMoon && earthly !== null;
+    if (onMoon && earthly) {
+      if (earthMat.map !== earthly.globe) {
+        earthMat.map = earthly.globe;
+        earthMat.needsUpdate = true;
+      }
+      earth.position.set(-50000, 3900, 33000);
+      earthAir.mesh.position.copy(earth.position);
       earth.rotation.y += 0.0006;
       earth.rotation.z = 0.41; // axial tilt, so the caps sit where they belong
     }
+    // Phobos and Deimos, the other way round: small, dark, and turning slowly.
+    phobos.visible = deimos.visible = onMars;
+    if (onMars) phobos.rotation.y += 0.0004;
 
     /* Ground: farmland below, regolith at the moon, and haze that thickens
        with distance so the horizon dissolves rather than ending. Above the
        atmosphere the plate gives way to the limb, which is a sphere. */
-    /* Which country is under the aircraft. The moon overrules the coast. */
-    const seaBlend = onMoon ? 0 : biomeAt(Date.now()).ocean;
+    /* Which country is under the aircraft. Another world overrules the coast. */
+    const seaBlend = elsewhere ? 0 : biomeAt(Date.now()).ocean;
     const waterFade = band.band === 'atmosphere'
       ? (1 - THREE.MathUtils.smoothstep(height, 1450, 2150)) * (1 - seaBlend)
       : 0;
@@ -800,20 +928,20 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     water.visible = waterFade > 0.01;
     /* The plate takes whichever map the moment calls for; the crossfade mesh
        only exists while the coast is actually going by. */
-    const plateMap = onMoon ? moon : seaBlend >= 0.999 ? ocean.day : farmland.day;
+    const body = surfaceFor(band.band);
+    const plateMap = body ? body.day : seaBlend >= 0.999 ? ocean.day : farmland.day;
     if (groundMat.map !== plateMap) {
       groundMat.map = plateMap;
-      // Nobody is home on the moon; ships are, at sea.
-      groundMat.emissiveMap = onMoon ? null : seaBlend >= 0.999 ? ocean.night : farmland.night;
+      // Nobody is home on the moon or Mars; ships are, at sea.
+      groundMat.emissiveMap = body ? null : seaBlend >= 0.999 ? ocean.night : farmland.night;
       groundMat.roughness = plateMap === ocean.day ? 0.62 : 1;
       groundMat.needsUpdate = true;
     }
-    /* The relief belongs to the farmland: none on the moon, and the hills
-       sink as the coast arrives, so the sea has somewhere flat to come in
-       over. Normal map and displacement go down together. */
-    const reliefOn = plateMap === farmland.day;
-    const relief = reliefOn ? 1 - THREE.MathUtils.smoothstep(seaBlend, 0, 0.6) : 0;
-    const wantNormal = reliefOn ? farmland.normal : null;
+    /* The relief: the farmland's hills, sinking as the coast arrives so the
+       sea has somewhere flat to come in over — or another world's craters,
+       mesas and dunes, whole. Normal map and displacement go together. */
+    const farmRelief = plateMap === farmland.day ? 1 - THREE.MathUtils.smoothstep(seaBlend, 0, 0.6) : 0;
+    const wantNormal = body ? body.normal : plateMap === farmland.day ? farmland.normal : null;
     if (groundMat.normalMap !== wantNormal) {
       groundMat.normalMap = wantNormal;
       groundMat.needsUpdate = true;
@@ -825,40 +953,47 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       nearMat.roughness = groundMat.roughness;
       nearMat.needsUpdate = true;
     }
-    landNoTile.value.z = reliefOn ? 1 : 0;
-    groundMat.normalScale.setScalar(relief);
-    nearMat.normalScale.setScalar(relief);
-    nearMat.displacementScale = HILL_HEIGHT * relief;
-    sea.visible = !onMoon && !inSpace && seaBlend > 0.001 && seaBlend < 0.999;
+    nearMat.displacementMap = body ? body.height : farmland.height;
+    // The broad green-and-dry tint is the farmland's; other worlds keep their own colour.
+    landNoTile.value.z = body ? 0 : farmRelief > 0 ? 1 : 0;
+    groundMat.normalScale.setScalar(body ? 1 : farmRelief);
+    nearMat.normalScale.setScalar(body ? 1 : farmRelief);
+    nearMat.displacementScale = body ? body.relief : HILL_HEIGHT * farmRelief;
+    sea.visible = !elsewhere && !inSpace && seaBlend > 0.001 && seaBlend < 0.999;
     seaMat.opacity = seaBlend;
     /* Lights up through dusk, out by mid-morning. Civil twilight is about
        six degrees below the horizon, so the ramp is hung either side of
        that rather than on sunset itself — which is when you can first see a
        town from the air, not when the sun clears the horizon. */
-    groundMat.emissiveIntensity = onMoon
+    groundMat.emissiveIntensity = elsewhere
       ? 0
       : 1 - THREE.MathUtils.smoothstep(skyState.elevation, -8, 3);
     seaMat.emissiveIntensity = groundMat.emissiveIntensity;
     nearMat.emissiveIntensity = groundMat.emissiveIntensity;
     ground.visible = !inSpace;
-    near.visible = !inSpace;
-    limb.visible = limbAir.visible = inSpace;
+    // Above the deck the hills are three kilometres down and mostly under
+    // cloud: the plate's own light and shade carries them.
+    near.visible = !inSpace && !aboveClouds;
+    limb.visible = limbAir.mesh.visible = inSpace;
     if (inSpace) {
+      if (!limbDressed && earthly) {
+        planetSurface(limbMat, earthly.macro, new THREE.Vector2(8, 4), new THREE.Vector4(0.16, 0.34, 0.72, 0.85));
+        limbDressed = true;
+      }
       /* The radius shrinks as you climb, so the horizon bends further the
          higher the market cap goes — the curve is the altitude, read off the
          window rather than off a tape. */
       const r = lerp(LIMB_R.low, LIMB_R.high, THREE.MathUtils.smoothstep(band.progress, 0, 0.85));
       limb.scale.setScalar(r);
       limb.position.y = -r;
-      /* The shell is the atmosphere seen edge on, and it only reads that way
-         from outside it. Scaled as a fraction of the planet it swallowed the
-         camera whole — 2% of four thousand kilometres is ninety, and the
-         aircraft is at sixteen — and an additive shell seen from inside is not
-         a glowing rim, it is a blue wash over the entire sky, which is what
-         the space band looked like. So its top is pinned below the aircraft:
-         the air you have climbed out of, not the air you are in. */
-      limbAir.scale.setScalar(r + height * 0.55);
-      limbAir.position.y = -r;
+      /* The air: a shell just big enough to hold the camera and still sit
+         inside the far plane toward the horizon. Its pixels do the work —
+         see `atmosphereShell` — so its own facets never show. */
+      limbAir.mesh.scale.setScalar(r + height * 1.6);
+      limbAir.mesh.position.y = -r;
+      limbAir.uniforms.planetCentre.value.set(0, -r, 0);
+      limbAir.uniforms.planetRadius.value = r;
+      limbAir.uniforms.sunDirection.value.copy(sunPos);
       /* Turn it under the aircraft rather than sliding a texture: on a sphere
          that is what travelling actually is, and it keeps the poles out of
          the frame. */
@@ -867,12 +1002,14 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
          map converges exactly where you are looking hardest. */
       limb.rotation.y = -shift.x / r;
       limb.rotation.x = Math.PI / 2 + shift.z / r;
-      /* With the dome gone, this shell is the only blue left in the sky, so
-         it carries the whole band on the horizon. */
-      (limbAir.material as THREE.MeshBasicMaterial).opacity = 0.3 + airless * 0.34;
-      // The far side of a 4,200 km sphere is past any sane far plane; the
-      // near cap and its horizon are not, so the frustum follows the radius.
-      const far = Math.max(200000, Math.sqrt((r + height) * (r + height) - r * r) * 1.35);
+      /* The far side of a 4,200 km sphere is past any sane far plane; the
+         near cap and its horizon are not, so the frustum follows the radius.
+         It has to reach the air as well: a ray skimming the limb crosses
+         the whole shell beyond it, and a far plane short of that cuts the
+         brightest part of the glow off in blocks. */
+      const horizon = Math.sqrt((r + height) * (r + height) - r * r);
+      const beyond = Math.sqrt((r + height * 1.6) * (r + height * 1.6) - r * r);
+      const far = Math.max(200000, (horizon + beyond) * 1.05);
       if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
       // Push the stars past the limb, and grow the points to match so they
       // stay the same size on screen.
@@ -889,13 +1026,16 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     }
 
     skyColour.setStyle(skyState.palette.horizon);
-    fog.color.copy(onMoon ? new THREE.Color(0x000000) : skyColour);
+    fog.color.copy(onMoon ? BLACK : onMars ? redSky.uniforms.horizon.value : skyColour);
     /* Haze is air, so it goes with the air. On the moon there is none at all
        and the ground runs sharp all the way to a knife-edge horizon, which is
-       the single thing that reads as vacuum. */
+       the single thing that reads as vacuum. Mars has a little, and it is
+       dust: the far ground fades into the colour of the sky. */
     fog.density = onMoon
       ? 0
-      : inSpace
+      : onMars
+        ? 0.000026
+        : inSpace
         ? lerp(0.0000045, 0.0000004, airless)
         : overcast
           ? 0.00006
@@ -919,6 +1059,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       ambient.intensity = 0.14;
       ambient.color.setHex(0x8e96a4);
       ambient.groundColor.setHex(0x6b6660);
+    } else if (onMars) {
+      // The dusty sky is a good share of Mars's daylight: butterscotch from
+      // above, rust thrown back up off the ground.
+      ambient.intensity = 0.72;
+      ambient.color.setHex(0xe0a67a);
+      ambient.groundColor.setHex(0x7a4630);
     } else if (inSpace) {
       ambient.intensity = lerp(0.44, 0.2, airless);
       ambient.color.setHex(0x8fb6e8);
@@ -966,6 +1112,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       // The relief rides the same offset, so the hills go with their fields.
       farmland.height.offset.copy(map.offset);
       farmland.normal.offset.copy(map.offset);
+      if (body) {
+        body.height.offset.copy(map.offset);
+        body.normal.offset.copy(map.offset);
+      }
       /* The sea rides the same shift — the coast must not slide against the
          fields while both are on screen mid-crossfade. */
       ocean.day.offset.copy(map.offset);
@@ -979,7 +1129,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         (shift.x * 1.07) / glintTile + Math.sin(now * 0.00037) * 0.0006,
         (shift.z * 1.07) / glintTile + Math.cos(now * 0.00031) * 0.0006,
       );
-      const sheenOn = seaBlend > 0.02 && !onMoon && !inSpace;
+      const sheenOn = seaBlend > 0.02 && !elsewhere && !inSpace;
       sheen.visible = sheenOn;
       if (sheenOn) sheenMat.opacity = 0.4 * seaBlend * (0.2 + 0.8 * day);
     }
@@ -989,22 +1139,57 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     /* Even a clear day has fair-weather cumulus at this altitude, and without
        a few of them there is nothing between the aircraft and a horizon
        twenty kilometres off for the eye to clock movement against. */
-    const cover = onMoon || inSpace ? 0 : Math.max(skyState.cloudCover, overcast ? 0.95 : 0.27);
+    /* Clouds are the most reflective thing in the scene, so they are the
+       first thing to take the sun's colour: white at midday, furnace-orange
+       on the deck at sunset, and barely blue after dark. Leaving them a flat
+       white was the single loudest wrong note at golden hour — the ground
+       and the sky both turned and the deck between them did not. */
+    cloudTint.setStyle(skyState.palette.glow);
+    const daylight = THREE.MathUtils.clamp((elevation + 6) / 26, 0, 1);
+    cloudLit.setRGB(1, 1, 1).lerp(cloudTint, 1 - daylight * 0.72);
+    // After sunset there is nothing lighting them at all.
+    cloudLit.multiplyScalar(THREE.MathUtils.lerp(0.22, 1, daylight));
+    // Overcast is its own flat grey, not a tinted cumulus deck.
+    if (overcast) cloudLit.lerp(NEUTRAL_CLOUD, 0.55);
+
+    /* On top of the deck, the sea of cloud. It travels with the ground but,
+       being nearer, sweeps past faster than the land showing through its
+       gaps — which is the parallax that says how high you are. The weather
+       opens and closes the gaps; even a clear day has a deck here, because
+       the band is named for it. */
+    // Until the sea has been built, the billboard deck below stands in for it.
+    const cloudSea = aboveClouds ? onPlate(bank.surface('clouds')) : null;
+    cloudSeaNear.visible = cloudSeaFar.visible = cloudSea !== null;
+    if (cloudSea) {
+      if (cloudSeaNearMat.map !== cloudSea.day) {
+        for (const mat of [cloudSeaNearMat, cloudSeaFarMat]) {
+          mat.map = cloudSea.day;
+          mat.normalMap = cloudSea.normal;
+          mat.needsUpdate = true;
+        }
+        cloudSeaNearMat.displacementMap = cloudSea.height;
+      }
+      cloudSeaNearMat.displacementScale = cloudSea.relief;
+      cloudSea.day.offset.set(shift.x / cloudSea.tile, shift.z / cloudSea.tile);
+      cloudSea.height.offset.copy(cloudSea.day.offset);
+      cloudSea.normal.offset.copy(cloudSea.day.offset);
+      const closed = overcast ? 1 : THREE.MathUtils.clamp((skyState.cloudCover - 0.2) / 0.7, 0, 1);
+      const edge = lerp(0.41, 0.26, closed);
+      seaCover.value.set(edge, edge + 0.1, 1);
+      cloudSeaNearMat.color.copy(cloudLit);
+      cloudSeaFarMat.color.copy(cloudLit);
+      /* A cloud's shadowed side is never dark: light has scattered all the
+         way through it. A little of its own colour back as glow stands in
+         for that. */
+      cloudSeaNearMat.emissive.copy(cloudLit).multiplyScalar(0.14);
+      cloudSeaFarMat.emissive.copy(cloudLit).multiplyScalar(0.14);
+    }
+
+    /* Below the deck, the deck itself: billboarded cumulus you fly among. */
+    const cover = elsewhere || inSpace || cloudSea ? 0 : Math.max(skyState.cloudCover, overcast ? 0.95 : 0.27);
     clouds.visible = cover > 0.05;
     if (clouds.visible) {
       cloudMat.opacity = 0.35 + cover * 0.55;
-      /* Clouds are the most reflective thing in the scene, so they are the
-         first thing to take the sun's colour: white at midday, furnace-orange
-         on the deck at sunset, and barely blue after dark. Leaving them a flat
-         white was the single loudest wrong note at golden hour — the ground
-         and the sky both turned and the deck between them did not. */
-      cloudTint.setStyle(skyState.palette.glow);
-      const daylight = THREE.MathUtils.clamp((elevation + 6) / 26, 0, 1);
-      cloudLit.setRGB(1, 1, 1).lerp(cloudTint, 1 - daylight * 0.72);
-      // After sunset there is nothing lighting them at all.
-      cloudLit.multiplyScalar(THREE.MathUtils.lerp(0.22, 1, daylight));
-      // Overcast is its own flat grey, not a tinted cumulus deck.
-      if (overcast) cloudLit.lerp(NEUTRAL_CLOUD, 0.55);
       cloudMat.color.copy(cloudLit);
       cloudCount = Math.floor(CLOUDS * cover);
       clouds.count = cloudCount;
@@ -1086,7 +1271,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
        the warm air low down, thin ones near the top of the weather, solid
        ribbons in the cold above the deck, thinning out again as the air
        itself runs out. */
-    const contrail = onMoon
+    const contrail = elsewhere
       ? 0
       : band.band === 'above-clouds'
         ? 1
@@ -1101,7 +1286,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
        the coves going over to the night blue as they do. The windows seen
        from outside carry that same level, so the cabin you sit in and the
        one you fly alongside agree. */
-    const night = onMoon || inSpace ? 0.3 : 1 - THREE.MathUtils.smoothstep(skyState.elevation, -8, 4);
+    const night = onMoon || inSpace ? 0.3 : onMars ? 0.18 : 1 - THREE.MathUtils.smoothstep(skyState.elevation, -8, 4);
     const cabinNight = 1 - THREE.MathUtils.smoothstep(skyState.elevation, -14, 2);
     const cabinLit = cabinLevel(cabinNight);
     airframe.update(dt, {
@@ -1164,9 +1349,10 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       // a sticker rather than a solid.
       // After dark there is no sunlight to throw back up — only the towns'
       // own, warm and faint, and nothing at all off the sea.
-      bounce.intensity = (onMoon || inSpace ? 0.08 : overcast ? 0.85 : 0.5) * THREE.MathUtils.lerp(1, 0.12, night);
-      bounce.color.copy(LAND_BOUNCE).lerp(SEA_BOUNCE, seaBlend);
-      if (!onMoon && !inSpace) bounce.color.lerp(TOWN_GLOW, night * (1 - seaBlend) * 0.7);
+      bounce.intensity = (onMoon || inSpace ? 0.08 : onMars ? 0.38 : overcast ? 0.85 : 0.5) * THREE.MathUtils.lerp(1, 0.12, night);
+      if (onMars) bounce.color.copy(RUST_BOUNCE);
+      else bounce.color.copy(LAND_BOUNCE).lerp(SEA_BOUNCE, seaBlend);
+      if (!elsewhere && !inSpace) bounce.color.lerp(TOWN_GLOW, night * (1 - seaBlend) * 0.7);
       bounce.visible = true;
       cabin.group.visible = false;
       cabinLight.visible = false;
@@ -1211,7 +1397,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       cabinFill.color.copy(FILL_SKY).lerp(MOOD_BLUE, nightMood * 0.6);
       cabinAmbient.color.copy(AMBIENT_WARM).lerp(MOOD_BLUE, nightMood * 0.6);
       // And everything in the cabin that glows by itself comes down with them.
-      cabin.setLighting(cabinNight, onMoon || inSpace ? 1 : THREE.MathUtils.smoothstep(skyState.elevation, -6, 8));
+      cabin.setLighting(cabinNight, elsewhere || inSpace ? 1 : THREE.MathUtils.smoothstep(skyState.elevation, -6, 8));
     }
 
     // Clouds are world objects while the camera rides in the rotating
@@ -1241,10 +1427,18 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 
     /* The aeroplane's lights are shaded where the camera sees them, so they
        are placed once the aeroplane and the camera are both posed. */
+    camera.updateWorldMatrix(true, false);
     if (airframe.group.visible) {
       airframe.group.updateWorldMatrix(true, false);
-      camera.updateWorldMatrix(true, false);
       airframe.place(camera);
+    }
+    /* Earth's air and rim are worked out in the world and in view, so they
+       follow the aircraft that carries the globe. */
+    if (earth.visible) {
+      earth.updateWorldMatrix(true, false);
+      earth.getWorldPosition(earthAir.uniforms.planetCentre.value);
+      earthAir.uniforms.sunDirection.value.copy(sunPos);
+      earthSun.copy(sunPos).transformDirection(camera.matrixWorldInverse);
     }
 
     const frameStart = performance.now();
@@ -1311,14 +1505,27 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     seaMat.dispose();
     sheenMat.dispose();
     envRT.dispose();
-    moon.dispose();
     puff.dispose();
+    // The worlds built on the way, and the stand-ins for them.
+    bank.dispose();
+    for (const t of [MOON_STAND_IN, MARS_STAND_IN]) {
+      t.day.dispose();
+      t.height.dispose();
+      t.normal.dispose();
+    }
+    cloudSeaNearMat.dispose();
+    cloudSeaFarMat.dispose();
+    redSky.mesh.geometry.dispose();
+    (redSky.mesh.material as THREE.Material).dispose();
+    phobos.geometry.dispose();
+    deimos.geometry.dispose();
+    regolithDark.dispose();
     ground.geometry.dispose();
     groundMat.dispose();
     limb.geometry.dispose();
     (limb.material as THREE.Material).dispose();
-    limbAir.geometry.dispose();
-    (limbAir.material as THREE.Material).dispose();
+    limbAir.mesh.geometry.dispose();
+    (limbAir.mesh.material as THREE.Material).dispose();
     planetTex.dispose();
     clouds.geometry.dispose();
     cloudMat.dispose();
@@ -1329,10 +1536,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     sunGlow.material.map?.dispose();
     sunGlow.material.dispose();
     earth.geometry.dispose();
-    (earth.material as THREE.Material).dispose();
-    earthMap.dispose();
-    earthAir.geometry.dispose();
-    (earthAir.material as THREE.Material).dispose();
+    earthMat.dispose();
+    earthAir.mesh.geometry.dispose();
+    (earthAir.mesh.material as THREE.Material).dispose();
     sky.geometry.dispose();
     (sky.material as THREE.Material).dispose();
     renderer.dispose();

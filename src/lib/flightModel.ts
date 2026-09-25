@@ -95,6 +95,7 @@ export function phaseFor(change5m: number): string {
      $1M   you break out on top of the cloud deck
      $10M  the sky goes black and the horizon starts to curve
      $50M  you are at the moon
+     $100M you are over Mars
 
    Everything between is a continuous climb; `progress` is how far through the
    current band you are, so the views can cross-fade rather than cut. */
@@ -102,8 +103,9 @@ export function phaseFor(change5m: number): string {
 export const BAND_CLOUDS = 1_000_000;
 export const BAND_SPACE = 10_000_000;
 export const BAND_MOON = 50_000_000;
+export const BAND_MARS = 100_000_000;
 
-export type FlightBand = 'atmosphere' | 'above-clouds' | 'space' | 'moon';
+export type FlightBand = 'atmosphere' | 'above-clouds' | 'space' | 'moon' | 'mars';
 
 export interface BandState {
   band: FlightBand;
@@ -111,7 +113,7 @@ export interface BandState {
   progress: number;
   /** Signage name for the band. */
   label: string;
-  /** What is next, and what it costs. Null at the moon. */
+  /** What is next, and what it costs. Null at Mars, which is as far as it goes. */
   next: string | null;
   /** 0–1 toward the next band, for the climb meter. */
   toNext: number;
@@ -122,6 +124,7 @@ const BAND_LABEL: Record<FlightBand, string> = {
   'above-clouds': 'Above the clouds',
   space: 'Space',
   moon: 'The moon',
+  mars: 'Mars',
 };
 
 /** Progress on a log scale — a climb from $1M to $2M should feel like one. */
@@ -129,8 +132,12 @@ const logProgress = (v: number, lo: number, hi: number) =>
   Math.max(0, Math.min(1, Math.log(v / lo) / Math.log(hi / lo)));
 
 export function bandFor(marketCap: number): BandState {
+  if (marketCap >= BAND_MARS) {
+    return { band: 'mars', progress: 1, label: BAND_LABEL.mars, next: null, toNext: 1 };
+  }
   if (marketCap >= BAND_MOON) {
-    return { band: 'moon', progress: 1, label: BAND_LABEL.moon, next: null, toNext: 1 };
+    const p = logProgress(marketCap, BAND_MOON, BAND_MARS);
+    return { band: 'moon', progress: p, label: BAND_LABEL.moon, next: 'Mars at $100M', toNext: p };
   }
   if (marketCap >= BAND_SPACE) {
     const p = logProgress(marketCap, BAND_SPACE, BAND_MOON);
@@ -160,12 +167,14 @@ export const formatFeet = (n: number) => Math.round(n).toLocaleString('en-US');
 /**
  * Altitude at instrument width.
  *
- * The tape is about six characters wide and the ladder now runs to fifty
- * million, so full digits do not fit — and on a real altimeter they would not
- * be there either.
+ * The tape is about six characters wide and the ladder now runs past a
+ * hundred million, so full digits do not fit — and on a real altimeter they
+ * would not be there either. Past a hundred million one decimal goes, so
+ * Mars still fits the tape.
  */
 export function formatFeetShort(n: number): string {
   const v = Math.round(n);
+  if (Math.abs(v) >= 100_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
   if (Math.abs(v) >= 10_000) return `${Math.round(v / 1000)}K`;
   if (Math.abs(v) >= 1_000) return `${(v / 1000).toFixed(1)}K`;
