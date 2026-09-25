@@ -43,10 +43,10 @@
 
 ## For developers
 
-* [How it is built](developers/how-it-is-built.md)
-* [Run it locally](developers/run-it-locally.md)
-* [Configuration](developers/configuration.md)
-* [Worker API](developers/worker-api.md)
-* [Deploying](developers/deploying.md)
-* [The departure board](developers/departure-board.md)
-* [Engineering notes](developers/engineering-notes.md)
+* [How it is built](for-developers/how-it-is-built.md)
+* [Run it locally](for-developers/run-it-locally.md)
+* [Configuration](for-developers/configuration.md)
+* [Worker API](for-developers/worker-api.md)
+* [Deploying](for-developers/deploying.md)
+* [The departure board](for-developers/departure-board.md)
+* [Engineering notes](for-developers/engineering-notes.md)

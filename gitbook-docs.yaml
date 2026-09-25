@@ -1,8 +1,3 @@
-# The site contract for GitBook's Git Sync, read from the root of the
-# site's project directory — this repository's root. It names the site
-# and maps the repository onto it: one space, the docs/ folder, read as
-# one book. The page tree is docs/SUMMARY.md's to define — its headings
-# are the section groups — so it lives there, not here.
 $schema: https://api.gitbook.com/gitbook-docs.yaml
 site:
   title: SEAT-AIRLINES Docs
