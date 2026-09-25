@@ -120,7 +120,7 @@ A holder directory with the cabin's own manners: publish a card, read your secti
 
 <div align="center">
 <img src="docs/.gitbook/assets/departure-board.png" alt="The split-flap departure board at the top of the page" width="720">
-<br><sub>The headline is a split-flap departure board, flap by flap — <a href="docs/developers/departure-board.md">how it works</a></sub>
+<br><sub>The headline is a split-flap departure board, flap by flap — <a href="docs/for-developers/departure-board.md">how it works</a></sub>
 </div>
 
 ## Explore the documentation
@@ -189,10 +189,10 @@ The full guide lives on **[GitBook](https://seat-airlines.gitbook.io/seat-airlin
 
 **For developers**
 
-- [How it is built](docs/developers/how-it-is-built.md) · [Engineering notes](docs/developers/engineering-notes.md)
-- [Run it locally](docs/developers/run-it-locally.md) · [Configuration](docs/developers/configuration.md)
-- [Worker API](docs/developers/worker-api.md) · [Deploying](docs/developers/deploying.md)
-- [The departure board](docs/developers/departure-board.md)
+- [How it is built](docs/for-developers/how-it-is-built.md) · [Engineering notes](docs/for-developers/engineering-notes.md)
+- [Run it locally](docs/for-developers/run-it-locally.md) · [Configuration](docs/for-developers/configuration.md)
+- [Worker API](docs/for-developers/worker-api.md) · [Deploying](docs/for-developers/deploying.md)
+- [The departure board](docs/for-developers/departure-board.md)
 
 </td>
 </tr>
@@ -232,7 +232,7 @@ flowchart LR
     W -->|"holder scan, cached a minute"| RPC[("Solana RPC")]
 ```
 
-The seat ladder itself lives in [`src/lib/seating.ts`](src/lib/seating.ts) — no browser and no Cloudflare in it — and the page and the Worker import the same file, so they cannot disagree about who sits where. → [How it is built](docs/developers/how-it-is-built.md) · [Engineering notes](docs/developers/engineering-notes.md)
+The seat ladder itself lives in [`src/lib/seating.ts`](src/lib/seating.ts) — no browser and no Cloudflare in it — and the page and the Worker import the same file, so they cannot disagree about who sits where. → [How it is built](docs/for-developers/how-it-is-built.md) · [Engineering notes](docs/for-developers/engineering-notes.md)
 
 ### Quick start
 
@@ -245,7 +245,7 @@ npm test             # the page's unit suites
 npm run build        # typecheck, then bundle to dist/
 ```
 
-With no configuration at all, a build flies the committed token against the production Worker. To run the Worker locally too — Miniflare, with simulated KV, R2 and D1 — see [Run it locally](docs/developers/run-it-locally.md) and the [Worker's README](worker/README.md).
+With no configuration at all, a build flies the committed token against the production Worker. To run the Worker locally too — Miniflare, with simulated KV, R2 and D1 — see [Run it locally](docs/for-developers/run-it-locally.md) and the [Worker's README](worker/README.md).
 
 ### Project structure
 
@@ -277,7 +277,7 @@ Every setting is optional, and every `VITE_` value is **public** — Vite writes
 > [!WARNING]
 > Leave `VITE_RPC_URL` unset in production. Its URL — key and all — would ship to every visitor. The Worker holds the RPC endpoint as a secret instead.
 
-The full list, and the Worker's bindings and secrets: [Configuration](docs/developers/configuration.md).
+The full list, and the Worker's bindings and secrets: [Configuration](docs/for-developers/configuration.md).
 
 ### Deploying
 
@@ -288,7 +288,7 @@ The full list, and the Worker's bindings and secrets: [Configuration](docs/devel
 | **The docs** | GitBook Git Sync publishes `docs/`; a push that changes only the docs does not redeploy the site. |
 | **A new token** | `npm run token:update -- <mint>` moves every copy of the address — page, Worker and docs — together. |
 
-Step by step, including DNS for the custom domain: [Deploying](docs/developers/deploying.md).
+Step by step, including DNS for the custom domain: [Deploying](docs/for-developers/deploying.md).
 
 ## Licence
 
