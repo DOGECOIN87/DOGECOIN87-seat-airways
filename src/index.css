@@ -1904,18 +1904,33 @@ html {
 }
 .sa-lamp--on .sa-lamp__label { color: var(--ui-ink); }
 .sa-lamp--on .sa-lamp__state { color: var(--accent-deep); }
-/* A caution takes the whole key. */
+/* An alarm takes the whole key, in the colour every flight deck gives it:
+   amber for a caution, red for a warning. These are the page's only two
+   colours outside its blue, and they are spent on nothing else. The legend
+   on amber is dark, because white on amber cannot be read. */
 .sa-lamp--caution {
-  background: var(--g-accent-text);
-  box-shadow: 3px 5px 16px rgba(0, 105, 194, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: linear-gradient(160deg, #FFC94A 0%, #F29A0E 100%);
+  box-shadow: 3px 5px 16px rgba(226, 139, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 .sa-lamp--caution .sa-lamp__label,
 .sa-lamp--caution .sa-lamp__detail,
-.sa-lamp--caution .sa-lamp__state { color: #fff; }
+.sa-lamp--caution .sa-lamp__state { color: #2B1700; }
 .sa-lamp--caution .sa-lamp__lens {
-  color: var(--accent-deep);
-  background: radial-gradient(circle at 40% 30%, #fff 0%, #D6F2FF 75%);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.85);
+  color: #9A5B00;
+  background: radial-gradient(circle at 40% 30%, #fff 0%, #FFF1CF 75%);
+  box-shadow: 0 0 16px rgba(255, 236, 190, 0.9);
+}
+.sa-lamp--warning {
+  background: linear-gradient(160deg, #E0343B 0%, #A8161D 100%);
+  box-shadow: 3px 5px 16px rgba(190, 25, 32, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.sa-lamp--warning .sa-lamp__label,
+.sa-lamp--warning .sa-lamp__detail,
+.sa-lamp--warning .sa-lamp__state { color: #fff; }
+.sa-lamp--warning .sa-lamp__lens {
+  color: #B3161E;
+  background: radial-gradient(circle at 40% 30%, #fff 0%, #FFE1E2 75%);
+  box-shadow: 0 0 16px rgba(255, 210, 212, 0.9);
 }
 
 @media (max-width: 720px) {

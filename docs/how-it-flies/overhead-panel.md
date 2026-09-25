@@ -15,7 +15,7 @@ Under the view is the overhead annunciator panel. Each lamp is lit by the five-m
 | **Oxygen** | the nose is pitched down more than 17° — a five-minute **fall of about 81%** or worse | Masks down |
 | **Brace** | the nose is pitched down more than 18° — a five-minute **fall of about 94%** or worse | Heads down |
 
-Oxygen and Brace are **cautions**: instead of just lighting a bulb, they fill their whole cell and pulse.
+Seat belt and Beverage service are advisories and light blue. Oxygen is a **caution** and lights amber; Brace is a **warning** and lights red — the colours a real flight deck gives them. Instead of just lighting up, both fill their whole key and pulse.
 
 {% hint style="info" %}
 A price can fall no more than 100%, which pitches the nose about 18.4° down, so Brace sits just inside that limit: it lights only in a near-total collapse.
