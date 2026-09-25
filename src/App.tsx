@@ -3,6 +3,7 @@ import Mark, { logoMarkup } from './components/Mark';
 import ContractBar from './components/ContractBar';
 import ViewFrame from './components/ViewFrame';
 import Annunciators from './components/Annunciators';
+import { ClimbRoute, DeckIcon, FlightReadouts, type DeckIconName } from './components/InstrumentDeck';
 import AdvertDialog from './components/AdvertDialog';
 import SplitFlapBoard from './components/SplitFlapBoard';
 import DocsLink from './components/DocsLink';
@@ -190,6 +191,18 @@ function representativeSeat(zone: ZoneKey, position: SeatPosition): CabinSeat {
  */
 const chip = (on: boolean, accent: 'cyan' | 'amber' = 'cyan') =>
   `sa-chip${on ? ` sa-chip--on sa-chip--${accent}` : ''}`;
+
+/** A segment of the deck's selectors: set into a track rather than standing proud. */
+const seg = (on: boolean) => `sa-seg__btn${on ? ' is-on' : ''}`;
+
+/** The symbol on each stop of the walk. */
+const ZONE_ICON: Record<ZoneKey, DeckIconName> = {
+  deck: 'deck',
+  first: 'first',
+  business: 'business',
+  exit: 'exit',
+  economy: 'economy',
+};
 
 const SceneLoading = ({ exterior = false }: { exterior?: boolean }) => (
   <div
@@ -663,81 +676,66 @@ export default function App() {
               are one panel under the window divided by hairlines, rather than
               three cards floating a few pixels apart. */}
           <div className="sa-deck mt-3">
-          {/* ── Walk the aircraft ── */}
-          <div className="sa-deck__strip sa-deck__strip--cyan flex-col sm:flex-row sm:items-center">
-            <div className="sd-chrome -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+          {/* ── Walk the aircraft ──
+              One selector, nose to tail: a track sunk into the panel with
+              the stop you are at lit in it. It scrolls sideways rather than
+              wrapping wherever the whole aeroplane does not fit on one line. */}
+          <div className="sa-deck__strip sa-deck__strip--cyan flex-wrap items-center">
+            <div className="sa-walk sd-chrome">
               <span className="sa-strip-label">Walk the aircraft</span>
-              <button type="button" onClick={() => setCamera('exterior')} aria-pressed={camera === 'exterior'} className={chip(camera === 'exterior')}>
-                Outside
-              </button>
-              {CABIN_ZONES.map((z) => (
-                <button
-                  key={z.key}
-                  type="button"
-                  onClick={() => walkTo(z.key)}
-                  onMouseEnter={z.key === 'deck' ? prefetchFlightDeck : undefined}
-                  onFocus={z.key === 'deck' ? prefetchFlightDeck : undefined}
-                  aria-pressed={camera !== 'exterior' && camera !== 'hold' && viewZone === z.key}
-                  className={chip(camera !== 'exterior' && camera !== 'hold' && viewZone === z.key)}
-                >
-                  {z.name}
+              <div className="sa-seg" role="group" aria-label="Walk the aircraft">
+                <button type="button" onClick={() => setCamera('exterior')} aria-pressed={camera === 'exterior'} className={seg(camera === 'exterior')}>
+                  <DeckIcon name="plane" className="sa-seg__icon" />
+                  Outside
                 </button>
-              ))}
-              <button type="button" onClick={() => setCamera('hold')} aria-pressed={camera === 'hold'} className={chip(camera === 'hold')}>
-                Cargo hold
-              </button>
+                {CABIN_ZONES.map((z) => (
+                  <button
+                    key={z.key}
+                    type="button"
+                    onClick={() => walkTo(z.key)}
+                    onMouseEnter={z.key === 'deck' ? prefetchFlightDeck : undefined}
+                    onFocus={z.key === 'deck' ? prefetchFlightDeck : undefined}
+                    aria-pressed={camera !== 'exterior' && camera !== 'hold' && viewZone === z.key}
+                    className={seg(camera !== 'exterior' && camera !== 'hold' && viewZone === z.key)}
+                  >
+                    <DeckIcon name={ZONE_ICON[z.key]} className="sa-seg__icon" />
+                    {z.name}
+                  </button>
+                ))}
+                <button type="button" onClick={() => setCamera('hold')} aria-pressed={camera === 'hold'} className={seg(camera === 'hold')}>
+                  <DeckIcon name="hold" className="sa-seg__icon" />
+                  Cargo hold
+                </button>
+              </div>
             </div>
 
             {camera === 'seat' && (
-              <div className="sd-chrome -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:ml-auto sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+              <div className="sa-walk sd-chrome xl:ml-auto">
                 <span className="sa-strip-label">Seat</span>
-                {POSITIONS.map((pos) => (
-                  <button
-                    key={pos.key}
-                    type="button"
-                    onClick={() => setViewPosition(pos.key)}
-                    aria-pressed={viewPosition === pos.key}
-                    className={chip(viewPosition === pos.key)}
-                  >
-                    {pos.label}
-                  </button>
-                ))}
+                <div className="sa-seg" role="group" aria-label="Seat position">
+                  {POSITIONS.map((pos) => (
+                    <button
+                      key={pos.key}
+                      type="button"
+                      onClick={() => setViewPosition(pos.key)}
+                      aria-pressed={viewPosition === pos.key}
+                      className={seg(viewPosition === pos.key)}
+                    >
+                      {pos.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          {/* ── Where the flight is ── */}
+          {/* ── Where the flight is ──
+              Three displays let into the panel, the whole route drawn as a
+              moving map, and the overhead lamps as keys on the panel. No
+              Band cell: the route names every level, and lights this one. */}
           <section className="sa-flight-state" aria-label="Flight state">
-            {/* No Band cell: the climb meter below already reads the band
-                and the next one, word for word, at each end of its track. */}
-            <dl className="sa-flight-summary grid grid-cols-2 sm:grid-cols-3">
-              {[
-                { k: 'Altitude', v: `${formatFeet(tick.marketCap)} ft`, s: formatCap(tick.marketCap) },
-                { k: '5m', v: formatChange(tick.change5m), s: tick.change5m >= 0 ? 'Climbing' : 'Descending' },
-                { k: 'Outside', v: sky.label, s: sky.live ? 'Live weather' : 'Modelled weather' },
-              ].map((cell) => (
-                <div key={cell.k} className={`px-4 py-3.5 ${cell.k === 'Outside' ? 'col-span-2 sm:col-span-1' : ''}`}>
-                  <dt className="text-[11px] font-bold uppercase tracking-[0.2em] text-ui-faint">{cell.k}</dt>
-                  <dd className="mt-1 text-base font-semibold leading-snug text-ui-ink sm:text-lg">{cell.v}</dd>
-                  <dd className="mt-0.5 text-[11px] leading-snug text-ui-soft">{cell.s}</dd>
-                </div>
-              ))}
-            </dl>
-
-            {/* Climb meter toward the next band */}
-            <div className="sa-progress px-4 py-3">
-              <div className="flex items-baseline justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-ui-faint">
-                <span>{band.label}</span>
-                <span>{band.next ?? 'Mars'}</span>
-              </div>
-              <div className="sa-track mt-2 h-2 w-full">
-                <div
-                  className="sa-climb-fill h-full transition-[width] duration-500"
-                  style={{ width: `${Math.max(1.5, band.toNext * 100)}%` }}
-                />
-              </div>
-            </div>
-
+            <FlightReadouts tick={tick} sky={sky} />
+            <ClimbRoute band={band} />
             <Annunciators lamps={lamps} />
           </section>
           </div>
