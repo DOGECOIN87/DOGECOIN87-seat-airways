@@ -947,6 +947,7 @@ html {
   text-transform: uppercase;
   color: #8EE8FA;
 }
+.sa-readout__unit-short { display: none; }
 .sa-readout__sub {
   grid-area: sub;
   margin: 0.32rem 0 0;
@@ -992,15 +993,21 @@ html {
 
 @media (max-width: 767px) {
   .sa-readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; padding: 0.85rem; }
+  /* The instrument takes the top corner, and the figure the whole width
+     under it: a half-width display is too narrow for both side by side. */
   .sa-readout {
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      'label label viz'
-      'tag tag viz'
-      'value value viz'
-      'sub sub viz';
+      'label viz'
+      'tag viz'
+      'value value'
+      'sub sub';
     column-gap: 0.4rem;
     padding: 0.75rem 0.7rem 0.75rem 0.85rem;
   }
+  .sa-readout__value--long { font-size: 1.1rem; }
+  .sa-readout__unit-long { display: none; }
+  .sa-readout__unit-short { display: inline; }
   .sa-readout__tag { margin-top: 0.35rem; }
   .sa-readout--wide { grid-column: span 2; }
   .sa-tape { width: 26px; height: 62px; }
@@ -1159,7 +1166,8 @@ html {
 @media (max-width: 520px) {
   .sa-route { padding: 0.9rem 0.85rem 1rem; }
   .sa-route__next { letter-spacing: 0.05em; }
-  .sa-route__name { letter-spacing: 0.02em; }
+  /* Six names across a phone do not fit in capitals: "Weather" ran into "Clouds". */
+  .sa-route__name { text-transform: none; letter-spacing: 0; }
   .sa-route__price { letter-spacing: 0; }
   .sa-route__price-full { display: none; }
   .sa-route__price-short { display: inline; }

@@ -186,7 +186,7 @@ function Porthole({ sky }: { sky: SkyState }) {
 
 interface ReadoutProps {
   label: string;
-  tag: string;
+  tag: ReactNode;
   tagLive?: boolean;
   value: string;
   unit?: string;
@@ -201,7 +201,8 @@ const Readout = ({ label, tag, tagLive, value, unit, sub, viz, wide }: ReadoutPr
   <div className={`sa-readout ${wide ? 'sa-readout--wide' : ''}`}>
     <dt className="sa-readout__label">{label}</dt>
     <dd className={`sa-readout__tag ${tagLive ? 'sa-readout__tag--live' : ''}`}>{tag}</dd>
-    <dd className="sa-readout__value">
+    {/* Mars is a nine-digit altitude, and on a phone the display is narrower than that at full size. */}
+    <dd className={`sa-readout__value ${value.length > 9 ? 'sa-readout__value--long' : ''}`}>
       {value}
       {unit && <span className="sa-readout__unit">{unit}</span>}
     </dd>
@@ -214,7 +215,18 @@ export function FlightReadouts({ tick, sky }: { tick: FlightTick; sky: SkyState 
   const change = tick.change5m;
   const level = Math.abs(change) < 0.05;
   const vs = verticalSpeedFor(change, tick.marketCap);
-  const vsText = `${vs >= 0 ? '+' : '−'}${Math.abs(Math.round(vs)).toLocaleString('en-US')} ft/min`;
+  const rate = Math.abs(vs);
+  const vsFigure =
+    rate >= 1_000_000 ? `${(rate / 1_000_000).toFixed(2)}M` : rate >= 10_000 ? `${Math.round(rate / 1000)}K` : Math.round(rate).toLocaleString('en-US');
+  // In feet a minute; "fpm" on a phone, where the tag shares its line with the tape.
+  const vsText = (
+    <>
+      {vs >= 0 ? '+' : '−'}
+      {vsFigure}
+      <span className="sa-readout__unit-long"> ft/min</span>
+      <span className="sa-readout__unit-short"> fpm</span>
+    </>
+  );
   return (
     <dl className="sa-readouts">
       <Readout
