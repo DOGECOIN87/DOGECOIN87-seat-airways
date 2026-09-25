@@ -24,6 +24,20 @@ The ground is always going past — that movement is the one thing that says the
 
 The land is not flat: it rolls, with woods on the high ground and the river and lakes down in the valleys, and the hills travel past with the fields on them. Every half-minute or so the aircraft banks gently into a turn — right, level, then back left — and from outside you can watch it happen: the wings tip, the nose swings into the turn and lifts a couple of degrees to hold the height, the ailerons work, the rudder swings into the turn and the elevators come up.
 
+## After dark
+
+At night the aircraft is lit the way a real one is: the sky no longer lights it, a little moonlight catches the top of the fuselage, and the airliner's own lights do the rest.
+
+* **The windows** glow along the cabin, warm with the cabin's light, and throw a little of it onto the wing root. A few are warmer where somebody has a reading light on.
+* **Navigation lights** stay on steadily: red on the left wingtip, green on the right, white on the tail. Each is seen only from its own side, as on a real aircraft.
+* **Strobes** flash white at both wingtips and the tail in the double flash an Airbus uses, lighting up the wingtip each time.
+* **Beacons** pulse red on the top of the fuselage and under the belly, taking turns, and wash the skin around them red.
+* **Logo lights** in the tailplane light the mark on the fin from below.
+
+Inside, the crew dims the cabin for the night. The lights come down through dusk, the ceiling turns a calm blue, the blinds stop glowing with daylight, and most reading lights go off. The seat-back screens and the aisle strips become what you see, as on a real night flight. The windows you see from outside show that same dimmed cabin, so the two views always agree.
+
+If your device is set to reduce motion, the strobes and beacons swell and fade slowly instead of flashing.
+
 ## Live or modelled
 
 If the weather cannot be fetched — you are offline, the request is blocked, or your time zone is not one the page recognises — a modelled sky for the date stands in, and the page never waits for it. The **Outside** reading says which you are seeing: **Live weather** or **Modelled weather**.

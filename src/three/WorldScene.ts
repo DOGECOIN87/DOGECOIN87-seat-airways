@@ -7,7 +7,7 @@ import type { Attitude } from '../lib/useAttitude';
 import { biomeAt } from '../lib/biome';
 import { noTileShader, type NoTileParams } from './noTile';
 import { HANDS_OFF, type ManualControls } from '../lib/manualControls';
-import { CABIN, createCabin, rowZ } from './cabin';
+import { CABIN, cabinLevel, createCabin, rowZ } from './cabin';
 import { createAirframe } from './airframe';
 
 /**
@@ -656,6 +656,8 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   const SEA_BOUNCE = new THREE.Color(0x9fc3d4);
   const LAND_BOUNCE = new THREE.Color(0xdcd3bd);
   const MOOD_BLUE = new THREE.Color(0x8fb8e8);
+  /** What comes up off farmland after dark: towns, sodium-warm. */
+  const TOWN_GLOW = new THREE.Color(0xffb46a);
   const CABIN_WARM = new THREE.Color(0xffd8a8);
   const cloudTint = new THREE.Color();
   const cloudLit = new THREE.Color();
@@ -1077,7 +1079,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     cgPivot.set(0, 0, CG_Z).applyEuler(airframe.group.rotation);
     airframe.group.position.set(-cgPivot.x, -cgPivot.y, CG_Z - cgPivot.z);
 
-    /* Fans, beacon, contrails. The contrail is the air's decision: none in
+    /* Fans, lights, contrails. The contrail is the air's decision: none in
        the warm air low down, thin ones near the top of the weather, solid
        ribbons in the cold above the deck, thinning out again as the air
        itself runs out. */
@@ -1088,7 +1090,26 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         : inSpace
           ? Math.max(0, 1 - band.progress * 2.4) * 0.7
           : THREE.MathUtils.smoothstep(height, 2100, 2600) * 0.5;
-    airframe.update(dt, contrail, groundSpeed, a.bank - a.roll);
+    /* The hour, for the lights. Outside, `night` is how dark it has got,
+       and the aeroplane's own lights come up as the sky goes; above the air
+       the sky is black whatever the clock says, so they show there too.
+       Inside, the crew dims the cabin by the sun rather than the clock, and
+       a little later: full by day, down through dusk to its night level,
+       the coves going over to the night blue as they do. The windows seen
+       from outside carry that same level, so the cabin you sit in and the
+       one you fly alongside agree. */
+    const night = onMoon || inSpace ? 0.3 : 1 - THREE.MathUtils.smoothstep(skyState.elevation, -8, 4);
+    const cabinNight = 1 - THREE.MathUtils.smoothstep(skyState.elevation, -14, 2);
+    const cabinLit = cabinLevel(cabinNight);
+    airframe.update(dt, {
+      contrail,
+      stream: groundSpeed,
+      bank: a.bank - a.roll,
+      night,
+      cabin: cabinLit,
+      mood: cabinNight,
+      calm,
+    });
 
     aircraft.position.set(0, height, 0);
     aircraft.rotation.set(
@@ -1138,8 +1159,11 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       // Sunlight from above, and the ground throwing light back at the belly —
       // without the bounce the underside goes black and the aeroplane reads as
       // a sticker rather than a solid.
-      bounce.intensity = onMoon || inSpace ? 0.08 : overcast ? 0.85 : 0.5;
+      // After dark there is no sunlight to throw back up — only the towns'
+      // own, warm and faint, and nothing at all off the sea.
+      bounce.intensity = (onMoon || inSpace ? 0.08 : overcast ? 0.85 : 0.5) * THREE.MathUtils.lerp(1, 0.12, night);
       bounce.color.copy(LAND_BOUNCE).lerp(SEA_BOUNCE, seaBlend);
+      if (!onMoon && !inSpace) bounce.color.lerp(TOWN_GLOW, night * (1 - seaBlend) * 0.7);
       bounce.visible = true;
       cabin.group.visible = false;
       cabinLight.visible = false;
@@ -1147,13 +1171,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       cabinAmbient.intensity = 0;
     } else {
       /* A seat is a place in the cabin, so looking around is looking around. */
-      const interiorLightLevel = skyState.phase === 'night'
-        ? 0.42
-        : skyState.phase === 'astronomical'
-          ? 0.58
-          : skyState.phase === 'dusk' || skyState.phase === 'dawn'
-            ? 0.82
-            : 1;
+      const interiorLightLevel = cabinLit;
       cabin.setViewer(pose.id);
       const x = pose.seatIndex === null ? 0 : CABIN.seatX[pose.seatIndex];
       const z = pose.seatIndex === null ? rowZ(1) - 4.2 : rowZ(pose.row);
@@ -1167,7 +1185,8 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         camera.fov = 70;
         camera.updateProjectionMatrix();
       }
-      renderer.toneMappingExposure = 0.85 * (skyState.phase === 'night' ? 0.78 : skyState.phase === 'astronomical' ? 0.88 : 1);
+      // The eye opens a little in a dimmed cabin, but not all the way.
+      renderer.toneMappingExposure = 0.85 * THREE.MathUtils.lerp(1, 0.8, cabinNight);
 
       airframe.group.visible = false;
       bounce.visible = false;
@@ -1177,13 +1196,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       /* Mood lighting: after dark the cove washes toward the airline's calm
          blue, the way a night flight's cabin actually looks, and warms back
          up through dawn. */
-      const nightMood = skyState.phase === 'night'
-        ? 1
-        : skyState.phase === 'astronomical'
-          ? 0.7
-          : skyState.phase === 'dusk' || skyState.phase === 'dawn'
-            ? 0.35
-            : 0;
+      const nightMood = cabinNight;
       cabinLight.color.copy(CABIN_WARM).lerp(MOOD_BLUE, nightMood * 0.5);
       cabinLamps.forEach(({ light, intensity, colour }) => {
         light.intensity = intensity * interiorLightLevel;
@@ -1191,6 +1204,8 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       });
       cabinFill.intensity = pose.seatIndex !== null ? 0.45 * interiorLightLevel : 0;
       cabinAmbient.intensity = pose.seatIndex !== null ? 0.32 * interiorLightLevel : 0;
+      // And everything in the cabin that glows by itself comes down with them.
+      cabin.setLighting(cabinNight, onMoon || inSpace ? 1 : THREE.MathUtils.smoothstep(skyState.elevation, -6, 8));
     }
 
     // Clouds are world objects while the camera rides in the rotating
@@ -1216,6 +1231,14 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         }
         clouds.instanceMatrix.needsUpdate = true;
       }
+    }
+
+    /* The aeroplane's lights are shaded where the camera sees them, so they
+       are placed once the aeroplane and the camera are both posed. */
+    if (airframe.group.visible) {
+      airframe.group.updateWorldMatrix(true, false);
+      camera.updateWorldMatrix(true, false);
+      airframe.place(camera);
     }
 
     const frameStart = performance.now();

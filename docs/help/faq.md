@@ -110,7 +110,7 @@ Only in a near-total collapse: a five-minute fall of about 94% or more, which pi
 
 <summary>Why does the board at the top keep changing?</summary>
 
-It is a split-flap departure board, and it turns through the airline's lines: _Hold more, fly higher_, _Take a seat_, _Network_, _Build_, _Relax_ and more. If your device is set to reduce motion — on Android, **Remove animations** — the words still change, but the flaps do not turn. The flight views respect the same setting the same way: the swaying and banking stop, while the ground keeps calmly going past, because an aircraft that is not moving is not an aircraft.
+It is a split-flap departure board, and it turns through the airline's lines: _Hold more, fly higher_, _Take a seat_, _Network_, _Build_, _Relax_ and more. If your device is set to reduce motion — on Android, **Remove animations** — the words still change, but the flaps do not turn. The flight views respect the same setting the same way: the swaying and banking stop, and the aircraft's strobes and beacons swell and fade instead of flashing, while the ground keeps calmly going past, because an aircraft that is not moving is not an aircraft.
 
 </details>
 

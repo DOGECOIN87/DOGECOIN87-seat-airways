@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CABIN, rowZ } from './cabin';
 import { MARK_PATH } from '../components/Mark';
+import { BEACON_CYCLE, createLampRig, type LampSpec, type WindowSpot } from './lamps';
 
 /**
  * The aircraft, from outside.
@@ -27,8 +28,8 @@ const TAIL_Z = 31.8;
 
 /* Where the wing sits on the fuselage.
  *
- * The wing, the winglet raked off its tip, the navigation lamp on that
- * winglet, the flap-track fairings under it and the engines hanging from it
+ * The wing, the winglet raked off its tip, the lights at that tip, the
+ * flap-track fairings under it and the engines hanging from it
  * are one assembly that has to move as one. Each of them used to carry its
  * own copy of the wing's fore-and-aft numbers, so shifting the wing meant
  * finding five sets of literals and getting every one of them right —
@@ -463,6 +464,15 @@ function flapGeometry(
   return { geometry, pivot };
 }
 
+/** The belly fairing: a scaled sphere, centred under the wing box. */
+const FAIRING = {
+  y: -R * 0.66,
+  z: WING.rootZ + WING.rootChord * 0.52,
+  rx: R * 1.02,
+  ry: R * 0.74,
+  rz: WING.rootChord * 1.42,
+};
+
 /**
  * The wing-root fairing.
  *
@@ -475,9 +485,18 @@ function flapGeometry(
  */
 function bellyFairing(): THREE.BufferGeometry {
   const g = new THREE.SphereGeometry(1, 40, 24);
-  g.scale(R * 1.02, R * 0.74, WING.rootChord * 1.42);
-  g.translate(0, -R * 0.66, WING.rootZ + WING.rootChord * 0.52);
+  g.scale(FAIRING.rx, FAIRING.ry, FAIRING.rz);
+  g.translate(0, FAIRING.y, FAIRING.z);
   return g;
+}
+
+/** The centre of the mark on the fin's starboard face; the port one mirrors it. */
+const FIN_MARK_AT = { x: 0.2, y: R * 0.72 + 2.45, z: 28.5 };
+
+/** The underside of the fairing at a station. */
+function fairingBottom(z: number): number {
+  const u = (z - FAIRING.z) / FAIRING.rz;
+  return FAIRING.y - FAIRING.ry * Math.sqrt(Math.max(0, 1 - u * u));
 }
 
 /**
@@ -829,6 +848,24 @@ function windowGeometry(): THREE.ExtrudeGeometry {
   });
 }
 
+/** What the scene tells the aeroplane, each frame. */
+export interface AirframeFrame {
+  /** Contrail strength: 0 where the air is too warm to hold one, 1 in the cold above the deck. */
+  contrail: number;
+  /** How fast the air goes past, m/s. The contrails stream at it. */
+  stream: number;
+  /** The bank being flown, degrees. The control surfaces fly it. */
+  bank: number;
+  /** 0 by day to 1 after dark. The lights come up with it. */
+  night: number;
+  /** How far up the cabin lights are: what the windows show. */
+  cabin: number;
+  /** How far the cabin has gone over to its night blue. */
+  mood: number;
+  /** The visitor asked for less motion: the flashers breathe instead. */
+  calm: boolean;
+}
+
 export interface AirframeHandles {
   group: THREE.Group;
   /** Light the windows of the rows somebody has actually booked. */
@@ -836,11 +873,16 @@ export interface AirframeHandles {
   /** Smoothly deploy the trailing-edge flaps from 0 (retracted) to 1. */
   setFlapDeployment(target: number): void;
   /**
-   * Advance the parts of the aeroplane that live: the fans turn, the beacon
-   * flashes, and the contrails stream at `contrail` strength (0 where the
-   * air is too warm to hold one, 1 in the cold above the deck).
+   * Advance the parts of the aeroplane that live: the fans turn, the
+   * strobes and beacons flash, the contrails stream, and the control
+   * surfaces fly the bank.
    */
-  update(dt: number, contrail: number, stream?: number, bank?: number): void;
+  update(dt: number, frame: AirframeFrame): void;
+  /**
+   * Put its lights where `camera` sees them. Call once the aeroplane and
+   * the camera are posed for the frame, just before it is drawn.
+   */
+  place(camera: THREE.Camera): void;
   dispose(): void;
 }
 
@@ -932,9 +974,6 @@ export function createAirframe(): AirframeHandles {
   const pylonMat = track(new THREE.MeshStandardMaterial({ color: 0xe0e7f0, roughness: 0.36, metalness: 0.1 }));
   const windshieldFrameMat = track(new THREE.MeshStandardMaterial({ color: 0x63728a, roughness: 0.32, metalness: 0.55 }));
   const seamMat = track(new THREE.LineBasicMaterial({ color: 0x536071, transparent: true, opacity: 0.7 }));
-  const portLamp = track(new THREE.MeshStandardMaterial({ color: 0xff4b45, emissive: 0xff120d, emissiveIntensity: 2.7, roughness: 0.28 }));
-  const starboardLamp = track(new THREE.MeshStandardMaterial({ color: 0x48f38b, emissive: 0x0ac54e, emissiveIntensity: 2.5, roughness: 0.28 }));
-  const beaconLamp = track(new THREE.MeshStandardMaterial({ color: 0xff4b45, emissive: 0xff120d, emissiveIntensity: 3.1, roughness: 0.25 }));
 
   const body = new THREE.Mesh(track(fuselageGeometry()), skin);
   body.castShadow = body.receiveShadow = true;
@@ -948,6 +987,11 @@ export function createAirframe(): AirframeHandles {
       group.add(new THREE.LineSegments(track(doorFrame(side, z)), seamMat));
     }
   }
+
+  /* The lights, gathered as each part that carries them is built. What they
+     do is lamps.ts; where they are is here, because it is the airframe's
+     geometry that says where a wingtip or a tail cone actually is. */
+  const lampSpecs: LampSpec[] = [];
 
   /* Wings: 34 m span, swept 25°, with dihedral. */
   for (const side of [1, -1]) {
@@ -1006,11 +1050,28 @@ export function createAirframe(): AirframeHandles {
     winglet.castShadow = winglet.receiveShadow = true;
     group.add(winglet);
 
-    // Navigation lamps sit at the actual winglet tips: starboard is green,
-    // port is red. The tiny colour accents make the scale legible at dusk.
-    const nav = new THREE.Mesh(track(new THREE.SphereGeometry(0.105, 16, 10)), side > 0 ? starboardLamp : portLamp);
-    nav.position.set(side * 16.57, 2.42, WING.tipZ + WING.wingletRun + 0.02);
-    group.add(nav);
+    /* The wingtip's lights. The position lamp sits in the leading edge —
+       red to port, green to starboard — and is seen from dead ahead round
+       to 110° on its own side and no further, which is how anybody outside
+       tells which way an aeroplane is pointing. The strobe is out on the
+       tip itself, where it can be seen from everywhere. */
+    const tipX = side * (R * 0.6 + WING.span);
+    const tipY = WING.rootY + WING.rise;
+    lampSpecs.push({
+      kind: 'nav',
+      at: new THREE.Vector3(tipX - side * 0.1, tipY + 0.03, WING.tipZ - 0.06),
+      colour: side > 0 ? 0x2bff6a : 0xff2a1c,
+      seen: { axis: new THREE.Vector3(side * 0.819, 0, -0.574), edge: 0.574 },
+      bead: 0.1,
+      lens: side > 0 ? 0x48f38b : 0xff4b45,
+    });
+    lampSpecs.push({
+      kind: 'strobe',
+      at: new THREE.Vector3(tipX + side * 0.05, tipY + 0.02, WING.tipZ + 0.4),
+      colour: 0xf4f8ff,
+      bead: 0.075,
+      lens: 0xe6ecf4,
+    });
 
     // Three flap-track fairings under each wing break the huge smooth slab
     // into credible manufactured surfaces without adding noisy panel lines.
@@ -1039,6 +1100,23 @@ export function createAirframe(): AirframeHandles {
     // The elevator: one surface, most of the span.
     elevators.push({ hinge: hinged(stabPanel, 0.08, 0.94, 0.68, true, flapMat, group), side });
     group.add(new THREE.LineSegments(track(hingeSeams(stabPanel, 0.08, 0.94, 0.68, true)), seamMat));
+
+    /* A logo light, set flush into the tailplane and aimed up at the fin,
+       so the mark is lit from below after dark — the light pooling at its
+       foot and fading toward the tip. */
+    const logoLens = upperSurface(stabPanel, 0.25, 0.3, 0.02);
+    lampSpecs.push({
+      kind: 'logo',
+      at: logoLens,
+      colour: 0xfff1dc,
+      seen: { axis: new THREE.Vector3(0, 1, 0), edge: -0.2 },
+      beam: {
+        axis: new THREE.Vector3(side * FIN_MARK_AT.x, FIN_MARK_AT.y, FIN_MARK_AT.z).sub(logoLens).normalize(),
+        edge: 0.78,
+      },
+      bead: 0.05,
+      lens: 0xf2f4f7,
+    });
 
     group.add(engine(side, {
       cowl: skin,
@@ -1084,8 +1162,6 @@ export function createAirframe(): AirframeHandles {
     }
   }
 
-  /* The beacon's clock, and everything else update() advances. */
-  let lifeT = Math.random() * 10;
   /* The control surfaces' state: the last bank seen, the roll rate read off
      it, and where each surface has got to. */
   let lastBank: number | null = null;
@@ -1145,7 +1221,7 @@ export function createAirframe(): AirframeHandles {
   const FIN_MARK = 2.5;
   for (const side of [1, -1]) {
     const decal = new THREE.Mesh(track(new THREE.PlaneGeometry(FIN_MARK, FIN_MARK)), finMarkMat);
-    decal.position.set(side * 0.2, R * 0.72 + 2.45, 28.5);
+    decal.position.set(side * FIN_MARK_AT.x, FIN_MARK_AT.y, FIN_MARK_AT.z);
     decal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
     group.add(decal);
   }
@@ -1161,30 +1237,23 @@ export function createAirframe(): AirframeHandles {
     group.add(new THREE.Mesh(track(barrelDecal(side, 0.4, 9.6, 1.06, 0.42)), titleMat));
   }
 
-  const topBeacon = new THREE.Mesh(track(new THREE.SphereGeometry(0.09, 14, 10)), beaconLamp);
-  topBeacon.position.set(0, R * 0.72 + 6.12, 29.85);
-  group.add(topBeacon);
-  const bellyBeacon = new THREE.Mesh(track(new THREE.SphereGeometry(0.08, 14, 10)), beaconLamp);
-  bellyBeacon.position.set(0, -R - 0.02, 13.7);
-  group.add(bellyBeacon);
-
   /* ── Windows ────────────────────────────────────────────────────────────
      One per row per side, punched at the same height and pitch the cabin
      uses, so a lit window really is a row somebody has booked. Instanced:
      sixty of them cost one draw call. */
   const WINDOW_Y = 0.139;
   const winGeo = track(windowGeometry());
+  // Dark glass. The cabin's light comes through it as emission: lamps.ts.
   const winMat = track(new THREE.MeshPhysicalMaterial({
-    roughness: 0.12, metalness: 0.18, clearcoat: 0.45, clearcoatRoughness: 0.16, vertexColors: true,
+    color: 0x1a2231, roughness: 0.12, metalness: 0.18, clearcoat: 0.45, clearcoatRoughness: 0.16,
   }));
   const windows = new THREE.InstancedMesh(winGeo, winMat, CABIN.rows * 2);
   const dummy = new THREE.Object3D();
-  const lit = new THREE.Color(0xffd79a);
-  const dark = new THREE.Color(0x151b26);
-  const seats: { row: number; i: number }[] = [];
+  const unlit = new THREE.Color(0x000000);
+  const spots: WindowSpot[] = [];
   let n = 0;
   for (let row = 1; row <= CABIN.rows; row++) {
-    for (const side of [1, -1]) {
+    for (const side of [1, -1] as const) {
       // On the skin, at the window line, lying along the tube.
       const a = Math.asin(WINDOW_Y / R) * side;
       // Extrusion points outward from the sidewall; the plane of the shape is
@@ -1194,8 +1263,9 @@ export function createAirframe(): AirframeHandles {
       dummy.rotation.set(0, side > 0 ? Math.PI / 2 : -Math.PI / 2, 0);
       dummy.updateMatrix();
       windows.setMatrixAt(n, dummy.matrix);
-      windows.setColorAt(n, dark);
-      seats.push({ row, i: n });
+      windows.setColorAt(n, unlit);
+      // The face of the glass, a bezel's depth proud of the skin.
+      spots.push({ row, side, at: new THREE.Vector3(dummy.position.x + side * 0.07, WINDOW_Y, rowZ(row)), out: new THREE.Vector3(side, 0, 0) });
       n++;
     }
   }
@@ -1208,6 +1278,10 @@ export function createAirframe(): AirframeHandles {
      A band wrapped round the nose at its own local radius sits *on* the
      surface, which is what a windscreen does. */
   const glassZ = -4.7;
+  // Dark, with the instruments' faint glow behind it after dark.
+  const deckGlass = track(new THREE.MeshStandardMaterial({
+    color: 0x0b1220, roughness: 0.07, metalness: 0.55, emissive: 0x1f3a44, emissiveIntensity: 0,
+  }));
   const glass = new THREE.Mesh(
     track(new THREE.CylinderGeometry(
       radiusAt(glassZ) * 1.004, radiusAt(glassZ - 1.1) * 1.004, 1.5, 32, 1, true,
@@ -1215,7 +1289,7 @@ export function createAirframe(): AirframeHandles {
       // This interval is centred on the crown of the nose, not its flank.
       Math.PI * 0.68, Math.PI * 0.64,
     )),
-    track(new THREE.MeshStandardMaterial({ color: 0x0b1220, roughness: 0.07, metalness: 0.55 })),
+    deckGlass,
   );
   glass.rotation.x = Math.PI / 2;
   glass.position.set(0, 0.12, glassZ - 0.55);
@@ -1235,27 +1309,109 @@ export function createAirframe(): AirframeHandles {
     group.add(frame);
   }
 
-  const setRowsLit = (isLit: (row: number) => boolean) => {
-    for (const s of seats) windows.setColorAt(s.i, isLit(s.row) ? lit : dark);
-    if (windows.instanceColor) windows.instanceColor.needsUpdate = true;
+  /* ── Lights ─────────────────────────────────────────────────────────────
+     The wingtips and tailplane have hung theirs already. The tail cone
+     carries a white position lamp shining aft and the third strobe; the
+     red beacons sit on the crown over the wing box and under the belly
+     fairing, and take turns.
+
+     The lamps cast no shadows, so a lamp mounted on the skin is given the
+     half of the world it can actually reach: a beacon on the crown lights
+     the crown and not, through the fuselage, the wing root beneath it. */
+  const tailZ = TAIL_Z - 0.3;
+  lampSpecs.push(
+    {
+      kind: 'nav',
+      at: new THREE.Vector3(0, riseAt(tailZ) + radiusAt(tailZ) + 0.03, tailZ),
+      colour: 0xfff4e6,
+      // Dead astern, seventy degrees either side.
+      seen: { axis: new THREE.Vector3(0, 0, 1), edge: 0.34 },
+      beam: { axis: new THREE.Vector3(0, 0.3, 1).normalize(), edge: -0.3 },
+      bead: 0.07,
+      lens: 0xf6f7fb,
+    },
+    {
+      kind: 'strobe',
+      at: new THREE.Vector3(0, riseAt(tailZ) - radiusAt(tailZ) - 0.03, tailZ),
+      colour: 0xf4f8ff,
+      beam: { axis: new THREE.Vector3(0, -0.5, 1).normalize(), edge: -0.4 },
+      bead: 0.065,
+      lens: 0xe6ecf4,
+    },
+    {
+      kind: 'beacon',
+      at: new THREE.Vector3(0, R + 0.04, 10.4),
+      colour: 0xff1a0e,
+      beam: { axis: new THREE.Vector3(0, 1, 0), edge: -0.55 },
+      bead: 0.1,
+      lens: 0xff4b45,
+    },
+    {
+      kind: 'beacon',
+      at: new THREE.Vector3(0, fairingBottom(12.4) - 0.04, 12.4),
+      colour: 0xff1a0e,
+      beam: { axis: new THREE.Vector3(0, -1, 0), edge: -0.55 },
+      phase: BEACON_CYCLE / 2,
+      bead: 0.1,
+      lens: 0xff4b45,
+    },
+  );
+
+  /* What can stand between the camera and a lamp: the fuselage and the
+     belly fairing, tested as the shapes they are built from. The wings and
+     the tail are thin enough to leave to the depth test. */
+  const probe = new THREE.Vector3();
+  const insideBody = (p: THREE.Vector3) => {
+    if (p.z > NOSE_Z && p.z < TAIL_Z) {
+      const r = radiusAt(p.z) * 0.96;
+      const y = p.y - riseAt(p.z);
+      if (p.x * p.x + y * y < r * r) return true;
+    }
+    const fx = p.x / FAIRING.rx;
+    const fy = (p.y - FAIRING.y) / FAIRING.ry;
+    const fz = (p.z - FAIRING.z) / FAIRING.rz;
+    return fx * fx + fy * fy + fz * fz < 0.94;
   };
-  const update = (dt: number, contrail: number, stream = 120, bank = 0) => {
-    lifeT += dt;
+  const blocked = (from: THREE.Vector3, to: THREE.Vector3) => {
+    // Stepped finer than the fuselage is wide, stopping short of the lamp.
+    for (let k = 1; k < 48; k++) {
+      if (insideBody(probe.lerpVectors(from, to, k / 48))) return true;
+    }
+    return false;
+  };
+
+  const windowRow = (side: 1 | -1) => ({
+    from: new THREE.Vector3(side * (R + 0.05), WINDOW_Y, rowZ(1) - CABIN.pitch / 2),
+    to: new THREE.Vector3(side * (R + 0.05), WINDOW_Y, rowZ(CABIN.rows) + CABIN.pitch / 2),
+    out: new THREE.Vector3(side, 0, 0),
+  });
+  const lamps = createLampRig(lampSpecs, spots, [windowRow(1), windowRow(-1)], windows, blocked);
+  group.add(lamps.group);
+  /* Everything the lamps can fall on. Not the lenses, which are the lamps,
+     and not the cabin windows, which are lit from the other side. */
+  for (const material of [
+    skin, navy, wingMat, flapMat, intake, fanMat, spinnerMat, nozzleMat, pylonMat,
+    windshieldFrameMat, deckGlass, finMarkMat, titleMat,
+  ]) lamps.light(material);
+
+  const setRowsLit = (isLit: (row: number) => boolean) => lamps.setRowsLit(isLit);
+  const update = (dt: number, { contrail, stream, bank, night, cabin, mood, calm }: AirframeFrame) => {
     /* The fans. Slow enough not to strobe against the frame rate, fast
        enough that the intake plainly holds a turning machine — and each
        engine a hair off its neighbour's speed, which is true of real pairs
        and is what keeps them from reading as mirrored copies. */
     for (const [i, fan] of fans.entries()) fan.rotation.z -= dt * (13 + i * 0.9);
-    /* The anti-collision beacon: a double flash, then dark — the rhythm is
-       the recognisable part, not the brightness. */
-    const phase = lifeT % 1.3;
-    beaconLamp.emissiveIntensity = phase < 0.07 || (phase > 0.16 && phase < 0.22) ? 3.6 : 0.16;
+    lamps.update(dt, { night, cabin, mood, calm });
+    // Instruments, faintly, behind the flight-deck glass once it is dark.
+    deckGlass.emissiveIntensity = 0.55 * night;
     /* The contrails stream aft at a fixed rate. Whether they exist at all is
        the air's decision, passed in from the scene: none in the warm air
-       down low, solid ribbons in the cold above the deck. */
+       down low, solid ribbons in the cold above the deck. After dark there
+       is no sun on them, and they go from white to a moonlit grey. */
     for (const [i, seg] of CONTRAIL.entries()) {
       contrailMats[i].opacity = seg.o * contrail;
       contrailMats[i].visible = contrail > 0.02;
+      contrailMats[i].color.setScalar(THREE.MathUtils.lerp(1, 0.28, night));
       seg.tex.offset.x += (dt * stream) / ((seg.z1 - seg.z0) / seg.tiles);
     }
     /* The control surfaces, flown the way a pilot flies a turn: aileron
@@ -1295,7 +1451,9 @@ export function createAirframe(): AirframeHandles {
     setRowsLit,
     setFlapDeployment,
     update,
+    place: (camera) => lamps.place(camera, group),
     dispose: () => {
+      lamps.dispose();
       dispose.forEach((d) => d());
       windows.dispose();
     },

@@ -45,6 +45,15 @@ const MID = cabinLength / 2 - 3;
 /** Where a row sits along the tube. Row 1 is forward; +z is aft. */
 export const rowZ = (row: number) => (row - 1) * CABIN.pitch;
 
+/**
+ * How far up the crew has the cabin lights, for `night` running 0 by day to
+ * 1 once they have been turned down for the night: to about a quarter, which
+ * is dim enough that the screens, the reading lights and the aisle strips
+ * become what you see, and not so dim the cabin is lost. The windows seen
+ * from outside carry the same number, so the two views agree.
+ */
+export const cabinLevel = (night: number) => THREE.MathUtils.lerp(1, 0.26, night);
+
 /** Window centre height, in tube coordinates — see wallTexture for the why. */
 const WINDOW_Y = 0.139;
 
@@ -553,8 +562,24 @@ export interface CabinHandles {
    * to show six.
    */
   setAdverts: (bySeat: Readonly<Record<string, string>>) => void;
+  /**
+   * The hour, as the cabin feels it: `night` is how far the crew has
+   * dimmed it (0 by day, 1 for the night — the lamps themselves are the
+   * scene's), `daylight` how much sun is behind the blinds.
+   */
+  setLighting: (night: number, daylight: number) => void;
   dispose: () => void;
 }
+
+/* The coves' own glow, by day and swung to the night mood; a reading lens
+   off by day, off at night, and on. */
+const STRIP_DAY = new THREE.Color(0xffe9c8);
+const STRIP_NIGHT = new THREE.Color(0x7fa7de);
+const LENS_DAY = new THREE.Color(0xfff0d2);
+const LENS_OFF = new THREE.Color(0x3a3833);
+const LENS_ON = new THREE.Color(0xffd9a0).multiplyScalar(1.6);
+const CEILING_GLOW = new THREE.Color(0xe0d6c0);
+const MOOD_GLOW = new THREE.Color(0x9ab8e6);
 
 const SKIN = [0xc99a72, 0x8d5f3f, 0xe3b894, 0x6b4529, 0xa8724c, 0xd9a87e, 0x5a3a22];
 /* Trousers get their own palette, darker and greyer than the tops — most
@@ -576,19 +601,20 @@ export function createCabin(): CabinHandles {
   /* ── The tube ───────────────────────────────────────────────────────── */
   const wallTex = wallTexture();
   kill.push(wallTex);
+  const wallMat = new THREE.MeshStandardMaterial({
+    map: wallTex,
+    side: THREE.BackSide,
+    transparent: true,
+    alphaTest: 0.45,
+    roughness: 0.88,
+    metalness: 0,
+    // Cabins have bounce; without it the crown of the tube renders black.
+    emissive: 0x2e2b26,
+    emissiveIntensity: 0.16,
+  });
   const wall = new THREE.Mesh(
     new THREE.CylinderGeometry(CABIN.radius, CABIN.radius, cabinLength, 96, 1, true),
-    new THREE.MeshStandardMaterial({
-      map: wallTex,
-      side: THREE.BackSide,
-      transparent: true,
-      alphaTest: 0.45,
-      roughness: 0.88,
-      metalness: 0,
-      // Cabins have bounce; without it the crown of the tube renders black.
-      emissive: 0x2e2b26,
-      emissiveIntensity: 0.16,
-    }),
+    wallMat,
   );
   wall.rotation.x = Math.PI / 2;
   wall.position.z = MID;
@@ -628,17 +654,18 @@ export function createCabin(): CabinHandles {
   const CEIL_R = 1.62;
   const CEIL_OFFSET = CABIN.ceilingY - CEIL_R;   // crown lands at ceilingY
   const half = Math.acos(-Math.sqrt(CEIL_R * CEIL_R - 0.8 * 0.8) / CEIL_R);
+  const ceilingMat = new THREE.MeshStandardMaterial({
+    color: 0xece7dc, side: THREE.BackSide, roughness: 0.95, metalness: 0,
+    /* Enough of its own light that the crown never resolves to black, and
+       no more: drive this up far enough to light the cabin by itself and
+       the ceiling stops being a surface and becomes a flat field, which
+       takes the depth out of the whole tube with it. The cove lamps do the
+       lighting; this only supplies the bounce a rasteriser cannot. */
+    emissive: 0xe0d6c0, emissiveIntensity: 0.2,
+  });
   const ceiling = new THREE.Mesh(
     new THREE.CylinderGeometry(CEIL_R, CEIL_R, cabinLength, 48, 1, true, half, 2 * (Math.PI - half)),
-    new THREE.MeshStandardMaterial({
-      color: 0xece7dc, side: THREE.BackSide, roughness: 0.95, metalness: 0,
-      /* Enough of its own light that the crown never resolves to black, and
-         no more: drive this up far enough to light the cabin by itself and
-         the ceiling stops being a surface and becomes a flat field, which
-         takes the depth out of the whole tube with it. The cove lamps do the
-         lighting; this only supplies the bounce a rasteriser cannot. */
-      emissive: 0xe0d6c0, emissiveIntensity: 0.2,
-    }),
+    ceilingMat,
   );
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.set(0, CEIL_OFFSET, MID);
@@ -692,9 +719,12 @@ export function createCabin(): CabinHandles {
   const lensGeo = new THREE.BoxGeometry(0.052, 0.012, 0.052);
   const lenses = new THREE.InstancedMesh(
     lensGeo,
-    new THREE.MeshBasicMaterial({ color: 0xfff0d2 }),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }),
     (CABIN.rows + 8) * 4,
   );
+  /* Which row and side each lens hangs over, so a reading light can only
+     be on above somebody who is actually sitting there. */
+  const lensAt: { row: number; side: 1 | -1; n: number }[] = [];
   const dummy = new THREE.Object3D();
   let k = 0, l = 0;
   for (let r = -3; r < CABIN.rows + 5; r++) {
@@ -706,7 +736,9 @@ export function createCabin(): CabinHandles {
       dummy.updateMatrix(); psus.setMatrixAt(k++, dummy.matrix);
       for (const d of [-0.13, 0.13]) {
         dummy.position.set(s * 1.24, y - 0.012, z + d);
-        dummy.updateMatrix(); lenses.setMatrixAt(l++, dummy.matrix);
+        dummy.updateMatrix(); lenses.setMatrixAt(l, dummy.matrix);
+        lenses.setColorAt(l, LENS_DAY);
+        lensAt.push({ row: r, side: s as 1 | -1, n: l++ });
       }
     }
   }
@@ -754,11 +786,9 @@ export function createCabin(): CabinHandles {
      are — and the light that comes through the rest is that much better for
      having something to contrast against. */
   const shadeGeo = new THREE.BoxGeometry(0.012, 0.4, 0.25);
-  const shades = new THREE.InstancedMesh(
-    shadeGeo,
-    new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: 0.85, emissive: 0x8f8a78, emissiveIntensity: 0.55 }),
-    (CABIN.rows + 8) * 2,
-  );
+  // Their glow is the sun behind them, so it goes when the sun does.
+  const shadeMat = new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: 0.85, emissive: 0x8f8a78, emissiveIntensity: 0.55 });
+  const shades = new THREE.InstancedMesh(shadeGeo, shadeMat, (CABIN.rows + 8) * 2);
   let f = 0;
   for (let r = -3; r < CABIN.rows + 5; r++) {
     for (const s of [1, -1]) {
@@ -824,11 +854,9 @@ export function createCabin(): CabinHandles {
      setting recovers a surface that far over. The lamps now sit in the cove,
      more than a metre from the crown, and the ceiling's own emissive carries
      the indirect term a rasteriser cannot compute. */
+  const stripMat = new THREE.MeshBasicMaterial({ color: STRIP_DAY });
   for (const x of [-0.83, 0.83]) {
-    const strip = new THREE.Mesh(
-      new THREE.BoxGeometry(0.1, 0.035, cabinLength),
-      new THREE.MeshBasicMaterial({ color: 0xffe9c8 }),
-    );
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.035, cabinLength), stripMat);
     strip.position.set(x, CABIN.binTopY - 0.01, MID);
     strip.rotation.z = x > 0 ? -0.2 : 0.2;
     group.add(strip);
@@ -888,13 +916,11 @@ export function createCabin(): CabinHandles {
   const MARK_W = 1.15;
   markTex.repeat.set(1 / MARK_W, 1 / MARK_W);
   markTex.offset.set(0.5, 0.5 - 0.3 / MARK_W);
-  const bulkhead = new THREE.Mesh(
-    bulkGeo,
-    new THREE.MeshStandardMaterial({
-      map: markTex, roughness: 0.85, metalness: 0,
-      emissive: 0x3b3830, emissiveIntensity: 0.35,
-    }),
-  );
+  const bulkheadMat = new THREE.MeshStandardMaterial({
+    map: markTex, roughness: 0.85, metalness: 0,
+    emissive: 0x3b3830, emissiveIntensity: 0.35,
+  });
+  const bulkhead = new THREE.Mesh(bulkGeo, bulkheadMat);
   bulkhead.position.z = rowZ(1) - 1.35;
   group.add(bulkhead);
 
@@ -1271,7 +1297,46 @@ export function createCabin(): CabinHandles {
     paintScreens();
   };
 
-  const setOccupancy = (taken: ReadonlySet<string>) => { sold = taken; rebuild(); };
+  /* ── The hour ───────────────────────────────────────────────────────────
+     Dimming a cabin is more than turning its lamps down, which the scene
+     does. Everything here that glows on its own has to come down with them —
+     the bounce in the walls, ceiling, bins and bulkhead — or the tube goes on
+     glowing at noon brightness with its lamps off. The blinds lose the sun
+     behind them, the coves swing to the night blue, and the reading lights
+     mostly go off, leaving one here and there over somebody still awake. */
+  let lightNight = 0;
+  const lensColour = new THREE.Color();
+  const readingOn = (row: number, side: 1 | -1, n: number) => {
+    const booked = [...(side < 0 ? 'ABC' : 'DEF')].some((c) => sold.has(`${row}${c}`));
+    return booked && (row * 31 + n * 7 + (side > 0 ? 3 : 0)) % 100 < 30;
+  };
+  const paintLenses = () => {
+    for (const { row, side, n } of lensAt) {
+      lensColour.copy(LENS_DAY).lerp(readingOn(row, side, n) ? LENS_ON : LENS_OFF, lightNight);
+      lenses.setColorAt(n, lensColour);
+    }
+    if (lenses.instanceColor) lenses.instanceColor.needsUpdate = true;
+  };
+  const setLighting = (night: number, daylight: number) => {
+    const level = cabinLevel(night);
+    wallMat.emissiveIntensity = 0.16 * level;
+    binMat.emissiveIntensity = 0.16 * level;
+    bulkheadMat.emissiveIntensity = 0.35 * level;
+    ceilingMat.emissiveIntensity = 0.2 * level;
+    ceilingMat.emissive.copy(CEILING_GLOW).lerp(MOOD_GLOW, night * 0.6);
+    shadeMat.emissiveIntensity = 0.55 * daylight;
+    stripMat.color.copy(STRIP_DAY).lerp(STRIP_NIGHT, night).multiplyScalar(THREE.MathUtils.lerp(1, 0.55, night));
+    if (Math.abs(night - lightNight) > 0.01) {
+      lightNight = night;
+      paintLenses();
+    }
+  };
+
+  const setOccupancy = (taken: ReadonlySet<string>) => {
+    sold = taken;
+    rebuild();
+    paintLenses();
+  };
   const setViewer = (id: string) => {
     if (id === viewer) return;
     viewer = id;
@@ -1297,5 +1362,5 @@ export function createCabin(): CabinHandles {
     });
   };
 
-  return { group, setOccupancy, setViewer, setAdverts, dispose };
+  return { group, setOccupancy, setViewer, setAdverts, setLighting, dispose };
 }

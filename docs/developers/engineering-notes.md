@@ -82,10 +82,11 @@ Avoid a blanket `localStorage.clear()` in production — it removes unrelated vi
 * **One animation loop.** Every view animates off refs through a single `requestAnimationFrame` loop; after mount, no React render is involved in the instruments at all.
 * **Polling is polite.** It pauses in hidden tabs, aborts superseded requests, and reads fresh when the page is visible again.
 * **The 3D scene adapts.** Cloud instances upload at 30 Hz, the pixel ratio follows measured render time, low-power devices ask for the low-power GPU, and the distant terrain's hex-tiling costs three texture reads only where it is used.
+* **The aircraft's lights light only the aircraft.** The strobes, beacons, position and logo lights, the window light and the night moonlight are added to the airframe's own materials in `src/three/lamps.ts`, not as scene lights — so the terrain never pays for a wingtip lamp. Their glare is one instanced draw call.
 * **Vendor chunks.** React and three.js are split into stable chunks, so a routine change does not invalidate both in the browser cache.
 
 ## Accessibility
 
 * The drawn and rendered views are `aria-hidden`; every value they show is also published as text in the annunciator strip and the readouts beneath them.
 * Seats are real buttons with pressed state, the radio log is a polite live region, and zoom and pan are fully keyboard-driven.
-* **Reduced motion calms the flight rather than parking it.** Attitude values snap instead of easing, the aircraft stops swaying and banking, and turns go flat — but the ground keeps going past, because an aircraft that is not moving is not an aircraft.
+* **Reduced motion calms the flight rather than parking it.** Attitude values snap instead of easing, the aircraft stops swaying and banking, turns go flat, and the strobes and beacons swell and fade rather than flash — but the ground keeps going past, because an aircraft that is not moving is not an aircraft.
