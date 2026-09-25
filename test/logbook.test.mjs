@@ -202,9 +202,21 @@ check('clearing a field is a change, not an absence', () => {
 check('ids are unique and sort by when they were written', () => {
   const ids = new Set(Array.from({ length: 500 }, entryId));
   assert(ids.size === 500, `${500 - ids.size} collisions in 500 ids`);
-  const [a, b] = [...ids];
+  const [a] = [...ids];
   assert(a.split('-').length === 2, `an id is not two parts: ${a}`);
-  assert(a.split('-')[0] === b.split('-')[0], 'ids written in the same millisecond disagree about when');
+  /* The time comes off the clock, so the clock is held still to ask about
+     it. Left running, two ids a loop apart can straddle a millisecond —
+     and on a busy CI runner, they did. */
+  const realNow = Date.now;
+  try {
+    Date.now = () => 1_790_000_000_000;
+    const [x, y] = [entryId(), entryId()];
+    assert(x.split('-')[0] === y.split('-')[0], 'ids written in the same millisecond disagree about when');
+    Date.now = () => 1_790_000_000_001;
+    assert(entryId() > x, 'a later id does not sort after an earlier one');
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
