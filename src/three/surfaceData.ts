@@ -34,6 +34,8 @@ export interface SurfaceData {
   normal: Plane;
   /** Metres from the lowest to the highest point: the displacement scale. */
   relief: number;
+  /** Where the ground lies on average, as a fraction of `relief` above the lowest point. */
+  level: number;
   /** Metres across one repeat of the tile. */
   tile: number;
 }
@@ -111,53 +113,100 @@ function crater(h: Float32Array, res: number, cx: number, cy: number, r: number,
   const floor = complex ? 0.72 : 1;
   const peak = complex ? depth * 0.34 * (1 - wear) : 0;
   const bowlDepth = depth * (1 - wear * 0.55);
+  // The wall, running into a flat floor where there is one. The floor meets
+  // the wall in a curve, not a crease: a crease reads as a drawn ring under
+  // a low sun.
+  const bowl = (wall: number) => (wall - floor + Math.sqrt((wall + floor) ** 2 + 0.02)) / 2;
+  const lip = bowl(0);
   around(res, cx, cy, r * 1.9, (i, dx, dy) => {
     const d = Math.sqrt(dx * dx + dy * dy) / r;
     if (d >= 1.9) return;
     let dh = rimHeight * Math.exp(-(((d - 1) / rimWidth) ** 2));
+    // The apron of ejecta runs under the bowl as well as round it, and the
+    // bowl starts from exactly nothing at the rim, so inside and outside
+    // meet without a step. A step there is a texel wide in the normal map,
+    // and a circle crossing the texel grid drew every rim as a dotted line.
+    dh += depth * 0.05 * (1 - smooth(1, 1.9, d));
     if (d < 1) {
-      // The floor meets the wall in a curve, not a crease: a crease reads
-      // as a drawn ring under a low sun.
-      const wall = d * d - 1;
-      dh += bowlDepth * (wall - floor + Math.sqrt((wall + floor) ** 2 + 0.02)) / 2;
+      dh += bowlDepth * (bowl(d * d - 1) - lip);
       if (peak) dh += peak * Math.exp(-((d / 0.16) ** 2));
-    } else {
-      dh += depth * 0.05 * (1 - smooth(1, 1.9, d));
     }
     h[i] += dh;
   });
 }
 
+/** A Gaussian blur of a square field that wraps at its edges; `sigma` in texels. */
+function blur(f: Float32Array, res: number, sigma: number): Float32Array {
+  const radius = Math.ceil(sigma * 3);
+  const w: number[] = [];
+  let total = 0;
+  for (let i = -radius; i <= radius; i++) {
+    w.push(Math.exp(-(i * i) / (2 * sigma * sigma)));
+    total += w[w.length - 1];
+  }
+  const across = new Float32Array(f.length);
+  const out = new Float32Array(f.length);
+  for (let y = 0; y < res; y++) {
+    for (let x = 0; x < res; x++) {
+      let a = 0;
+      for (let i = -radius; i <= radius; i++) a += f[y * res + ((x + i + res) % res)] * w[i + radius];
+      across[y * res + x] = a / total;
+    }
+  }
+  for (let y = 0; y < res; y++) {
+    for (let x = 0; x < res; x++) {
+      let a = 0;
+      for (let i = -radius; i <= radius; i++) a += across[((y + i + res) % res) * res + x] * w[i + radius];
+      out[y * res + x] = a / total;
+    }
+  }
+  return out;
+}
+
+/** How smooth the ground's shape is, as a blur in metres: see `reliefMaps`. */
+const SHAPE_BLUR = 75;
+
 /**
- * The height field as the two textures the scene reads: displacement,
- * box-filtered down to `geoRes` so a vertex every hundred metres or so does
- * not crawl as it scrolls; and a normal map at full resolution for the light.
+ * The height field as the two textures the scene reads: displacement for
+ * the shape, and a normal map at full resolution for the light.
+ *
+ * The shape is box-filtered down to `geoRes`, then blurred to about the
+ * spacing of the mesh that reads it. A vertex every hundred-odd metres
+ * cannot carry a crater rim fifty metres wide: sampled anyway, the rim came
+ * out as a chain of spikes and the slope under it as a staircase, and both
+ * crawled as the ground scrolled. The light keeps every rim, because the
+ * normal map is cut from the full-resolution field.
  *
  * Data textures are not flipped on upload, so +v runs with the rows and both
  * slopes take the same sign.
  */
-function reliefMaps(h: Float32Array, res: number, tile: number, geoRes = 256): Pick<SurfaceData, 'height' | 'normal' | 'relief'> {
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const v of h) {
-    if (v < lo) lo = v;
-    if (v > hi) hi = v;
-  }
-  const relief = Math.max(1, hi - lo);
-
+function reliefMaps(h: Float32Array, res: number, tile: number, geoRes = 256): Pick<SurfaceData, 'height' | 'normal' | 'relief' | 'level'> {
   const step = res / geoRes;
-  const hd = new Uint8Array(geoRes * geoRes * 4);
+  let shape = new Float32Array(geoRes * geoRes);
   for (let y = 0; y < geoRes; y++) {
     for (let x = 0; x < geoRes; x++) {
       let sum = 0;
       for (let j = 0; j < step; j++) {
         for (let k = 0; k < step; k++) sum += h[(y * step + j) * res + x * step + k];
       }
-      const v = Math.round(((sum / (step * step) - lo) / relief) * 255);
-      const o = (y * geoRes + x) * 4;
-      hd[o] = hd[o + 1] = hd[o + 2] = v;
-      hd[o + 3] = 255;
+      shape[y * geoRes + x] = sum / (step * step);
     }
+  }
+  shape = blur(shape, geoRes, SHAPE_BLUR / (tile / geoRes));
+  let lo = Infinity;
+  let hi = -Infinity;
+  let mean = 0;
+  for (const v of shape) {
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+    mean += v / shape.length;
+  }
+  const relief = Math.max(1, hi - lo);
+  const hd = new Uint8Array(geoRes * geoRes * 4);
+  for (let i = 0; i < shape.length; i++) {
+    const v = Math.round(((shape[i] - lo) / relief) * 255);
+    hd[i * 4] = hd[i * 4 + 1] = hd[i * 4 + 2] = v;
+    hd[i * 4 + 3] = 255;
   }
 
   const texel = tile / res;
@@ -183,6 +232,7 @@ function reliefMaps(h: Float32Array, res: number, tile: number, geoRes = 256): P
     height: { data: hd, width: geoRes, height: geoRes },
     normal: { data: nd, width: res, height: res },
     relief,
+    level: (mean - lo) / relief,
   };
 }
 
@@ -394,8 +444,11 @@ export function cloudSeaData(): SurfaceData {
     around(RES, cx, cy, r, (i, dx, dy) => {
       const q = 1 - (dx * dx + dy * dy) / (r * r);
       if (q > 0) {
+        // Soft at the foot as well as the top: a dome that meets its
+        // surroundings at a cliff draws a ring round itself, and a sea of
+        // rings reads as craters rather than cloud.
+        const z = q * Math.sqrt(q) * top;
         // Merged softly: a hard maximum leaves a crease between every pair of domes.
-        const z = Math.sqrt(q) * top;
         const b = billow[i];
         billow[i] = (z + b + Math.sqrt((z - b) * (z - b) + 1600)) / 2 - 20;
       }

@@ -119,7 +119,15 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 200000);
+  /* The near plane sits as far out as each view allows. Clip-space depth is
+     only as fine as the near plane is far from the eye, and in space that
+     decides whether triangles hundreds of kilometres out survive clipping
+     at all (see the air, in the space band). From a seat the closest thing
+     is the wall, a third of a metre away; outside, the camera rides
+     thirty-odd metres off the airframe. */
+  const CABIN_NEAR = 0.1;
+  const EXTERIOR_NEAR = 1;
+  const camera = new THREE.PerspectiveCamera(70, 1, CABIN_NEAR, 200000);
 
   /* The aircraft carries the cabin and the camera; the world does not move. */
   const aircraft = new THREE.Group();
@@ -214,8 +222,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      tuned for the ground — washes out to white. */
   const skyShade = { value: new THREE.Color(1, 1, 1) };
   (skyU as typeof skyU & { skyTint: typeof skyShade }).skyTint = skyShade;
+  /* How far the dome gives way to the blue above the deck: 0 in the weather,
+     up to 1 over the cloud sea by day. See the shader below. */
+  const deckBlend = { value: 0 };
+  (skyU as typeof skyU & { deckBlend: typeof deckBlend }).deckBlend = deckBlend;
   sky.material.fragmentShader = sky.material.fragmentShader
-    .replace('uniform float mieDirectionalG;', 'uniform float mieDirectionalG;\n\t\tuniform float skyFade;\n\t\tuniform vec3 skyTint;')
+    .replace('uniform float mieDirectionalG;', 'uniform float mieDirectionalG;\n\t\tuniform float skyFade;\n\t\tuniform vec3 skyTint;\n\t\tuniform float deckBlend;')
     .replace(
       'gl_FragColor = vec4( texColor, 1.0 );',
       `// A fifth power, not a fraction. This sky runs to hundreds of units in
@@ -225,7 +237,22 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
 			// genuinely gone by the time the band is entered, and the blue that
 			// survives up there comes from the limb's own atmosphere shell,
 			// seen edge on, which is where it comes from in a photograph.
-			gl_FragColor = vec4( texColor * pow( skyFade, 5.0 ) * skyTint, 1.0 );`,
+			vec3 skyOut = texColor * pow( skyFade, 5.0 ) * skyTint;
+			// Above the deck the haze is underneath you, and the sky over it is
+			// the deep, clean blue of every photograph from a window seat. The
+			// model, tuned for the ground, can only tone-map to a pale wash up
+			// here, so the dome gives way to that blue by design: pale at the
+			// cloud tops, deepening overhead, and darker still as the climb
+			// runs on toward space. Round the sun the model keeps its glare.
+			// The stops are linear light, chosen for where they land after
+			// the tone mapping.
+			float deckUp = clamp( direction.y, 0.0, 1.0 );
+			vec3 deckSky = mix( vec3( 0.18, 0.51, 1.7 ), vec3( 0.055, 0.22, 1.04 ), smoothstep( 0.0, 0.22, deckUp ) );
+			deckSky = mix( deckSky, vec3( 0.045, 0.11, 0.52 ), smoothstep( 0.2, 0.9, deckUp ) );
+			deckSky *= mix( 1.0, pow( skyFade, 4.0 ), smoothstep( 0.05, 0.7, deckUp ) );
+			float deckSun = smoothstep( 0.965, 0.9995, cosTheta );
+			skyOut = mix( skyOut, deckSky, deckBlend * ( 1.0 - deckSun ) );
+			gl_FragColor = vec4( skyOut, 1.0 );`,
     );
   sky.material.needsUpdate = true;
 
@@ -419,7 +446,7 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       return tex;
     };
     const day = one(Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255));
-    return { day, height: one(0, 0, 0), normal: one(128, 128, 255), relief: 1, tile: 12000 };
+    return { day, height: one(0, 0, 0), normal: one(128, 128, 255), relief: 1, level: 0, tile: 12000 };
   };
   const MOON_STAND_IN = standIn(0x96918b);
   const MARS_STAND_IN = standIn(0xa8633f);
@@ -515,7 +542,11 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      place. */
   const landNoTile: NoTileParams = { value: new THREE.Vector3(11000, 20000, 1) };
   const waterNoTile: NoTileParams = { value: new THREE.Vector3(11000, 20000, 0) };
-  nearMat.onBeforeCompile = (shader) => noTileShader(shader, landNoTile, true);
+  /* Where the relief settles at the rim: the farmland's hills sink to the
+     plate, but another world's ground, hundreds of metres deep, meets it
+     at its own average height — see `noTileShader`. */
+  const nearRim = { value: 0 };
+  nearMat.onBeforeCompile = (shader) => noTileShader(shader, landNoTile, true, nearRim);
   groundMat.onBeforeCompile = (shader) => noTileShader(shader, landNoTile, false);
   const near = new THREE.Mesh(nearGeometry, nearMat);
   near.rotation.x = -Math.PI / 2;
@@ -606,9 +637,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      over this band's 16–60 km would be a couple of degrees and read as
      nothing. It is instead interpolated down as you climb, from nearly flat
      at the bottom of the band to a hard curve at the top, so the curvature
-     itself is the thing the climb buys you. The shell around it is the
-     atmosphere seen edge on: back faces, additive, so it lights the rim the
-     way the real one does without costing a shader. */
+     itself is the thing the climb buys you. Its air is drawn by
+     `atmosphereShell`, a glow worked out along every ray, so it lights the
+     rim the way the real one does. */
   /* The same ground the lower bands fly over, seen from further up — which is
      both the honest answer and the legible one. A whole-Earth map at this
      scale put a single continent and one cloud across the entire visible cap:
@@ -630,7 +661,11 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      `planetSurface`). Fine enough in the sphere that its silhouette is a
      curve and not a polygon from sixty kilometres up. */
   const limbMat = new THREE.MeshStandardMaterial({ map: planetTex, roughness: 0.98, metalness: 0 });
-  const limb = new THREE.Mesh(new THREE.SphereGeometry(1, 256, 128), limbMat);
+  const LIMB_SEGMENTS = [256, 128] as const;
+  const limb = new THREE.Mesh(new THREE.SphereGeometry(1, ...LIMB_SEGMENTS), limbMat);
+  /* How far inside the true sphere its flat facets sit at most, as a
+     fraction of the radius: the air has to reach down that far. */
+  const LIMB_INSET = 1 - Math.cos(Math.PI / LIMB_SEGMENTS[0]) * Math.cos(Math.PI / (2 * LIMB_SEGMENTS[1]));
   limb.visible = false;
   scene.add(limb);
   let limbDressed = false;
@@ -639,9 +674,13 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
      the black arrives with the climb. See `atmosphereShell`. */
   const limbAir = atmosphereShell(0x2f6fe8, 1.7);
   limbAir.uniforms.glowHeight.value = 7000;
+  // Under everything else see-through, as it would be from the far side of the sky.
+  limbAir.mesh.renderOrder = -1;
   scene.add(limbAir.mesh);
   /* Nearly flat where the band begins, and a real planet by the top of it. */
   const LIMB_R = { low: 4_200_000, high: 620_000 };
+  /* The radius of the dome the air is drawn on: see where it is placed. */
+  const AIR_DOME = 20000;
 
   /* ── Cloud deck ──────────────────────────────────────────────────────
      Billboarded puffs on one instanced mesh: cheap, and from inside they
@@ -862,6 +901,12 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         : 0;
     skyU.skyFade.value = 1 - airless;
     skyShade.value.setRGB(1, 1, 1).lerp(ABOVE_DECK_SKY, aboveClouds && !overcast ? 0.75 + 0.25 * band.progress : 0);
+    /* Over the deck by day the dome gives way to a designed blue (see the
+       shader); toward dusk it hands back, since the model's own sunset is the
+       better one. Its stock cirrus goes too: above the deck the weather is
+       all underneath you. */
+    deckBlend.value = aboveClouds && !overcast ? THREE.MathUtils.smoothstep(elevation, 1, 12) : 0;
+    skyU.cloudCoverage.value = aboveClouds || inSpace ? 0 : 0.4;
     // Ground and cabin lighting follow the sky: an aeroplane in vacuum is not
     // lit by a dome that is no longer there.
     sky.visible = !elsewhere;
@@ -959,6 +1004,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
     groundMat.normalScale.setScalar(body ? 1 : farmRelief);
     nearMat.normalScale.setScalar(body ? 1 : farmRelief);
     nearMat.displacementScale = body ? body.relief : HILL_HEIGHT * farmRelief;
+    // The flat plate lies at that same level, just under the relief's rim.
+    nearRim.value = body ? body.level : 0;
+    ground.position.y = (body ? body.level * body.relief : 0) - 2;
     sea.visible = !elsewhere && !inSpace && seaBlend > 0.001 && seaBlend < 0.999;
     seaMat.opacity = seaBlend;
     /* Lights up through dusk, out by mid-morning. Civil twilight is about
@@ -986,13 +1034,19 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       const r = lerp(LIMB_R.low, LIMB_R.high, THREE.MathUtils.smoothstep(band.progress, 0, 0.85));
       limb.scale.setScalar(r);
       limb.position.y = -r;
-      /* The air: a shell just big enough to hold the camera and still sit
-         inside the far plane toward the horizon. Its pixels do the work —
-         see `atmosphereShell` — so its own facets never show. */
-      limbAir.mesh.scale.setScalar(r + height * 1.6);
-      limbAir.mesh.position.y = -r;
+      /* The air. Its pixels do the work — see `atmosphereShell` — so the
+         mesh is only a canvas, and a small one: a dome twenty kilometres
+         round the aircraft, not a shell the size of the planet. The glow is
+         worked out along each ray, so the picture is the same; what changes
+         is the depth. Hundreds of kilometres out, clip-space depth is within
+         a rounding error of the far plane, and whole triangles of a
+         planet-sized shell dropped out at random: black shards along the
+         limb, a different set every frame. */
+      limbAir.mesh.scale.setScalar(AIR_DOME);
+      limbAir.mesh.position.set(0, height, 0);
       limbAir.uniforms.planetCentre.value.set(0, -r, 0);
       limbAir.uniforms.planetRadius.value = r;
+      limbAir.uniforms.groundInset.value = r * LIMB_INSET;
       limbAir.uniforms.sunDirection.value.copy(sunPos);
       /* Turn it under the aircraft rather than sliding a texture: on a sphere
          that is what travelling actually is, and it keeps the poles out of
@@ -1004,16 +1058,15 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       limb.rotation.x = Math.PI / 2 + shift.z / r;
       /* The far side of a 4,200 km sphere is past any sane far plane; the
          near cap and its horizon are not, so the frustum follows the radius.
-         It has to reach the air as well: a ray skimming the limb crosses
-         the whole shell beyond it, and a far plane short of that cuts the
-         brightest part of the glow off in blocks. */
+         The stars go just past the horizon, where the planet can hide them,
+         and the far plane well beyond that. With a logarithmic depth buffer
+         a distant far plane costs nothing, and it keeps the clip-space depth
+         of everything short of it clear of the rounding (see the air). */
       const horizon = Math.sqrt((r + height) * (r + height) - r * r);
-      const beyond = Math.sqrt((r + height * 1.6) * (r + height * 1.6) - r * r);
-      const far = Math.max(200000, (horizon + beyond) * 1.05);
+      const far = Math.max(200000, horizon * 8);
       if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
-      // Push the stars past the limb, and grow the points to match so they
-      // stay the same size on screen.
-      const k = (far * 0.82) / STAR_R;
+      // Grow the points with their distance so they stay the same size on screen.
+      const k = (horizon * 1.25) / STAR_R;
       stars.scale.setScalar(k);
       starMat.size = STAR_SIZE * k;
     } else {
@@ -1337,8 +1390,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
         0,
         'YXZ',
       );
-      if (camera.fov !== 46) {
+      if (camera.fov !== 46 || camera.near !== EXTERIOR_NEAR) {
         camera.fov = 46;
+        camera.near = EXTERIOR_NEAR;
         camera.updateProjectionMatrix();
       }
       renderer.toneMappingExposure = onMoon || inSpace ? 1.0 : 1.06;
@@ -1370,8 +1424,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
          line of sight rather than about any world axis. Which is what makes
          it a roll of the shot and not a swing of the head. */
       camera.rotation.set(0, THREE.MathUtils.degToRad(-pose.yaw), THREE.MathUtils.degToRad(a.roll), 'YXZ');
-      if (camera.fov !== 70) {
+      if (camera.fov !== 70 || camera.near !== CABIN_NEAR) {
         camera.fov = 70;
+        camera.near = CABIN_NEAR;
         camera.updateProjectionMatrix();
       }
       // The eye opens a little in a dimmed cabin, but not all the way.

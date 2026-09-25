@@ -42,6 +42,7 @@ const SHELL_FRAGMENT = /* glsl */ `
 #include <logdepthbuf_pars_fragment>
 uniform vec3 planetCentre;
 uniform float planetRadius;
+uniform float groundInset;
 uniform float glowHeight;
 uniform vec3 sunDirection;
 uniform vec3 glowColour;
@@ -56,9 +57,11 @@ void main() {
   vec3 closest = ro + rd * t;
   float b = length( closest );
   float alt = b - planetRadius;
-  // A ray into the ground is the ground's to draw.
-  if ( alt < 0.0 ) discard;
-  float glow = exp( - alt / glowHeight );
+  // A ray into the ground is the ground's to draw. Between its vertices the
+  // ground's mesh sits a little inside the true sphere, so the air carries
+  // on that far below the limb, or the gap shows as a dotted black line.
+  if ( alt < - groundInset ) discard;
+  float glow = exp( - max( alt, 0.0 ) / glowHeight );
   // The day side of the limb glows; the night side barely does.
   float lit = smoothstep( -0.3, 0.45, dot( closest / b, sunDirection ) );
   // And toward the sun the air scatters forward, brighter still.
@@ -75,6 +78,8 @@ export interface AtmosphereShell {
   uniforms: {
     planetCentre: { value: THREE.Vector3 };
     planetRadius: { value: number };
+    /** How far the planet's own mesh can sit inside `planetRadius`, in the same units. */
+    groundInset: { value: number };
     glowHeight: { value: number };
     sunDirection: { value: THREE.Vector3 };
     glowColour: { value: THREE.Color };
@@ -87,6 +92,7 @@ export function atmosphereShell(colour: number, strength: number): AtmosphereShe
   const uniforms = {
     planetCentre: { value: new THREE.Vector3() },
     planetRadius: { value: 1 },
+    groundInset: { value: 0 },
     glowHeight: { value: 0.02 },
     sunDirection: { value: new THREE.Vector3(0, 1, 0) },
     glowColour: { value: new THREE.Color(colour) },

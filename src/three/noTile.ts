@@ -140,7 +140,9 @@ const DISPLACE = /* glsl */ `
       + textureLod( displacementMap, vDisplacementMapUv + o3, 0.0 ).x * w.z;
     ntH = mix( ntH, shuffled, ntF );
   }
-  transformed += normalize( objectNormal ) * ( ntH * displacementScale * fade + displacementBias );
+  // Toward the rim the relief settles to the ground's own average level
+  // (see noTileShader), where the flat plate beyond carries on.
+  transformed += normalize( objectNormal ) * ( mix( ntRim, ntH, fade ) * displacementScale + displacementBias );
 #endif
 `;
 
@@ -153,13 +155,18 @@ interface CompilingShader {
 /**
  * Patch a ground material's shader to shuffle its tile in the distance.
  * `displaced` also shuffles the displacement and reads a per-vertex `fade`
- * attribute, for the near-field relief mesh.
+ * attribute, for the near-field relief mesh. `rim` is the height, 0–1 of
+ * the displacement, that the relief fades to where `fade` runs out: 0, the
+ * lowest point, suits hills a few tens of metres high; ground with real
+ * relief wants its average, or everything inside the rim stands up out of
+ * the plate beyond it like a mesa.
  */
-export function noTileShader(shader: CompilingShader, params: NoTileParams, displaced: boolean): void {
+export function noTileShader(shader: CompilingShader, params: NoTileParams, displaced: boolean, rim?: { value: number }): void {
   shader.uniforms.ntParams = params;
+  if (displaced) shader.uniforms.ntRim = rim ?? { value: 0 };
   let vs = shader.vertexShader.replace(
     '#include <common>',
-    `#include <common>\n${COMMON}${displaced ? '\nattribute float fade;' : ''}`,
+    `#include <common>\n${COMMON}${displaced ? '\nattribute float fade;\nuniform float ntRim;' : ''}`,
   );
   if (displaced) vs = vs.replace('#include <displacementmap_vertex>', DISPLACE);
   shader.vertexShader = vs.replace(

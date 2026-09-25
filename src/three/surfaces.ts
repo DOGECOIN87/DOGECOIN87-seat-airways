@@ -23,6 +23,8 @@ export interface SurfaceTextures {
   normal: THREE.DataTexture;
   /** Metres from the lowest to the highest point: the displacement scale. */
   relief: number;
+  /** Where the ground lies on average, as a fraction of `relief` above the lowest point. */
+  level: number;
   /** Metres across one repeat of the tile. */
   tile: number;
 }
@@ -61,6 +63,7 @@ const surfaceTextures = (d: SurfaceData): SurfaceTextures => ({
   height: texture(d.height, false, false),
   normal: texture(d.normal, false),
   relief: d.relief,
+  level: d.level,
   tile: d.tile,
 });
 

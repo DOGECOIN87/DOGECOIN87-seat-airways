@@ -65,6 +65,11 @@ Every publish is signed over a challenge that names the wallet, **pins the exact
 
 **One roll of occupancy.** The seat map, the passengers ahead of you, the people beside you and the lit windows outside all read the same seeded set, so a window lit from outside is a row somebody has genuinely booked.
 
+## Rendering at planet scale
+
+* **Near planes as far out as each view allows.** The logarithmic depth buffer keeps depth *testing* precise from a seatback to the limb of a planet, but clipping still runs on the ordinary projection. With the near plane 5 cm from the eye, anything 600 km out sat within a rounding error of the far plane, and whole triangles dropped out at random — black shards along the limb in space, a different set every frame. The near plane is now 0.1 m in a seat and 1 m outside. The space band's air is drawn on a dome 20 km round the aircraft rather than on a planet-sized shell: its glow is worked out along each ray (`atmosphereShell` in `src/three/skies.ts`), so the mesh is only a canvas and its size changes nothing but the depth.
+* **Relief that the mesh can carry.** The near ground is a displaced mesh with a vertex every hundred-odd metres. The height map the other worlds hand it is blurred to about that spacing, because a sharper one aliases: crater rims came out as chains of spikes. The normal map keeps the full resolution, so the light still shows every rim. Toward its edge the relief settles to the ground's average height, where the flat plate beyond carries on — otherwise everything inside stands up out of the plate like a mesa.
+
 ## After a token change
 
 The page detects a mint change on start-up and clears the old token's browser-only adverts and directory session. To force that while testing, run this in the production page's console and reload:
