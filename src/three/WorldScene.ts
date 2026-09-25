@@ -659,6 +659,9 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
   /** What comes up off farmland after dark: towns, sodium-warm. */
   const TOWN_GLOW = new THREE.Color(0xffb46a);
   const CABIN_WARM = new THREE.Color(0xffd8a8);
+  // The cabin's bounce by day, for the mood lighting to swing away from.
+  const FILL_SKY = new THREE.Color(0xdcebff);
+  const AMBIENT_WARM = new THREE.Color(0xdfd6c4);
   const cloudTint = new THREE.Color();
   const cloudLit = new THREE.Color();
   const NEUTRAL_CLOUD = new THREE.Color(0xb9c2cf);
@@ -1193,17 +1196,20 @@ export function createWorld(canvas: HTMLCanvasElement): WorldHandles {
       cabin.group.visible = pose.seatIndex !== null;
       cabinLight.visible = pose.seatIndex !== null;
       cabinLight.intensity = 11 * interiorLightLevel;
-      /* Mood lighting: after dark the cove washes toward the airline's calm
+      /* Mood lighting: after dark the cabin washes toward the airline's calm
          blue, the way a night flight's cabin actually looks, and warms back
-         up through dawn. */
+         up through dawn. All of it — the coves, the light over the seat and
+         the bounce — or the warm ones left over mix the blue back to grey. */
       const nightMood = cabinNight;
-      cabinLight.color.copy(CABIN_WARM).lerp(MOOD_BLUE, nightMood * 0.5);
+      cabinLight.color.copy(CABIN_WARM).lerp(MOOD_BLUE, nightMood * 0.8);
       cabinLamps.forEach(({ light, intensity, colour }) => {
         light.intensity = intensity * interiorLightLevel;
-        light.color.copy(colour).lerp(MOOD_BLUE, nightMood * 0.5);
+        light.color.copy(colour).lerp(MOOD_BLUE, nightMood * 0.8);
       });
       cabinFill.intensity = pose.seatIndex !== null ? 0.45 * interiorLightLevel : 0;
       cabinAmbient.intensity = pose.seatIndex !== null ? 0.32 * interiorLightLevel : 0;
+      cabinFill.color.copy(FILL_SKY).lerp(MOOD_BLUE, nightMood * 0.6);
+      cabinAmbient.color.copy(AMBIENT_WARM).lerp(MOOD_BLUE, nightMood * 0.6);
       // And everything in the cabin that glows by itself comes down with them.
       cabin.setLighting(cabinNight, onMoon || inSpace ? 1 : THREE.MathUtils.smoothstep(skyState.elevation, -6, 8));
     }
