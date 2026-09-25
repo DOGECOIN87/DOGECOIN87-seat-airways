@@ -962,7 +962,7 @@ html {
 }
 
 /* The altimeter's tape. */
-.sa-tape { display: block; width: 34px; height: 72px; }
+.sa-tape { display: block; width: 40px; height: 84px; }
 .sa-tape__spine { stroke: rgba(142, 232, 250, 0.35); stroke-width: 1; }
 .sa-tape__minor { stroke: rgba(169, 185, 205, 0.6); stroke-width: 1.2; }
 .sa-tape__major { stroke: #D6F3FF; stroke-width: 1.6; }
@@ -970,7 +970,7 @@ html {
 .sa-tape__pointer { fill: var(--accent-bright); filter: drop-shadow(0 0 4px rgba(0, 201, 241, 0.8)); }
 
 /* The attitude ball. */
-.sa-ball { display: block; width: 52px; height: 52px; filter: drop-shadow(0 0 10px rgba(0, 150, 230, 0.35)); }
+.sa-ball { display: block; width: 64px; height: 64px; filter: drop-shadow(0 0 10px rgba(0, 150, 230, 0.35)); }
 .sa-ball__world { transition: transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .sa-ball__horizon { stroke: #fff; stroke-width: 1.2; }
 .sa-ball__rung { stroke: rgba(255, 255, 255, 0.72); stroke-width: 1; }
@@ -985,7 +985,7 @@ html {
 }
 
 /* The cabin window. */
-.sa-window { display: block; width: 44px; height: 58px; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
+.sa-window { display: block; width: 52px; height: 68px; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
 .sa-window__bezel { fill: #D9DCE2; }
 .sa-window__glare { fill: #fff; opacity: 0.14; }
 .sa-window__rain line { stroke: rgba(220, 235, 255, 0.6); stroke-width: 0.9; stroke-linecap: round; }
@@ -1133,7 +1133,8 @@ html {
 .sa-route__stops .is-next .sa-route__price { font-weight: 700; color: var(--accent-deep); }
 @media (max-width: 520px) {
   .sa-route { padding: 0.9rem 0.85rem 1rem; }
-  .sa-route__name { letter-spacing: 0.06em; }
+  .sa-route__next { letter-spacing: 0.05em; }
+  .sa-route__name { letter-spacing: 0.02em; }
   .sa-route__price { letter-spacing: 0; }
 }
 
@@ -1866,7 +1867,7 @@ html {
   height: 2.4rem;
   border-radius: 11px;
   font-size: 1.15rem;
-  color: #66748A;
+  color: #7C8AA0;
   background: linear-gradient(160deg, #1C2535 0%, #0C121C 100%);
   box-shadow:
     inset 0 2px 4px rgba(0, 0, 0, 0.7),
