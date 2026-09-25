@@ -247,21 +247,30 @@ export function FlightReadouts({ tick, sky }: { tick: FlightTick; sky: SkyState 
 
 /* ── The route ──────────────────────────────────────────────────────────
    The climb meter, drawn as the moving map on a seatback screen: every
-   level on one line, the ground covered lit, the aircraft where it is. */
+   level on one line, the ground covered lit, the aircraft where it is.
 
-const STOPS: { band: FlightBand; name: string; price: string }[] = [
-  { band: 'atmosphere', name: 'Weather', price: 'Under $1M' },
+   Mars is the furthest the aircraft flies so far, not the end of the line.
+   The route carries on past it, dashed, to a stop nobody has named yet,
+   and trails off the edge of the screen beyond that. */
+
+const STOPS: { band: FlightBand; name: string; price: string; short?: string }[] = [
+  { band: 'atmosphere', name: 'Weather', price: 'Under $1M', short: '<$1M' },
   { band: 'above-clouds', name: 'Clouds', price: '$1M' },
   { band: 'space', name: 'Space', price: '$10M' },
   { band: 'moon', name: 'Moon', price: '$50M' },
   { band: 'mars', name: 'Mars', price: '$100M' },
 ];
+/** Stops along the line: every known level, and the one after Mars. */
+const SPAN = STOPS.length;
+const stopAt = (i: number) => `${(i / SPAN) * 100}%`;
 
 export function ClimbRoute({ band }: { band: BandState }) {
   const at = STOPS.findIndex((s) => s.band === band.band);
-  const along = at >= STOPS.length - 1 ? 1 : (at + Math.max(0, Math.min(1, band.toNext))) / (STOPS.length - 1);
+  const beyond = at === STOPS.length - 1;
+  const along = beyond ? (STOPS.length - 1) / SPAN : (at + Math.max(0, Math.min(1, band.toNext))) / SPAN;
   const pct = `${(along * 100).toFixed(2)}%`;
   const toGo = Math.round(Math.max(0, Math.min(1, band.toNext)) * 100);
+  const state = (i: number) => (i < at ? 'is-passed' : i === at ? 'is-here' : i === at + 1 ? 'is-next' : '');
   return (
     <div className="sa-route">
       <div className="sa-route__head">
@@ -273,31 +282,48 @@ export function ClimbRoute({ band }: { band: BandState }) {
               <span className="sa-route__pct">{toGo}%</span>
             </>
           ) : (
-            <b>Final destination: Mars</b>
+            <>
+              Next stop <b>Beyond Mars</b>
+              <span className="sa-route__pct" aria-hidden>???</span>
+            </>
           )}
         </span>
       </div>
       <div className="sa-route__track" aria-hidden>
-        <span className="sa-route__line" />
+        <span className="sa-route__line" style={{ right: `${100 / SPAN}%` }} />
+        <span className="sa-route__beyond" style={{ left: stopAt(STOPS.length - 1) }} />
         <span className="sa-route__done" style={{ width: pct }} />
         {STOPS.map((s, i) => (
-          <span
-            key={s.band}
-            className={`sa-route__stop ${i < at ? 'is-passed' : i === at ? 'is-here' : i === at + 1 ? 'is-next' : ''}`}
-            style={{ left: `${(i / (STOPS.length - 1)) * 100}%` }}
-          />
+          <span key={s.band} className={`sa-route__stop ${state(i)}`} style={{ left: stopAt(i) }} />
         ))}
+        <span className={`sa-route__stop is-unknown ${state(STOPS.length)}`} style={{ left: stopAt(STOPS.length) }} />
         <span className="sa-route__plane" style={{ left: pct }}>
           <DeckIcon name="plane" />
         </span>
       </div>
       <ol className="sa-route__stops" aria-label="Levels">
         {STOPS.map((s, i) => (
-          <li key={s.band} className={i < at ? 'is-passed' : i === at ? 'is-here' : i === at + 1 ? 'is-next' : ''} aria-current={i === at ? 'step' : undefined}>
+          <li key={s.band} className={state(i)} aria-current={i === at ? 'step' : undefined}>
             <span className="sa-route__name">{s.name}</span>
-            <span className="sa-route__price">{s.price}</span>
+            <span className="sa-route__price">
+              {s.short ? (
+                <>
+                  <span className="sa-route__price-full">{s.price}</span>
+                  <span className="sa-route__price-short">{s.short}</span>
+                </>
+              ) : (
+                s.price
+              )}
+            </span>
           </li>
         ))}
+        <li className={`is-unknown ${state(STOPS.length)}`}>
+          <span className="sa-route__name">Beyond</span>
+          <span className="sa-route__price">
+            <span aria-hidden>???</span>
+            <span className="sr-only">Still to come</span>
+          </span>
+        </li>
       </ol>
     </div>
   );

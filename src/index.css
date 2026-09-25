@@ -1011,8 +1011,11 @@ html {
 /* ── The route ────────────────────────────────────────────────
    The climb meter as the moving map on a seatback screen: every
    level on one line, the ground covered lit, the aircraft where it
-   is, and the next stop ringed. The line is inset a tenth at each
-   end so the stops sit over the middle of their five labels. */
+   is, and the next stop ringed. Past Mars the line carries on dashed
+   to a stop with no name yet, and trails off the edge of the panel:
+   Mars is the furthest the aircraft flies so far, not where the route
+   ends. The line is inset a twelfth at each end so the stops sit over
+   the middle of their six labels. */
 .sa-route { padding: 1rem 1.25rem 1.1rem; }
 .sa-route__head {
   display: flex;
@@ -1051,7 +1054,7 @@ html {
   font-variant-numeric: tabular-nums;
   color: var(--ui-soft);
 }
-.sa-route__track { position: relative; height: 36px; margin: 0.6rem 10% 0; }
+.sa-route__track { position: relative; height: 36px; margin: 0.6rem calc(100% / 12) 0; }
 .sa-route__line,
 .sa-route__done {
   position: absolute;
@@ -1061,7 +1064,20 @@ html {
   margin-top: -3px;
   border-radius: 999px;
 }
-.sa-route__line { right: 0; background: var(--ui-sink); box-shadow: var(--e-press); }
+.sa-route__line { background: var(--ui-sink); box-shadow: var(--e-press); }
+/* The unflown stretch: dashed, running on past the last named stop and
+   fading out at the edge of the panel. */
+.sa-route__beyond {
+  position: absolute;
+  right: -9%;
+  top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, rgba(88, 93, 102, 0.55) 0 7px, transparent 7px 13px);
+  -webkit-mask-image: linear-gradient(90deg, #000 60%, transparent);
+  mask-image: linear-gradient(90deg, #000 60%, transparent);
+}
 .sa-route__done {
   background: var(--g-accent);
   box-shadow: 0 0 12px rgba(0, 160, 230, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
@@ -1088,6 +1104,13 @@ html {
 .sa-route__stop.is-here::after { background: var(--g-accent); box-shadow: 0 0 6px rgba(0, 175, 235, 0.8); }
 .sa-route__stop.is-next { box-shadow: var(--e-sm), 0 0 0 2px rgba(0, 135, 234, 0.35); }
 .sa-route__stop.is-next::after { inset: 3px; background: transparent; box-shadow: inset 0 0 0 2px var(--accent); }
+.sa-route__stop.is-unknown {
+  background: var(--ui-bg);
+  box-shadow: none;
+  border: 2px dashed rgba(88, 93, 102, 0.6);
+}
+.sa-route__stop.is-unknown::after { display: none; }
+.sa-route__stop.is-unknown.is-next { border-color: var(--accent); box-shadow: 0 0 10px rgba(0, 175, 235, 0.35); }
 .sa-route__plane {
   position: absolute;
   top: 50%;
@@ -1107,7 +1130,7 @@ html {
 .sa-route__plane svg { transform: rotate(90deg); }
 .sa-route__stops {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0.55rem 0 0;
   padding: 0;
   list-style: none;
@@ -1131,11 +1154,15 @@ html {
 .sa-route__stops .is-passed .sa-route__name { color: var(--ui-ink); }
 .sa-route__stops .is-here .sa-route__name { color: var(--accent-deep); }
 .sa-route__stops .is-next .sa-route__price { font-weight: 700; color: var(--accent-deep); }
+.sa-route__stops .is-unknown .sa-route__name { font-style: italic; }
+.sa-route__price-short { display: none; }
 @media (max-width: 520px) {
   .sa-route { padding: 0.9rem 0.85rem 1rem; }
   .sa-route__next { letter-spacing: 0.05em; }
   .sa-route__name { letter-spacing: 0.02em; }
   .sa-route__price { letter-spacing: 0; }
+  .sa-route__price-full { display: none; }
+  .sa-route__price-short { display: inline; }
 }
 
 /* The fill the boarding ladder's meter still uses. */

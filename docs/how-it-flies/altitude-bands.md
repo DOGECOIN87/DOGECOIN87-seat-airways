@@ -4,7 +4,7 @@ description: Five levels, one number. $1M is above the clouds, $10M is space, $5
 
 # The five levels
 
-Because market cap _is_ altitude, the milestones are places. There are five of them. Crossing into each one changes the whole world outside the windows, and the PA says so.
+Because market cap _is_ altitude, the milestones are places. There are five of them so far. Crossing into each one changes the whole world outside the windows, and the PA says so.
 
 | Market cap | Level | On the PA |
 | --- | --- | --- |
@@ -44,12 +44,12 @@ Cratered highlands and dark maria under a low sun. Every crater is in relief —
 
 ![Flight SA350 over the rust-red mesas and dunes of Mars under a butterscotch sky](../.gitbook/assets/levels/5-mars.jpg)
 
-The last stop. Layered mesas with their strata showing, old craters filled with dark sand, and dune fields in the low ground, fading into a dusty butterscotch sky. The sun is smaller out here and its halo is pale dust. Phobos and Deimos, small, dark and lumpy, hang off the port side.
+The furthest out the aircraft flies — so far. Layered mesas with their strata showing, old craters filled with dark sand, and dune fields in the low ground, fading into a dusty butterscotch sky. The sun is smaller out here and its halo is pale dust. Phobos and Deimos, small, dark and lumpy, hang off the port side.
 
 ## Where you are right now
 
 * The label at the top of the page — **Live · SA350 · In the weather**, for example — names the current level.
-* The **climb meter** under the view shows the current level at one end and the next at the other, with how far through the climb you are. It is measured on a log scale, so going from $1M to $2M moves it as much as going from $5M to $10M.
+* The **flight progress** map under the view draws every level on one line, like the moving map on a seatback screen: lit as far as you have come, the aircraft where it is, the next stop ringed, and how far through the climb to it you are. It is measured on a log scale, so going from $1M to $2M moves it as much as going from $5M to $10M. The line does not stop at Mars: it carries on, dashed, to a stop that has no name yet.
 
 {% hint style="info" %}
 The levels are about altitude only. The sky's colour and weather within the lower two come from your own clock and local weather — see [The sky outside](the-sky.md). In space, at the moon and on Mars, the sun is placed where it shows the place off.

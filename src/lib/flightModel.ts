@@ -113,7 +113,7 @@ export interface BandState {
   progress: number;
   /** Signage name for the band. */
   label: string;
-  /** What is next, and what it costs. Null at Mars, which is as far as it goes. */
+  /** What is next, and what it costs. Null at Mars, the furthest level so far: nothing past it has a name yet. */
   next: string | null;
   /** 0–1 toward the next band, for the climb meter. */
   toNext: number;

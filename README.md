@@ -60,7 +60,7 @@ One input drives everything the aircraft does — its token's market data — an
 
 ### The five levels
 
-Market cap *is* altitude, so the milestones are places — five of them, each a different world outside the windows. → [The five levels](docs/how-it-flies/altitude-bands.md)
+Market cap *is* altitude, so the milestones are places — five of them so far, each a different world outside the windows. → [The five levels](docs/how-it-flies/altitude-bands.md)
 
 <table>
 <tr>
@@ -95,7 +95,7 @@ Market cap *is* altitude, so the milestones are places — five of them, each a 
 <td colspan="2" valign="top">
 <img src="docs/.gitbook/assets/levels/5-mars.jpg" alt="Flight SA350 over the mesas and dunes of Mars under a butterscotch sky">
 
-**Mars** · $100M — the last stop<br>
+**Mars** · $100M — the furthest out, so far<br>
 <sub>Layered mesas, sand-filled craters and dune fields fading into a dusty butterscotch sky, under a smaller sun, with Phobos and Deimos off the port side.</sub>
 </td>
 </tr>
