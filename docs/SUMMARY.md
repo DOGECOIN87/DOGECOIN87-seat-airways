@@ -11,7 +11,7 @@
 ## How it flies
 
 * [One number flies the plane](how-it-flies/flight-model.md)
-* [Altitude bands](how-it-flies/altitude-bands.md)
+* [The five levels](how-it-flies/altitude-bands.md)
 * [The overhead panel and the PA](how-it-flies/overhead-panel.md)
 * [The sky outside](how-it-flies/the-sky.md)
 

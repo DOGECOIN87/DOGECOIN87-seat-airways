@@ -37,7 +37,7 @@ so the aeroplane on your screen *is* the chart — and its 178 seats go to the b
 
 | | |
 | :-- | :-- |
-| **Market cap is altitude** | $163K flies at 163,000 ft. $1M breaks out above the clouds, $10M is space, $50M is the moon. |
+| **Market cap is altitude** | $163K flies at 163,000 ft. $1M breaks out above the clouds, $10M is space, $50M is the moon, $100M is Mars. |
 | **The five-minute move is attitude** | A rising market pitches the nose up; a falling one pitches it down. |
 | **Your bag is your seat** | The 178 biggest holders are seated by rank, flight deck first. Everyone else rides in the cargo hold. |
 | **Seats are finite** | Out-hold the holder in front of you and you take their seat — and the PA tells the whole cabin. |
@@ -58,14 +58,48 @@ One input drives everything the aircraft does — its token's market data — an
 | Holder count | **Souls on board** |
 | Attitude | The **overhead annunciators**, and the PA announcements they trigger |
 
-Market cap *is* altitude, so the milestones are places:
+### The five levels
 
-| Market cap | Where you are |
-| :-- | :-- |
-| under **$1M** | **In the weather** — rolling farmland, coastlines and open sea below, cloud and haze around you |
-| **$1M** | **Above the clouds** — you break out on top of the deck, and the air above thins and deepens |
-| **$10M** | **Space** — the sky drains from the zenith down, the ground becomes a curved limb, the stars arrive |
-| **$50M** | **The moon** — the lunar surface under a grazing sun, with Earthrise off the port side |
+Market cap *is* altitude, so the milestones are places — five of them, each a different world outside the windows. → [The five levels](docs/how-it-flies/altitude-bands.md)
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/.gitbook/assets/levels/1-weather.jpg" alt="Flight SA350 over rolling farmland, in the weather">
+
+**In the weather** · under $1M<br>
+<sub>Low over rolling farmland, woods and rivers among the cumulus, with a coast and open sea every few minutes. Your own sky, from your clock and your local weather.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/.gitbook/assets/levels/2-clouds.jpg" alt="Flight SA350 above a sea of cloud">
+
+**Above the clouds** · $1M<br>
+<sub>On top of the deck: a sea of billowing cumulus to the horizon, gaps down to the country that open and close with the real weather, and a deeper blue overhead.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/.gitbook/assets/levels/3-space.jpg" alt="Flight SA350 at the edge of space over a curved Earth">
+
+**Space** · $10M<br>
+<sub>The sky drains to black and the horizon bends into a planet — oceans, coastlines and weather under a thin glowing band of atmosphere, with the stars out.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/.gitbook/assets/levels/4-moon.jpg" alt="Flight SA350 over the cratered moon with Earth on the horizon">
+
+**The moon** · $50M<br>
+<sub>Craters in real relief under a low sun, rays across the maria, a knife-sharp airless horizon — and Earth hanging off the port side.</sub>
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top">
+<img src="docs/.gitbook/assets/levels/5-mars.jpg" alt="Flight SA350 over the mesas and dunes of Mars under a butterscotch sky">
+
+**Mars** · $100M — the last stop<br>
+<sub>Layered mesas, sand-filled craters and dune fields fading into a dusty butterscotch sky, under a smaller sun, with Phobos and Deimos off the port side.</sub>
+</td>
+</tr>
+</table>
 
 The sky is the visitor's own: the sun is placed from their clock and time zone, and the weather is live from [Open-Meteo](https://open-meteo.com/) — no location prompt, ever. → [The sky outside](docs/how-it-flies/the-sky.md)
 
@@ -143,7 +177,7 @@ The full guide lives on **[GitBook](https://seat-airlines.gitbook.io/seat-airlin
 **How it flies**
 
 - [One number flies the plane](docs/how-it-flies/flight-model.md)
-- [Altitude bands](docs/how-it-flies/altitude-bands.md)
+- [The five levels](docs/how-it-flies/altitude-bands.md)
 - [The overhead panel and the PA](docs/how-it-flies/overhead-panel.md)
 - [The sky outside](docs/how-it-flies/the-sky.md)
 
